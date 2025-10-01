@@ -1,6 +1,9 @@
-import asyncio
-import random
+import os
+from twitchio.ext import commands
 from dotenv import load_dotenv
+import asyncio
+
+import random
 
 from gpt_utils import generate_response
 from tts_utils import speak_from_prompt
@@ -8,21 +11,33 @@ from tts_utils import speak_from_prompt
 # === Load environment variables ===
 load_dotenv()
 
+TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
+TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
+
 # === Setup colorlog logger ===
 from log_utils import get_logger
 logger = get_logger("Bot")
 
-class Bot:
+class Bot(commands.Bot):
     """
     Asynchronous bot that generates speech monologues and listens for input concurrently.
+    Also responds to twitch chat messages.
     Manages startup, shutdown, and control of background tasks.
     """
     def __init__(self):
-        self.monologue_task = None
-        self.input_listener_task = None
+        super().__init__(
+            token=TWITCH_OAUTH_TOKEN,
+            prefix="!",
+            initial_channels=[TWITCH_CHANNEL]
+        )
         self.tasks = []
         self.shutdown_event = asyncio.Event()
+        self.startup_done = False
         self.monologue_running = True
+
+        self.message_queue = asyncio.Queue()
+        self.speech_queue = asyncio.Queue()
+        self.processing_message = False
 
         self.starters = [
             "I was just thinking about",
@@ -33,21 +48,34 @@ class Bot:
             "Let me tell you about"
         ]
 
-    async def start(self):
+    # === Bot Controls ===
+    async def event_ready(self):
         """
-        Starts the bot: speaks an intro, launches background tasks, and waits for shutdown signal.
+        Called when the bot is ready. Speaks an intro message once.
         """
-        logger.info("[Start] Starting up...")
-        
+        if self.startup_done:
+            return 
+        logger.info(f"[Twitch] Logged in as {self.nick}")
+
         intro_prompt = "[Start]  Write a short, cheerful greeting..."
         logger.debug(f"[Start] Intro prompt: {intro_prompt}")
-        intro_text = generate_response(intro_prompt)
+
+        loop = asyncio.get_running_loop()
+        intro_text = await loop.run_in_executor(None, generate_response, intro_prompt)
         logger.info(f"[Start] Intro response: {intro_text}")
         await speak_from_prompt(intro_text)
 
+        self.startup_done = True
+        await self.background_tasks()
+
+    async def background_tasks(self):
+        """
+        Launches background tasks, and waits for shutdown signal.
+        """
         logger.info("[Start] Launching background tasks...")
         self.tasks.append(asyncio.create_task(self.monologue_loop()))
-        self.tasks.append(asyncio.create_task(self.input_listener_loop()))
+        self.tasks.append(asyncio.create_task(self.process_messages()))
+        self.tasks.append(asyncio.create_task(self.speech_consumer()))
 
         await self.shutdown_event.wait()
 
@@ -57,6 +85,61 @@ class Bot:
         await asyncio.gather(*self.tasks, return_exceptions=True)
         logger.info("[Start] All tasks cancelled. Exiting.")
 
+    def stop(self):
+        """
+        Signals the bot to shutdown by setting the shutdown event.
+        """
+        logger.warning("[Stop] Stop signal issued.")
+        self.shutdown_event.set()
+
+    # === Message Functionality ===
+    async def process_messages(self):
+        """
+        Continuously processes messages from the message queue by generating TTS responses.
+        """
+        while True:
+            message = await self.message_queue.get()
+
+            try:
+                prompt = message.content
+                logger.info(f"[Twitch] Generating response to: {prompt}")
+                await self.speech_queue.put(f"{message.author.name} says {prompt}")
+
+                loop = asyncio.get_running_loop()
+                response = await loop.run_in_executor(None, generate_response, prompt)
+
+                await message.channel.send("response generated, speaking now...")
+                await self.speech_queue.put(response)
+            except Exception as e:
+                logger.error(f"Error processing message: {e}")
+            finally:
+                self.speech_queue.task_done()
+
+
+    async def event_message(self, message):
+        """
+        Handles incoming Twitch chat messages.
+        """
+        if message.echo:
+            return
+        logger.info(f"[Twitch] Message from {message.author.name}: {message.content}")
+
+        content = message.content.lower()
+
+        """
+        if content == "!pause":
+            await self.pause_monologue(message)
+            return
+        
+        if content == "!resume":
+            await self.resume_monologue(message)
+            return
+        """
+
+        await self.message_queue.put(message)
+
+
+    # === Monologue Functionality ===
     async def monologue_loop(self):
         """
         Continuously generates and speaks monologues based on starter prompts until cancelled or paused.
@@ -80,7 +163,7 @@ class Bot:
                     response = "Something went wrong!"
 
                 logger.info(f"[Monologue] Response:\n{response}")
-                await speak_from_prompt(response)
+                await self.speech_queue.put(response)
 
                 delay = 10
                 logger.debug(f"[Monologue] Waiting {delay} seconds before next cycle...")
@@ -88,34 +171,32 @@ class Bot:
         except asyncio.CancelledError:
             logger.warning("[Monologue] Monologue loop cancelled")
 
-    def pause_monologue(self):
+    async def pause_monologue(self, message):
         """
         Pauses the monologue loop.
         """
         self.monologue_running = False
+        await message.channel.send("Monologue paused.")
         logger.info("[Monologue] Paused.")
 
-    def resume_monologue(self):
+    async def resume_monologue(self, message):
         """
         Resumes the monologue loop.
         """
         self.monologue_running = True
+        await message.channel.send("Monologue resumed.")
         logger.info("[Monologue] Resumed.")
 
-    async def input_listener_loop(self):
+    # === Handling Speech Queue ===
+    async def speech_consumer(self):
         """
-        Placeholder async loop for listening to user input (e.g., chat), runs until cancelled.
+        Continuously consumes text messages from the speech queue and processes them for speech synthesis.
         """
-        try:
-            while True:
-                # pholder 4 twitch chat
-                await asyncio.sleep(1)
-        except asyncio.CancelledError:
-                logger.warning("[Input] Listener loop cancelled")
-
-    def stop(self):
-        """
-        Signals the bot to shutdown by setting the shutdown event.
-        """
-        logger.warning("[Stop] Stop signal issued.")
-        self.shutdown_event.set()
+        while True:
+            text = await self.speech_queue.get()
+            try:
+                await speak_from_prompt(text)
+            except Exception as e:
+                logger.error(f"Error during speech playback: {e}")
+            finally:
+                self.speech_queue.task_done()

@@ -1,5 +1,6 @@
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 import re
+import torch
 
 # === Setup sentence tokenisation ===
 import nltk
@@ -12,6 +13,9 @@ from log_utils import get_logger
 logger = get_logger("GPT_Utils")
 
 # === Load GPT-2 model ===
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logger.info(f"[GPT_Utils] Using device: {device}")
+
 model_name = "gpt2-xl"
 logger.info(f"[GPT_Utils] Loading model: {model_name}")
 model = GPT2LMHeadModel.from_pretrained(model_name)
@@ -108,6 +112,7 @@ def generate_response(prompt, max_new_tokens=200):
         logger.debug(f"[generate_response] Created full prompt")
 
         inputs = tokeniser(full_prompt, return_tensors="pt")
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         logger.debug(f"[generate_response] Tokenised input")
 
         max_context_len = 1024
@@ -115,9 +120,10 @@ def generate_response(prompt, max_new_tokens=200):
 
         if len(input_ids) > max_context_len - max_new_tokens:
             input_ids = input_ids[-(max_context_len - max_new_tokens):]
-            inputs = {"input_ids": input_ids.unsqueeze(0)}
+            inputs = {"input_ids": input_ids.unsqueeze(0).to(device)}
             logger.debug(f"[generate_response] Truncated input_ids to fit context length")
-            
+        
+        model.to(device)
         logger.debug(f"[generate_response] Calling model.generate()...")
         outputs = model.generate(
             **inputs,
@@ -141,8 +147,11 @@ def generate_response(prompt, max_new_tokens=200):
             logger.debug(f"[generate_response] Removed prompt prefix from generated text")
 
         final_response = clean_and_limit_text(generated_text, max_sentences=3, max_chars=300)
-        logger.info(f"[generate_response] Final response: {final_response}")
+        if not final_response.strip():
+            logger.warning("[generate_response] Generated empty response, returning fallback text.")
+            final_response = "Sorry, I couldn't generate a response. Please try again."
 
+        logger.info(f"[generate_response] Final response: {final_response}")
         return final_response
 
     except Exception as e:

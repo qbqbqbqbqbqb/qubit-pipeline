@@ -22,23 +22,32 @@ async def main():
     Entry point for running the bot asynchronously.
 
     - Logs the start of the bot.
+    - Logs and starts the token refresher loop.
     - Initialises and starts the Bot instance.
     - Logs a warning if the bot's start method returns unexpectedly.
     - Catches and logs any critical exceptions that occur during execution.
     """
+    bot = Bot()
+
     try:
         logger.info("[Main] Refreshing token before bot start...")
         await refresh_twitch_token()
         
         logger.info("[Main] Starting Bot and Token Refresher...")
-        bot = Bot()
+        
         bot_task = asyncio.create_task(bot.start()) 
         refresher_task = asyncio.create_task(token_refresher_loop())
 
         await bot_task
-        refresher_task.cancel()
+        
+    except KeyboardInterrupt:
+        logger.info("[Main] KeyboardInterrupt received. Shutting down...")
+        bot.shutdown_event.set()
 
+        refresher_task.cancel()
         await asyncio.gather(refresher_task, return_exceptions=True)
+
+        await bot_task
         logger.info("[Main] Bot has exited. Token refresher cancelled.")
     
     except Exception as e:

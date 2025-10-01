@@ -2,8 +2,9 @@ import re
 import inflect
 from TTS.api import TTS
 import concurrent.futures
-import os
 import simpleaudio as sa
+import asyncio
+import numpy as np
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -12,9 +13,8 @@ logger = get_logger("TTS_Utils")
 # === Import TTS model ===
 p = inflect.engine()
 tts = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", progress_bar=False, gpu=False)
-tts.synthesizer.tts_model.decoder.max_decoder_steps = 500
+tts.synthesizer.tts_model.decoder.max_decoder_steps = 2000
 executor = concurrent.futures.ThreadPoolExecutor()
-
 
 # === Normalise text for TTS ===
 def remove_unsupported_chars(text: str) -> str:
@@ -92,13 +92,25 @@ def remove_urls(text: str) -> str:
     """
     url_pattern = re.compile(
         r"""
-        (https?://\S+)|       # Matches http:// or https:// links
-        (www\.\S+)|           # Matches www. links
-        (\b\S+\.(com|org|net|co|io|gov|edu)(\/\S*)?)  # Matches domain endings like .com and optional /paths
+        (https?://\S+)|
+        (www\.\S+)| 
+        (\b\S+\.(com|org|net|co|io|gov|edu)(\/\S*)?)  
         """,
         re.IGNORECASE | re.VERBOSE
     )
     return re.sub(url_pattern, '', text)
+
+def remove_trailing_punctuation(text: str) -> str:
+    """
+        Removes trailing punctuation marks such as periods, exclamation points, and question marks from the end of the text.
+    """
+    return re.sub(r'[.!?]+$', '', text).strip()
+
+def collapse_repeated_words(text: str) -> str:
+    """
+    Collapses consecutive repeated words into a single instance.
+    """
+    return re.sub(r'\b(\w+)( \1\b)+', r'\1', text)
 
 def normalise_text(text: str, number_converter) -> str:
     """
@@ -127,36 +139,59 @@ def normalise_text(text: str, number_converter) -> str:
     text = ensure_spacing_after_punctuation(text)
     text = re.sub(r'\s+', ' ', text).strip()
     text = remove_unsupported_chars(text)
+    text = collapse_repeated_words(text)
 
-    acronyms = ["PC", "CPU", "GPU", "RAM", "QB"]
+    acronyms = ["PC", "CPU", "GPU", "RAM", "QB", "QBOT", "USB", "HTTP", "HTTPS", "API", "ID", "TV", "LOL", "BRB", "GTG", "AFK", 
+                "IMHO", "FYI", "DIY", "ETA", "ASAP", "TTS", "AI", "VR", "AR", "IP", "LAN", "WAN", "SSID", "DM", "PM", "GMT", 
+                "UTC", "FBI", "CIA", "NSA", "NASA", "HTML", "CSS", "JS", "JSON", "XML", "SQL", "HTTP", "HTTPS"]
     text = spell_out_acronyms(text, acronyms)
+
+    if not text.endswith(('.', '!', '?')):
+        text += '.'
 
     return text
 
 # === TTS Output ===
-async def speak_from_prompt(text, output_audio="output.wav"):
+async def speak_from_prompt(text):
     """
-    Normalises text, converts it to speech, plays the audio, and deletes the file.
+    Normalises text, converts it to speech, plays the audio.
 
     Args:
         text (str): Text to be spoken.
-        output_audio (str): Path to temporary audio file (default: "output.wav").
     """
     normalised_text = normalise_text(text, p.number_to_words)
-    normalised_text = remove_urls(normalised_text)
 
+    if not normalised_text or re.fullmatch(r'[.!?]+', normalised_text.strip()):
+        logger.warning("[TTS] No valid text to speak after normalisation.")
+        return
+      
     logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
     
-    tts.tts_to_file(text=normalised_text, file_path=output_audio, max_decoder_steps=500)
+    loop = asyncio.get_running_loop()
+    wav = await loop.run_in_executor(None, lambda: tts.tts(normalised_text))
 
-    logger.info(f"[Audio saved to]: {output_audio}")
+    if isinstance(wav, list):
+        wav = np.array(wav)
 
-    wave_obj = sa.WaveObject.from_wave_file(output_audio)
-    play_obj = wave_obj.play()
-    play_obj.wait_done() 
+    wav = np.array(wav)
+    if wav.ndim > 1:
+        wav = wav.mean(axis=1)
+    
+    if len(wav) == 0:
+        logger.warning("[TTS] Generated empty audio, skipping playback.")
+        return
+    
+    max_val = np.max(np.abs(wav))
+    if max_val > 0:
+        wav = wav / max_val
+    wav = np.clip(wav, -1.0, 1.0)
 
-    try:
-        os.remove(output_audio)
-        logger.debug(f"[Deleted audio file]: {output_audio}")
-    except Exception as e:
-        logger.error(f"Error deleting audio file: {e}")
+    logger.debug(f"[TTS] Audio waveform length: {len(wav)}, min: {wav.min()}, max: {wav.max()}")
+
+    audio_data = (wav * 32767).astype(np.int16)
+
+    def play_audio():
+        play_obj = sa.play_buffer(audio_data, 1, 2, tts.synthesizer.output_sample_rate)
+        play_obj.wait_done()
+
+    await loop.run_in_executor(None, play_audio)
