@@ -12,11 +12,18 @@ nltk.download('punkt')
 from log_utils import get_logger
 logger = get_logger("GPT_Utils")
 
+# === Load environment variables ===
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt2-xl")
+
 # === Load GPT-2 model ===
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 logger.info(f"[GPT_Utils] Using device: {device}")
 
-model_name = "gpt2-xl"
+model_name = MODEL_NAME
 logger.info(f"[GPT_Utils] Loading model: {model_name}")
 model = GPT2LMHeadModel.from_pretrained(model_name)
 tokeniser = GPT2Tokenizer.from_pretrained(model_name)

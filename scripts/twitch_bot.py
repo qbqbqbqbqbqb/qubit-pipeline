@@ -1,12 +1,13 @@
-import os
 from twitchio.ext import commands
 import asyncio
 import random
+import re
 
 from gpt_utils import generate_response
 from tts_utils import speak_from_prompt
 
 # === Load environment variables ===
+import os
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -16,6 +17,7 @@ TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
 TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
 
 IGNORED_USERS = ['nightbot', 'streamelements']
+
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -42,6 +44,9 @@ class Bot(commands.Bot):
         self.speech_queue = asyncio.Queue()
         self.processing_message = False
 
+        self.prompt_template = self.load_file("instructions.txt")
+        self.banned_words = self.load_banned_words("banned_words.txt")
+
         self.starters = [
             "I was just thinking about",
             "Did you know that",
@@ -60,7 +65,7 @@ class Bot(commands.Bot):
             return 
         logger.info(f"[Twitch] Logged in as {self.nick}")
 
-        intro_prompt = "[Start]  Write a short, cheerful greeting..."
+        intro_prompt = "[Start]  This is the first thing you will say this stream. Write a short, cheerful greeting to welcome viewers to the stream. For example: 'Hey everyone! Welcome to the Qubit stream! I'm so excited to hang out with you all today. Let's have some fun!'"
         logger.debug(f"[Start] Intro prompt: {intro_prompt}")
 
         loop = asyncio.get_running_loop()
@@ -103,17 +108,39 @@ class Bot(commands.Bot):
         """
         while True:
             message = await self.message_queue.get()
+            author = message.author.name
+
+            logger.info(f"[Twitch] Generating response to: {message_content}")
 
             try:
                 message_content = message.content
-                logger.info(f"[Twitch] Generating response to: {message_content}")
-                await self.speech_queue.put({"type": "chat_response", "text": "{message.author.name} says {message_content}"})
+                if self.contains_banned_words(message_content.lower()):
+                    logger.warning(f"[Filter] Blocked user message with banned words: {message_content}")
+                    continue
 
+                if self.contains_banned_words(author.lower()):
+                    await self.speech_queue.put({"type": "chat_response", "text": f"A censored name says {message_content}"})
+                else:
+                    await self.speech_queue.put({"type": "chat_response", "text": f"{message.author.name} says {message_content}"})
+                
                 loop = asyncio.get_running_loop()
-                prompt = self.build_prompt(f"Respond to this Twitch chat message: {message_content}")
+                
+                if self.contains_banned_words(author.lower()):
+                    prompt = self.build_prompt(
+                        f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
+                    )
+                else:
+                    prompt = self.build_prompt(
+                        f"A user named {message.author.name} said: \"{message_content}\". Respond to this Twitch chat message."
+                    )
+
                 response = await loop.run_in_executor(None, generate_response, prompt)
 
-                await message.channel.send("response generated, speaking now...")
+                if self.contains_banned_words(response):
+                    logger.warning(f"[Filter] Response contains banned words, skipping speech: {response}")
+                    response = "I'm sorry, I can't respond to that."
+
+                #await message.channel.send("response generated, speaking now...")
                 await self.speech_queue.put({"type": "chat_response", "text": response})
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
@@ -124,22 +151,24 @@ class Bot(commands.Bot):
         """
         Handles incoming Twitch chat messages.
         """
-        content = message.content.lower()
+        content = message.content
+        author = message.author.name
+
         if message.echo and not content.startswith("!"):
             return
         
-        if message.author.name.lower() in IGNORED_USERS:
+        if author.lower() in IGNORED_USERS:
             return
         
-        logger.info(f"[Twitch] Message from {message.author.name}: {message.content}")
+        logger.info(f"[Twitch] Message from {author}: {content}")
 
-        if (message.author.name.lower() == TWITCH_STREAMER_NAME.lower() or
-            message.author.name.lower() == TWITCH_BOT_NAME.lower()):
-            if content == "!pause":
+        if (author.lower() == TWITCH_STREAMER_NAME.lower() or
+            author.lower() == TWITCH_BOT_NAME.lower()):
+            if content.lower() == "!pause":
                 await self.pause_monologue(message)
                 return
             
-            if content == "!resume":
+            if content.lower() == "!resume":
                 await self.resume_monologue(message)
                 return
 
@@ -171,6 +200,10 @@ class Bot(commands.Bot):
                     response = "Something went wrong!"
 
                 logger.info(f"[Monologue] Response:\n{response}")
+                if self.contains_banned_words(response):
+                    logger.warning(f"[Filter] Blocked response due to banned words:\n{response}")
+                    continue
+
                 await self.speech_queue.put({"type": "monologue", "text": response})
 
                 delay = 10
@@ -220,6 +253,9 @@ class Bot(commands.Bot):
                     logger.debug("[Speech] Monologue paused, skipping speech.")
                 else:
                     text = item['text'] 
+                    if self.contains_banned_words(text):
+                        logger.warning(f"[Speech Filter] Blocked TTS due to banned content:\n{text}")
+                        continue
                     await speak_from_prompt(text)
 
             except Exception as e:
@@ -228,17 +264,59 @@ class Bot(commands.Bot):
                 self.speech_queue.task_done()
 
     # === Heh.... Prompt Engineering... ===
-    def build_prompt(self, base_prompt: str) -> str:
+    def build_prompt(self, base_prompt: str, mood: str = "energetic", 
+                     interaction_level: str = "high",
+                     tone: str = "casual and humorous"
+                     ) -> str:
         """
         Wraps a base prompt with instructions to generate a lively,
         fun, casual Twitch streamer style response.
         """
-        instructions = (
-            "You are a lively Twitch streamer chatting live with your audience. "
-            "Be fun, energetic, casual, and humorous. Use Twitch slang, "
-            "internet memes, and emotes like PogChamp or LUL occasionally. "
-            "Talk like you're genuinely excited and engaged. "
-            "Make jokes, react to things emotionally, and keep it interactive. "
-            "Speak as if you're live on stream talking to friends. "
+
+        interaction_instruction = {
+            "low": "Focus mostly on monologue style, little audience interaction.",
+            "medium": "Engage with the audience occasionally, reacting to chat.",
+            "high": "Frequently interact with the audience, asking questions, "
+                    "responding to chat, and making jokes about chat messages."
+        }.get(interaction_level, "Frequently interact with the audience.")
+
+
+        instructions =  self.prompt_template.format(
+            mood=mood,
+            tone=tone,
+            interaction_instruction=interaction_instruction
         )
-        return instructions + " " + base_prompt
+
+        prompt = f"{instructions} Now talk about: {base_prompt}"
+
+        return prompt
+
+    def load_file(self, path: str) -> str:
+        with open(path, "r", encoding="utf-8") as file:
+            return file.read()
+
+    def load_banned_words(self, path: str) -> list:
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                words = [line.strip().lower() for line in file if line.strip()]
+            return words
+        except Exception as e:
+            logger.error(f"Error loading banned words from {path}: {e}")
+            return []
+        
+    # == Moderation ===
+    def contains_banned_words(self, text: str) -> bool:
+        """
+        Checks if the given text contains any banned words as whole words,
+        ignoring case and avoiding partial matches.
+        """
+        text_lower = text.lower()
+
+        for word in self.banned_words:
+            pattern = r'\b' + re.escape(word) + r'\b'
+
+            if re.search(pattern, text_lower):
+                return True
+
+        return False
+
