@@ -2,6 +2,7 @@ from twitchio.ext import commands
 import asyncio
 import random
 import re
+import time
 
 from gpt_utils import generate_response
 from tts_utils import speak_from_prompt
@@ -40,7 +41,7 @@ class Bot(commands.Bot):
         self.startup_done = False
         self.monologue_running = True
 
-        self.message_queue = asyncio.Queue()
+        self.message_queue = asyncio.Queue(maxsize=50)
         self.speech_queue = asyncio.Queue()
         self.processing_message = False
 
@@ -49,6 +50,8 @@ class Bot(commands.Bot):
 
         self.chat_history = []
         self.max_chat_history = 8
+
+        self.shutting_down = False
 
         self.starters = [
             "I was just thinking about",
@@ -66,15 +69,44 @@ class Bot(commands.Bot):
         """
         if self.startup_done:
             return 
+        
         logger.info(f"[Twitch] Logged in as {self.nick}")
 
-        intro_prompt = "[Start]  This is the first thing you will say this stream. Write a short, cheerful greeting to welcome viewers to the stream. For example: 'Hey everyone! Welcome to the Qubit stream! I'm so excited to hang out with you all today. Let's have some fun!'"
+        intro_prompt = (
+            "This is the first thing you will say this stream. "
+            "Write a short, cheerful greeting to welcome viewers to the stream. "
+            "For example: 'Hey everyone! Welcome to the Qubit stream!"
+            "I'm so excited to hang out with you all today. Let's have some fun!'"
+        )
         logger.debug(f"[Start] Intro prompt: {intro_prompt}")
 
+        if not self.chat_history:
+            self.chat_history.append(("bot", "Ready to start the stream!"))
+
         loop = asyncio.get_running_loop()
-        prompt = self.build_prompt(intro_prompt)
-        intro_text = await loop.run_in_executor(None, generate_response, prompt)
-        logger.info(f"[Start] Intro response: {intro_text}")
+        prompt = self.build_prompt(intro_prompt) 
+
+        max_attempts = 3
+        intro_text = ""
+
+        for attempt in range(max_attempts):
+            try:
+                intro_text = await loop.run_in_executor(None, generate_response, prompt)
+                logger.info(f"[Start] Intro response (attempt {attempt+1}): {intro_text}")
+
+                if not intro_text.strip() or "couldn't generate" in intro_text.lower() or "something went wrong" in intro_text.lower():
+                    logger.warning(f"[Start] Invalid intro response on attempt {attempt+1}")
+                    continue
+                break 
+            except Exception as e:
+                logger.error(f"[Start] Error generating intro response: {e}")
+                intro_text = "I'm Qubit. This is my stream"
+                break
+
+            
+        if not intro_text.strip():
+            intro_text = "I'm Qubit. This is my stream"
+
         await speak_from_prompt(intro_text)
 
         self.startup_done = True
@@ -97,11 +129,52 @@ class Bot(commands.Bot):
         await asyncio.gather(*self.tasks, return_exceptions=True)
         logger.info("[Start] All tasks cancelled. Exiting.")
 
-    def stop(self):
+    async def stop(self):
         """
-        Signals the bot to shutdown by setting the shutdown event.
+        Signals the bot to shutdown by speaking a sign-off message and setting the shutdown event.
         """
         logger.warning("[Stop] Stop signal issued.")
+
+        self.shutting_down = True
+        self.monologue_running = False
+
+        cleared_messages = 0
+        while not self.message_queue.empty():
+            try:
+                self.message_queue.get_nowait()
+                self.message_queue.task_done()
+                cleared_messages += 1
+            except asyncio.QueueEmpty:
+                break
+
+        logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
+
+        cleared_speech = 0
+        new_speech_queue = asyncio.Queue()
+        while not self.speech_queue.empty():
+            try:
+                self.speech_queue.get_nowait()
+                self.speech_queue.task_done()
+                cleared_speech += 1
+            except asyncio.QueueEmpty:
+                break
+
+        self.speech_queue = new_speech_queue
+        logger.info(f"[Stop] Cleared {cleared_speech} items from speech queue.")
+
+        try:
+            ending_prompt = "This is the last thing you will say before the stream ends. Say a short, vtuber-esque sign-off to say goodbye to your audience."
+            logger.debug(f"[Stop] Ending prompt: {ending_prompt}")
+            
+            prompt = self.build_prompt(ending_prompt)
+            loop = asyncio.get_running_loop()
+            end_txt = await loop.run_in_executor(None, generate_response, prompt)
+
+            logger.info(f"[Stop] Sign-off message: {end_txt}")
+            await speak_from_prompt(end_txt)
+        except Exception as e:
+            logger.error(f"[Stop] Error during shutdown message: {e}")
+
         self.shutdown_event.set()
 
     # === Message Functionality ===
@@ -110,9 +183,19 @@ class Bot(commands.Bot):
         Continuously processes messages from the message queue by generating TTS responses.
         """
         while True:
-            message = await self.message_queue.get()
+            message_data = await self.message_queue.get()
+            message = message_data["message"]
+            timestamp = message_data.get("timestamp", time.time())
+
             author = message.author.name
             message_content = message.content
+            age = time.time() - timestamp
+
+            if age > 120:
+                logger.info(f"Dropped stale message from {author} ({int(age)}s old)")
+                self.message_queue.task_done()
+                continue
+
             logger.info(f"[Twitch] Generating response to: {message_content}")
 
             try:
@@ -120,11 +203,6 @@ class Bot(commands.Bot):
                     logger.warning(f"[Filter] Blocked user message with banned words: {message_content}")
                     continue
 
-                if self.contains_banned_words(author.lower()):
-                    await self.speech_queue.put({"type": "chat_response", "text": f"A censored name says {message_content}"})
-                else:
-                    await self.speech_queue.put({"type": "chat_response", "text": f"{author} says {message_content}"})
-                
                 loop = asyncio.get_running_loop()
                 
                 if self.contains_banned_words(author.lower()):
@@ -140,18 +218,31 @@ class Bot(commands.Bot):
 
                 response = await loop.run_in_executor(None, generate_response, prompt)
 
+                if (
+                    response.strip().lower().startswith("sorry, i couldn't generate a response") or
+                    "something went wrong" in response.lower()
+                ):
+                    logger.warning(f"[GPT] Skipping response due to fallback message: {response}")
+                    self.message_queue.task_done()
+                    continue 
+                
                 if self.contains_banned_words(response):
                     logger.warning(f"[Filter] Response contains banned words, skipping speech: {response}")
-                    response = "I'm sorry, I can't respond to that."
-                    await self.speech_queue.put({"type": "chat_response", "text": response})
+                    continue
+
+                if self.contains_banned_words(author.lower()):
+                    await self.speech_queue.put({"type": "chat_response", "text": f"A censored name says {message_content}"})
                 else:
-                    await self.speech_queue.put({"type": "chat_response", "text": response})
-                    self.chat_history.append(("bot", response))
+                    await self.speech_queue.put({"type": "chat_response", "text": f"{author} says {message_content}"})
+                
+                await self.speech_queue.put({"type": "chat_response", "text": response})
+                self.chat_history.append(("bot", response))
                 
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
             finally:
-                self.speech_queue.task_done()
+                self.message_queue.task_done() 
+
 
     async def event_message(self, message):
         """
@@ -160,12 +251,20 @@ class Bot(commands.Bot):
         content = message.content
         author = message.author.name
 
-        response_chance = 0.8
-
+        if self.shutting_down:
+            logger.info(f"[Shutdown] Ignored message from {author} because bot is shutting down.")
+            return
+    
         if message.echo and not content.startswith("!"):
             return
         
         if author.lower() in IGNORED_USERS:
+            return
+        
+        min_length = 3
+        word_count = len(content.strip().split())
+        if word_count < min_length:
+            logger.info(f"[Filter] Ignored short message from {author}: {content}")
             return
         
         logger.info(f"[Twitch] Message from {author}: {content}")
@@ -173,16 +272,42 @@ class Bot(commands.Bot):
         if (author.lower() == TWITCH_STREAMER_NAME.lower() or
             author.lower() == TWITCH_BOT_NAME.lower()):
             if content.lower() == "!pause":
-                await self.pause_monologue(message)
+                if callable(self.pause_monologue):
+                    await self.pause_monologue(message)
+                else:
+                    logger.error(f"pause_monologue is not callable: {self.pause_monologue}")
                 return
             
             if content.lower() == "!resume":
-                await self.resume_monologue(message)
+                if callable(self.resume_monologue):
+                    await self.resume_monologue(message)
+                else:
+                    logger.error(f"resume_monologue is not callable: {self.resume_monologue}")
                 return
 
+            if content.lower() == "!stop":
+                if callable(self.stop):
+                    await self.stop(message)
+                else:
+                    logger.error(f"stop is not callable: {self.stop}")
+                return
+            
+            if content.lower() == "!stop":
+                await self.stop()
+                return
+        
+        response_chance = 0.8
+
         if random.random() < response_chance:
-            logger.info(f"[Twitch] Queuing message from {author} for response.")
-            await self.message_queue.put(message)
+            try:
+                logger.info(f"[Twitch] Queuing message from {author} for response.")
+                message_data = {
+                    "message": message,
+                    "timestamp": time.time()
+                }
+                await self.message_queue.put(message_data)
+            except asyncio.QueueFull:
+                logger.warning(f"[Twitch] Queue Full. Dropping message.")
         else:
             logger.info(f"[Twitch] Ignoring message from {author} (chance).")   
             pass
@@ -205,11 +330,29 @@ class Bot(commands.Bot):
                 prompt = self.build_prompt(starter_prompt)
                 loop = asyncio.get_running_loop()
 
-                try:
-                    response = await loop.run_in_executor(None, generate_response, prompt)
-                except Exception as e:
-                    logger.error(f"[Monologue] Error during response generation: {e}")
-                    response = "Something went wrong!"
+                max_attempts = 2
+                response = ""
+
+                for attempt in range(max_attempts):
+                    try:
+                        response = await loop.run_in_executor(None, generate_response, prompt)
+                        logger.info(f"[Monologue] Response (attempt {attempt + 1}): {response}")
+
+                        if not response.strip() or \
+                        "couldn't generate" in response.lower() or \
+                        "something went wrong" in response.lower():
+                            logger.warning(f"[Monologue] Invalid response on attempt {attempt + 1}")
+                            continue
+                        break
+                    except Exception as e:
+                        logger.error(f"[Monologue] Error during response generation: {e}")
+                        response = "Something went wrong!"
+                        break
+                
+                if not response.strip():
+                    logger.warning("[Monologue] Skipping empty or invalid response")
+                    await asyncio.sleep(5)  
+                    continue
 
                 logger.info(f"[Monologue] Response:\n{response}")
                 if self.contains_banned_words(response):
@@ -218,7 +361,7 @@ class Bot(commands.Bot):
 
                 await self.speech_queue.put({"type": "monologue", "text": response})
 
-                delay = 10
+                delay = 5
                 logger.debug(f"[Monologue] Waiting {delay} seconds before next cycle...")
                 await asyncio.sleep(delay)
         except asyncio.CancelledError:
@@ -301,7 +444,7 @@ class Bot(commands.Bot):
             interaction_instruction=interaction_instruction
         )
 
-        prompt = f"{instructions}\nChat History:\n{history_text}\nNow talk about: {base_prompt}"
+        prompt = f"{instructions}\nChat History: {history_text}\nNow talk about: {base_prompt}"
 
         return prompt
 
@@ -333,4 +476,8 @@ class Bot(commands.Bot):
                 return True
 
         return False
+
+def is_fallback_text(text: str) -> bool:
+    text_lower = text.strip().lower()
+    return text_lower.startswith("sorry, i couldn't generate a response") or "something went wrong" in text_lower
 
