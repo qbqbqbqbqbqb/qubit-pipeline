@@ -1,0 +1,150 @@
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+import re
+
+# === Setup sentence tokenisation ===
+import nltk
+from nltk.tokenize import sent_tokenize
+
+nltk.download('punkt') 
+
+# === Setup colorlog logger ===
+from log_utils import get_logger
+logger = get_logger("GPT_Utils")
+
+# === Load GPT-2 model ===
+model_name = "gpt2-xl"
+logger.info(f"[GPT_Utils] Loading model: {model_name}")
+model = GPT2LMHeadModel.from_pretrained(model_name)
+tokeniser = GPT2Tokenizer.from_pretrained(model_name)
+
+logger.info("[GPT_Utils] Module loaded")
+
+# === Utility Functions ===
+def trim_to_last_sentence(text):
+    """
+    Returns text trimmed to the last full sentence according to the sentence tokeniser.
+    """
+    sentences = sent_tokenize(text)
+    if not sentences:
+        return ""
+    if not text.endswith(('.', '!', '?')):
+        sentences = sentences[:-1]
+    return ' '.join(sentences).strip()
+
+def limit_sentences(text, max_sentences=3):
+    """
+    Limits text to a maximum number of sentences using the sentence tokeniser.
+    """
+    sentences = sent_tokenize(text)
+    return ' '.join(sentences[:max_sentences]).strip()
+
+def limit_chars(text, max_chars=300):
+    """
+    Truncates the input text to a maximum character length without cutting off words abruptly.
+    """
+    if len(text) > max_chars:
+        return text[:max_chars].rsplit(' ', 1)[0] + '...'
+    return text
+
+def clean_and_limit_text(text, max_sentences=3, max_chars=300):
+    """
+    Cleans and limits the input text by trimming to full sentences, limiting sentence count, and truncating characters.
+    """
+    text = trim_to_last_sentence(text)
+    text = limit_sentences(text, max_sentences)
+    text = limit_chars(text, max_chars)
+    return text
+
+def contains_url(text):
+    """
+    Checks if the input text contains a URL pattern.
+    """
+    url_pattern = re.compile(r'https?://\S+|www\.\S+|.com\S*', re.IGNORECASE)
+    return bool(url_pattern.search(text))
+
+
+def clean_generated_text(text):
+    """
+    Cleans generated text by removing text consisting only of punctuation and stripping trailing punctuation,
+    and removes sentences containing URLs.
+    """
+    if re.fullmatch(r"[:;,.!?\-]+", text.strip()):
+        return ""
+    text = text.strip().strip(":;,.!?-")
+    sentences = text.split('. ')
+    sentences = [s for s in sentences if not contains_url(s)]
+    return '. '.join(sentences).strip()
+
+# === Core Function ===
+def generate_response(prompt, max_new_tokens=200):
+    """
+    Generates a text response from a model given an input prompt, while filtering out URLs and limiting output length.
+
+    The function:
+    - Adds a system instruction to avoid generating URLs.
+    - Tokenises and optionally truncates the input to fit model context limits.
+    - Generates text with sampling parameters and constraints.
+    - Decodes the generated tokens back to text.
+    - Removes the original prompt from the generated output.
+    - Cleans and limits the response by sentences and character length.
+    - Logs key steps and handles exceptions gracefully.
+
+    Args:
+        prompt (str): The input text prompt to generate a response for.
+        max_new_tokens (int, optional): The maximum number of new tokens to generate. Default is 200.
+
+    Returns:
+        str: The cleaned, limited generated text response, or an error message if generation fails.
+    """
+    try:
+        logger.info(f"[generate_response] Received prompt: {prompt[:60]}...")
+
+        bad_words = ["http", "www", "https", ".com"]
+        bad_words_ids = [tokeniser.encode(word, add_special_tokens=False) for word in bad_words]
+        logger.debug(f"[generate_response] bad_words_ids: {bad_words_ids}")
+
+        system_instruction = "Please respond without including any links, URLs, or web addresses.\n\n"
+        full_prompt = system_instruction + prompt
+        logger.debug(f"[generate_response] Created full prompt")
+
+        inputs = tokeniser(full_prompt, return_tensors="pt")
+        logger.debug(f"[generate_response] Tokenised input")
+
+        max_context_len = 1024
+        input_ids = inputs["input_ids"][0]
+
+        if len(input_ids) > max_context_len - max_new_tokens:
+            input_ids = input_ids[-(max_context_len - max_new_tokens):]
+            inputs = {"input_ids": input_ids.unsqueeze(0)}
+            logger.debug(f"[generate_response] Truncated input_ids to fit context length")
+            
+        logger.debug(f"[generate_response] Calling model.generate()...")
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            top_k=50,
+            top_p=0.95,
+            temperature=0.9,
+            pad_token_id=tokeniser.eos_token_id,
+            repetition_penalty=1.2,
+            no_repeat_ngram_size=2,
+            bad_words_ids=bad_words_ids,
+        )
+        logger.debug(f"[generate_response] Model generation completed")
+
+        generated_text = tokeniser.decode(outputs[0], skip_special_tokens=True)
+        logger.debug(f"[generate_response] Raw generated text: {generated_text[:60]}...")
+
+        if generated_text.startswith(full_prompt):
+            generated_text = generated_text[len(full_prompt):].strip()
+            logger.debug(f"[generate_response] Removed prompt prefix from generated text")
+
+        final_response = clean_and_limit_text(generated_text, max_sentences=3, max_chars=300)
+        logger.info(f"[generate_response] Final response: {final_response}")
+
+        return final_response
+
+    except Exception as e:
+        logger.exception("[generate_response] Exception occurred during response generation")
+        return "Something went wrong!"
