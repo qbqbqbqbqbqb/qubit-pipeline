@@ -15,6 +15,8 @@ TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
 TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
 
+IGNORED_USERS = ['nightbot', 'streamelements']
+
 # === Setup colorlog logger ===
 from log_utils import get_logger
 logger = get_logger("Bot")
@@ -122,6 +124,9 @@ class Bot(commands.Bot):
         """
         content = message.content.lower()
         if message.echo and not content.startswith("!"):
+            return
+        
+        if message.author.name.lower() in IGNORED_USERS:
             return
         
         logger.info(f"[Twitch] Message from {message.author.name}: {message.content}")
