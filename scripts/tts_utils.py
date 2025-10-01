@@ -12,7 +12,9 @@ logger = get_logger("TTS_Utils")
 # === Import TTS model ===
 p = inflect.engine()
 tts = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", progress_bar=False, gpu=False)
+tts.synthesizer.tts_model.decoder.max_decoder_steps = 500
 executor = concurrent.futures.ThreadPoolExecutor()
+
 
 # === Normalise text for TTS ===
 def remove_unsupported_chars(text: str) -> str:
@@ -84,6 +86,20 @@ def spell_out_acronyms(text: str, acronyms: list[str]) -> str:
         )
     return text
 
+def remove_urls(text: str) -> str:
+    """
+    Removes URLs and domain-like patterns from the input text.
+    """
+    url_pattern = re.compile(
+        r"""
+        (https?://\S+)|       # Matches http:// or https:// links
+        (www\.\S+)|           # Matches www. links
+        (\b\S+\.(com|org|net|co|io|gov|edu)(\/\S*)?)  # Matches domain endings like .com and optional /paths
+        """,
+        re.IGNORECASE | re.VERBOSE
+    )
+    return re.sub(url_pattern, '', text)
+
 def normalise_text(text: str, number_converter) -> str:
     """
     Prepares text for TTS by cleaning and normalising it:
@@ -102,6 +118,7 @@ def normalise_text(text: str, number_converter) -> str:
     Returns:
         str: Cleaned and normalised text ready for TTS.
     """
+    text = remove_urls(text)
     text = remove_brackets_and_parentheses(text)
     text = convert_numbers_to_words(text, number_converter)
     text = strip_edge_punctuation(text)
@@ -126,6 +143,8 @@ async def speak_from_prompt(text, output_audio="output.wav"):
         output_audio (str): Path to temporary audio file (default: "output.wav").
     """
     normalised_text = normalise_text(text, p.number_to_words)
+    normalised_text = remove_urls(normalised_text)
+
     logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
     
     tts.tts_to_file(text=normalised_text, file_path=output_audio, max_decoder_steps=500)
