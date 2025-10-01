@@ -1,9 +1,11 @@
 import aiohttp
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
-logger = get_logger("GPT_Utils")
+logger = get_logger("RefreshToken")
 
 def update_env_var(key, value, env_path=".env"):
     """
@@ -39,9 +41,15 @@ async def refresh_twitch_token():
     """
     Refreshes the Twitch OAuth token asynchronously using the refresh token, updates environment variables, and persists them in the .env file.
     """
+
+    logger.info("Starting refresh_twitch_token()")
+    
     client_id = os.getenv("TWITCH_CLIENT_ID")
     client_secret = os.getenv("TWITCH_CLIENT_SECRET")
     refresh_token = os.getenv("TWITCH_REFRESH_TOKEN")
+
+    if not client_id or not client_secret or not refresh_token:
+        raise ValueError("One or more required environment variables are missing or None")
 
     token_url = "https://id.twitch.tv/oauth2/token"
     params = {
@@ -53,8 +61,10 @@ async def refresh_twitch_token():
 
     async with aiohttp.ClientSession() as session:
         async with session.post(token_url, params=params) as response:
+            logger.info(f"HTTP Status: {response.status}")
             data = await response.json()
-
+            #logger.info(f"Twitch token response: {data}")
+            # this will show token in terminal if uncommented
             if "access_token" in data:
                 logger.debug("[Token Refreshed]")
                 new_access_token = data["access_token"]
@@ -67,4 +77,5 @@ async def refresh_twitch_token():
                 update_env_var("TWITCH_REFRESH_TOKEN", new_refresh_token)
 
             else:
-                logger.critical("[Token Refresh Failed]", data)
+                logger.critical(f"[Token Refresh Failed] {data}")
+                raise Exception("Failed to refresh Twitch token")

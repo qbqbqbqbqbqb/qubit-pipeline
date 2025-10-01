@@ -1,9 +1,21 @@
 import asyncio
 from twitch_bot import Bot
+from refresh_token import refresh_twitch_token 
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
 logger = get_logger("Main")
+
+async def token_refresher_loop():
+    while True:
+        try:
+            logger.info("[Token Refresh] Refreshing Twitch token...")
+            await refresh_twitch_token()
+            logger.info("[Token Refresh] Refresh complete")
+        except Exception as e:
+            logger.error(f"[Token Refresh] Failed to refresh token: {e}")
+
+        await asyncio.sleep(3600)  
 
 async def main():
     """
@@ -15,10 +27,20 @@ async def main():
     - Catches and logs any critical exceptions that occur during execution.
     """
     try:
-        logger.info("[Main] Starting Bot...")
+        logger.info("[Main] Refreshing token before bot start...")
+        await refresh_twitch_token()
+        
+        logger.info("[Main] Starting Bot and Token Refresher...")
         bot = Bot()
-        await bot.start()
-        logger.warning("[Main] Bot.start() has returned. Exiting main()")
+        bot_task = asyncio.create_task(bot.start()) 
+        refresher_task = asyncio.create_task(token_refresher_loop())
+
+        await bot_task
+        refresher_task.cancel()
+
+        await asyncio.gather(refresher_task, return_exceptions=True)
+        logger.info("[Main] Bot has exited. Token refresher cancelled.")
+    
     except Exception as e:
         logger.critical(f"[main] ERROR: {e}")
 
