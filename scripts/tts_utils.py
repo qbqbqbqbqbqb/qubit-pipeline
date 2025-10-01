@@ -5,6 +5,14 @@ import concurrent.futures
 import simpleaudio as sa
 import asyncio
 import numpy as np
+from obs_controller import update_obs_text, set_text_scroll_speed
+
+# === Load environment variables ===
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+TTS_SUBTITLE_NAME = os.getenv("TTS_SUBTITLE_NAME", "TTS_Subtitles")
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -167,6 +175,9 @@ async def speak_from_prompt(text):
       
     logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
     
+    set_text_scroll_speed(TTS_SUBTITLE_NAME, "Scroll", normalised_text)  
+    update_obs_text(TTS_SUBTITLE_NAME, normalised_text)
+
     loop = asyncio.get_running_loop()
     wav = await loop.run_in_executor(None, lambda: tts.tts(normalised_text))
 

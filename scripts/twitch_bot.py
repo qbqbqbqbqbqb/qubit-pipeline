@@ -1,14 +1,13 @@
 import os
 from twitchio.ext import commands
-from dotenv import load_dotenv
 import asyncio
-
 import random
 
 from gpt_utils import generate_response
 from tts_utils import speak_from_prompt
 
 # === Load environment variables ===
+from dotenv import load_dotenv
 load_dotenv()
 
 TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
