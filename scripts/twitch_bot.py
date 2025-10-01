@@ -154,6 +154,8 @@ class Bot(commands.Bot):
         content = message.content
         author = message.author.name
 
+        response_chance = 0.8
+
         if message.echo and not content.startswith("!"):
             return
         
@@ -172,8 +174,12 @@ class Bot(commands.Bot):
                 await self.resume_monologue(message)
                 return
 
-        await self.message_queue.put(message)
-
+        if random.random() < response_chance:
+            logger.info(f"[Twitch] Queuing message from {author} for response.")
+            await self.message_queue.put(message)
+        else:
+            logger.info(f"[Twitch] Ignoring message from {author} (chance).")   
+            pass
 
     # === Monologue Functionality ===
     async def monologue_loop(self):
