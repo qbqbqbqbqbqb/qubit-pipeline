@@ -47,6 +47,9 @@ class Bot(commands.Bot):
         self.prompt_template = self.load_file("instructions.txt")
         self.banned_words = self.load_banned_words("banned_words.txt")
 
+        self.chat_history = []
+        self.max_chat_history = 8
+
         self.starters = [
             "I was just thinking about",
             "Did you know that",
@@ -109,11 +112,10 @@ class Bot(commands.Bot):
         while True:
             message = await self.message_queue.get()
             author = message.author.name
-
+            message_content = message.content
             logger.info(f"[Twitch] Generating response to: {message_content}")
 
             try:
-                message_content = message.content
                 if self.contains_banned_words(message_content.lower()):
                     logger.warning(f"[Filter] Blocked user message with banned words: {message_content}")
                     continue
@@ -121,7 +123,7 @@ class Bot(commands.Bot):
                 if self.contains_banned_words(author.lower()):
                     await self.speech_queue.put({"type": "chat_response", "text": f"A censored name says {message_content}"})
                 else:
-                    await self.speech_queue.put({"type": "chat_response", "text": f"{message.author.name} says {message_content}"})
+                    await self.speech_queue.put({"type": "chat_response", "text": f"{author} says {message_content}"})
                 
                 loop = asyncio.get_running_loop()
                 
@@ -129,19 +131,23 @@ class Bot(commands.Bot):
                     prompt = self.build_prompt(
                         f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
                     )
+                    self.chat_history.append(("user", f"Censored Name: {message_content}"))
                 else:
                     prompt = self.build_prompt(
                         f"A user named {message.author.name} said: \"{message_content}\". Respond to this Twitch chat message."
                     )
+                    self.chat_history.append(("user", f"{author}: {message_content}"))
 
                 response = await loop.run_in_executor(None, generate_response, prompt)
 
                 if self.contains_banned_words(response):
                     logger.warning(f"[Filter] Response contains banned words, skipping speech: {response}")
                     response = "I'm sorry, I can't respond to that."
-
-                #await message.channel.send("response generated, speaking now...")
-                await self.speech_queue.put({"type": "chat_response", "text": response})
+                    await self.speech_queue.put({"type": "chat_response", "text": response})
+                else:
+                    await self.speech_queue.put({"type": "chat_response", "text": response})
+                    self.chat_history.append(("bot", response))
+                
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
             finally:
@@ -278,6 +284,8 @@ class Bot(commands.Bot):
         Wraps a base prompt with instructions to generate a lively,
         fun, casual Twitch streamer style response.
         """
+        history = self.chat_history[-self.max_chat_history:]
+        history_text = "".join(f"{role}: {content}\n" for role, content, in history)
 
         interaction_instruction = {
             "low": "Focus mostly on monologue style, little audience interaction.",
@@ -293,7 +301,7 @@ class Bot(commands.Bot):
             interaction_instruction=interaction_instruction
         )
 
-        prompt = f"{instructions} Now talk about: {base_prompt}"
+        prompt = f"{instructions}\nChat History:\n{history_text}\nNow talk about: {base_prompt}"
 
         return prompt
 
