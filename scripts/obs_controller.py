@@ -110,8 +110,8 @@ def set_text_scroll_speed(source_name, filter_name, text):
         ws = connect_to_obs()
 
         base_speed = 50
-        speed_per_char = 3
-        max_speed = 500
+        speed_per_char = 5
+        max_speed = 1000
 
         speed = min(base_speed + len(text) * speed_per_char, max_speed)
 

@@ -12,6 +12,8 @@ load_dotenv()
 
 TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
+TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
+TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -102,38 +104,37 @@ class Bot(commands.Bot):
             try:
                 prompt = message.content
                 logger.info(f"[Twitch] Generating response to: {prompt}")
-                await self.speech_queue.put(f"{message.author.name} says {prompt}")
+                await self.speech_queue.put({"type": "chat_response", "text": "{message.author.name} says {prompt}"})
 
                 loop = asyncio.get_running_loop()
                 response = await loop.run_in_executor(None, generate_response, prompt)
 
                 await message.channel.send("response generated, speaking now...")
-                await self.speech_queue.put(response)
+                await self.speech_queue.put({"type": "chat_response", "text": response})
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
             finally:
                 self.speech_queue.task_done()
 
-
     async def event_message(self, message):
         """
         Handles incoming Twitch chat messages.
         """
-        if message.echo:
-            return
-        logger.info(f"[Twitch] Message from {message.author.name}: {message.content}")
-
         content = message.content.lower()
-
-        """
-        if content == "!pause":
-            await self.pause_monologue(message)
+        if message.echo and not content.startswith("!"):
             return
         
-        if content == "!resume":
-            await self.resume_monologue(message)
-            return
-        """
+        logger.info(f"[Twitch] Message from {message.author.name}: {message.content}")
+
+        if (message.author.name.lower() == TWITCH_STREAMER_NAME.lower() or
+            message.author.name.lower() == TWITCH_BOT_NAME.lower()):
+            if content == "!pause":
+                await self.pause_monologue(message)
+                return
+            
+            if content == "!resume":
+                await self.resume_monologue(message)
+                return
 
         await self.message_queue.put(message)
 
@@ -162,7 +163,7 @@ class Bot(commands.Bot):
                     response = "Something went wrong!"
 
                 logger.info(f"[Monologue] Response:\n{response}")
-                await self.speech_queue.put(response)
+                await self.speech_queue.put({"type": "monologue", "text": response})
 
                 delay = 10
                 logger.debug(f"[Monologue] Waiting {delay} seconds before next cycle...")
@@ -172,11 +173,24 @@ class Bot(commands.Bot):
 
     async def pause_monologue(self, message):
         """
-        Pauses the monologue loop.
+        Pauses the monologue loop and clears pending speech items to stop ongoing speech.
         """
         self.monologue_running = False
-        await message.channel.send("Monologue paused.")
-        logger.info("[Monologue] Paused.")
+
+        new_queue = asyncio.Queue()
+        while not self.speech_queue.empty():
+            try:
+                item = self.speech_queue.get_nowait()
+                if item["type"] != "monologue":
+                    await new_queue.put(item)
+                self.speech_queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+        self.speech_queue = new_queue
+
+        await message.channel.send("Monologue paused and speech queue cleared.")
+        logger.info("[Monologue] Paused and speech queue cleared.")
+
 
     async def resume_monologue(self, message):
         """
@@ -192,9 +206,14 @@ class Bot(commands.Bot):
         Continuously consumes text messages from the speech queue and processes them for speech synthesis.
         """
         while True:
-            text = await self.speech_queue.get()
+            item = await self.speech_queue.get()
             try:
-                await speak_from_prompt(text)
+                if item["type"] == "monologue" and not self.monologue_running:
+                    logger.debug("[Speech] Monologue paused, skipping speech.")
+                else:
+                    text = item['text'] 
+                    await speak_from_prompt(text)
+
             except Exception as e:
                 logger.error(f"Error during speech playback: {e}")
             finally:
