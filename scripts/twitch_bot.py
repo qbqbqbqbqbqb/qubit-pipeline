@@ -64,7 +64,8 @@ class Bot(commands.Bot):
         logger.debug(f"[Start] Intro prompt: {intro_prompt}")
 
         loop = asyncio.get_running_loop()
-        intro_text = await loop.run_in_executor(None, generate_response, intro_prompt)
+        prompt = self.build_prompt(intro_prompt)
+        intro_text = await loop.run_in_executor(None, generate_response, prompt)
         logger.info(f"[Start] Intro response: {intro_text}")
         await speak_from_prompt(intro_text)
 
@@ -104,11 +105,12 @@ class Bot(commands.Bot):
             message = await self.message_queue.get()
 
             try:
-                prompt = message.content
-                logger.info(f"[Twitch] Generating response to: {prompt}")
-                await self.speech_queue.put({"type": "chat_response", "text": "{message.author.name} says {prompt}"})
+                message_content = message.content
+                logger.info(f"[Twitch] Generating response to: {message_content}")
+                await self.speech_queue.put({"type": "chat_response", "text": "{message.author.name} says {message_content}"})
 
                 loop = asyncio.get_running_loop()
+                prompt = self.build_prompt(f"Respond to this Twitch chat message: {message_content}")
                 response = await loop.run_in_executor(None, generate_response, prompt)
 
                 await message.channel.send("response generated, speaking now...")
@@ -159,10 +161,11 @@ class Bot(commands.Bot):
                 logger.debug("[Monologue] Starting new cycle")
                 starter_prompt = random.choice(self.starters)
                 logger.info(f"[Monologue] Prompt: {starter_prompt}")
-
+                prompt = self.build_prompt(starter_prompt)
                 loop = asyncio.get_running_loop()
+
                 try:
-                    response = await loop.run_in_executor(None, generate_response, starter_prompt)
+                    response = await loop.run_in_executor(None, generate_response, prompt)
                 except Exception as e:
                     logger.error(f"[Monologue] Error during response generation: {e}")
                     response = "Something went wrong!"
@@ -223,3 +226,19 @@ class Bot(commands.Bot):
                 logger.error(f"Error during speech playback: {e}")
             finally:
                 self.speech_queue.task_done()
+
+    # === Heh.... Prompt Engineering... ===
+    def build_prompt(self, base_prompt: str) -> str:
+        """
+        Wraps a base prompt with instructions to generate a lively,
+        fun, casual Twitch streamer style response.
+        """
+        instructions = (
+            "You are a lively Twitch streamer chatting live with your audience. "
+            "Be fun, energetic, casual, and humorous. Use Twitch slang, "
+            "internet memes, and emotes like PogChamp or LUL occasionally. "
+            "Talk like you're genuinely excited and engaged. "
+            "Make jokes, react to things emotionally, and keep it interactive. "
+            "Speak as if you're live on stream talking to friends. "
+        )
+        return instructions + " " + base_prompt
