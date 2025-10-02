@@ -9,6 +9,7 @@ from pathlib import Path
 from dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
 from prompt_manager import PromptManager
+from bot_utils import load_config, load_file, load_banned_words, contains_banned_words, is_fallback_text
 
 # === Load environment variables ===
 import os
@@ -44,7 +45,7 @@ class Bot(commands.Bot):
 
         self._root = project_root
 
-        cfg = self.load_config("config.json")
+        cfg = load_config(self._root, "config.json")
 
         instr = cfg.get("instructions_file", "instructions.txt")
         banned = cfg.get("banned_words_file", "banned_words.txt")
@@ -52,7 +53,7 @@ class Bot(commands.Bot):
         self.instructions_path = (self._root / instr).resolve()
         self.banned_words_path = (self._root / banned).resolve()
 
-        self.banned_words = self.load_banned_words(self.banned_words_path)
+        self.banned_words = load_banned_words(self.banned_words_path)
 
         self.tasks = []
         self.shutdown_event = asyncio.Event()
@@ -65,7 +66,7 @@ class Bot(commands.Bot):
         self.max_chat_history = cfg.get("max_chat_history", 8)
 
         self.prompt_manager = PromptManager(
-            system_instructions = self.load_file(self.instructions_path),
+            system_instructions = load_file(self.instructions_path),
             max_history = self.max_chat_history
         )
 
@@ -220,11 +221,11 @@ class Bot(commands.Bot):
             logger.info(f"[process_messages] Generating response to: {message_content}")
 
             try:
-                if self.contains_banned_words(message_content.lower()):
+                if contains_banned_words(message_content.lower(), banned_words=self.banned_words):
                     logger.warning(f"[Filter] Blocked user message with banned words: {message_content}")
                     continue
                 
-                if self.contains_banned_words(author.lower()):
+                if contains_banned_words(author.lower(), banned_words=self.banned_words):
                     user_record = f"Censored Name: {message_content}"
                     base_prompt = f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
                 else:
@@ -242,11 +243,11 @@ class Bot(commands.Bot):
                                     self.message_queue.task_done()
                                     continue
                                 
-                if self.contains_banned_words(response):
+                if contains_banned_words(response, banned_words=self.banned_words):
                     logger.warning(f"[process_messages] Response contains banned words, skipping speech: {response}")
                     continue
 
-                if self.contains_banned_words(author.lower()):
+                if contains_banned_words(author.lower(), banned_words=self.banned_words):
                     await self.speech_queue.put({
                         "type": "chat_response", 
                         "text": user_record
@@ -379,7 +380,7 @@ class Bot(commands.Bot):
 
                 logger.info(f"[Monologue] Response:\n{response}")
                 
-                if self.contains_banned_words(response):
+                if contains_banned_words(response, banned_words=self.banned_words):
                     logger.warning(f"[Filter] Blocked response due to banned words:\n{response}")
                     continue
 
@@ -432,7 +433,7 @@ class Bot(commands.Bot):
                     logger.debug("[Speech] Monologue paused, skipping speech.")
                 else:
                     text = item['text'] 
-                    if self.contains_banned_words(text):
+                    if contains_banned_words(text, banned_words=self.banned_words):
                         logger.warning(f"[Speech Filter] Blocked TTS due to banned content:\n{text}")
                         continue
                     await speak_from_prompt(text)
@@ -441,52 +442,3 @@ class Bot(commands.Bot):
                 logger.error(f"Error during speech playback: {e}")
             finally:
                 self.speech_queue.task_done()
-
-    # === Utility Functions ===
-    def load_config(self, cfg_name: str) -> dict:
-        cfg_path = (self._root / cfg_name).resolve()
-        if not cfg_path.is_file():
-            logger.warning(f"Config file not found at {cfg_path}, using defaults.")
-            return {}
-        try:
-            text = cfg_path.read_text(encoding="utf-8")
-            return json.loads(text)
-        except Exception as e:
-            logger.error(f"Error reading config {cfg_path}: {e}")
-            return {}
-        
-    def load_file(self, path: str) -> str:
-        try:
-            return path.read_text(encoding="utf-8")
-        except Exception as e:
-            logger.error(f"Could not load file {path}: {e}")
-            raise
-
-    def load_banned_words(self, path: Path) -> list[str]:
-        try:
-            lines = path.read_text(encoding="utf-8").splitlines()
-            return [w.strip().lower() for w in lines if w.strip()]
-        except Exception as e:
-            logger.error(f"Error loading banned words from {path}: {e}")
-            return []
-        
-    # == Moderation ===
-    def contains_banned_words(self, text: str) -> bool:
-        """
-        Checks if the given text contains any banned words as whole words,
-        ignoring case and avoiding partial matches.
-        """
-        text_lower = text.lower()
-
-        for word in self.banned_words:
-            pattern = r'\b' + re.escape(word) + r'\b'
-
-            if re.search(pattern, text_lower):
-                return True
-
-        return False
-
-def is_fallback_text(text: str) -> bool:
-    text_lower = text.strip().lower()
-    return text_lower.startswith("sorry, i couldn't generate a response") or "something went wrong" in text_lower
-
