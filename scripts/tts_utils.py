@@ -2,7 +2,7 @@ import re
 import inflect
 from TTS.api import TTS
 import concurrent.futures
-import simpleaudio as sa
+import pyaudio
 import asyncio
 import numpy as np
 from obs_controller import update_obs_text, set_text_scroll_speed
@@ -167,6 +167,8 @@ async def speak_from_prompt(text):
     Args:
         text (str): Text to be spoken.
     """
+    
+    
     normalised_text = normalise_text(text, p.number_to_words)
 
     if not normalised_text or re.fullmatch(r'[.!?]+', normalised_text.strip()):
@@ -201,8 +203,24 @@ async def speak_from_prompt(text):
 
     audio_data = (wav * 32767).astype(np.int16)
 
-    def play_audio():
-        play_obj = sa.play_buffer(audio_data, 1, 2, tts.synthesizer.output_sample_rate)
-        play_obj.wait_done()
+    def play_audio(audio_data: np.ndarray, sample_rate: int):
+        pa = pyaudio.PyAudio()
 
-    await loop.run_in_executor(None, play_audio)
+        stream = pa.open(
+            format=pyaudio.paInt16,
+            channels=1,
+            rate=sample_rate,
+            output=True
+        )
+        stream.write(audio_data.tobytes())
+        stream.stop_stream()
+        stream.close()
+        pa.terminate()
+
+    print(dir(tts.synthesizer))
+    print(dir(tts))
+    await loop.run_in_executor(
+        None, 
+        play_audio, 
+        audio_data, 
+        tts.synthesizer.output_sample_rate)

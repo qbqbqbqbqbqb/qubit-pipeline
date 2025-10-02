@@ -18,7 +18,7 @@ def get_logger(name: str = "default") -> logging.Logger:
     logger = logging.getLogger(name)
 
     if not logger.hasHandlers():
-        handler = logging.StreamHandler()
+        console_handler = logging.StreamHandler()
         formatter = ColoredFormatter(
             "%(log_color)s[%(asctime)s][%(name)s][%(levelname)s] %(message)s",
             log_colors={
@@ -29,8 +29,16 @@ def get_logger(name: str = "default") -> logging.Logger:
                 'CRITICAL': 'bold_red',
             }
         )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+
+        file_handler = logging.FileHandler('app.log', mode='a')
+        file_formatter = logging.Formatter(
+            "[%(asctime)s][%(name)s][%(levelname)s] %(message)s"
+        )
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+
         logger.setLevel(logging.DEBUG)
 
     return logger

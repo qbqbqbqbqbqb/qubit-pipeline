@@ -1,12 +1,13 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import re
 import torch
-
+from vllm import LLM, SamplingParams
+from transformers import AutoProcessor
 # === Setup sentence tokenisation ===
 import nltk
 from nltk.tokenize import sent_tokenize
 
 nltk.download('punkt') 
+nltk.download('punkt_tab')
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -17,21 +18,11 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-MODEL_NAME = os.getenv("MODEL_NAME", "TheBloke/Llama-2-7b-chat-GPTQ")
+MODEL_NAME = "RedHatAI/gemma-3-4b-it-quantized.w4a16"
 
 # === Load LLAMA2 model ===
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logger.info(f"[Speech_Model_Utils] Using device: {device}")
-
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    device_map="auto",
-    trust_remote_code=False,
-    dtype=torch.float16
-)
-
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
-tokenizer.pad_token = tokenizer.eos_token
+processor = AutoProcessor.from_pretrained(MODEL_NAME, trust_remote_code=True)
+llm = LLM(model=MODEL_NAME, trust_remote_code=True)
 logger.info(f"[Speech_Model_Utils] Loaded model: {MODEL_NAME}")
 
 # === Prompt Formatting ===
@@ -124,46 +115,33 @@ def generate_response(user_prompt, max_new_tokens=100):
         logger.info(f"[generate_response] Received prompt: {user_prompt[:60]}...")
 
         system_instruction = "Please respond without including any links, URLs, or web addresses.\n\n"
-        prompt = format_prompt(system_instruction, user_prompt)
+        
+        chat = [
+            {"role": "user", "content": [{"type": "text", "text": system_instruction + user_prompt}]},
+            {"role": "assistant", "content": []},
+        ]
+
+        prompt = processor.apply_chat_template(chat, add_generation_prompt=True)
         logger.debug(f"[generate_response] Created full prompt")
 
-        inputs = tokenizer(prompt, return_tensors="pt", truncation=True)
-        inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        logger.debug(f"[generate_response] Tokenised input")
+        inputs = {
+            "prompt": prompt,
+            "multi_modal_data": {},  
+        }
 
-        max_context_len = 4096
-        if inputs["input_ids"].size(1) > max_context_len - max_new_tokens:
-                inputs["input_ids"] = inputs["input_ids"][:, -(max_context_len - max_new_tokens):]
-        inputs = {k: v.to(model.device) for k, v in inputs.items()}
-        logger.debug(f"[generate_response] Truncated input_ids to fit context length")
-            
-        bad_words = ["http", "www", "https", ".com"]
-        bad_words_ids = [
-            tokenizer.encode(word, add_special_tokens=False) 
-            for word in bad_words
-            if len(tokenizer.encode(word, add_special_tokens=False)) > 0
-            ]
-        logger.debug(f"[generate_response] bad_words_ids: {bad_words_ids}")
-
-        #model.to(device)
-        logger.debug(f"[generate_response] Calling model.generate()...")
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            do_sample=True,
-            top_k=50,
-            top_p=0.95,
+        sampling_params = SamplingParams(
             temperature=0.7,
-            pad_token_id=tokenizer.eos_token_id,
+            top_p=0.95,
+            top_k=50,
+            max_tokens=max_new_tokens,
             repetition_penalty=1.2,
-            no_repeat_ngram_size=2,
-            bad_words_ids=bad_words_ids,
+            #no_repeat_ngram_size=2,
         )
-        logger.debug(f"[generate_response] Model generation completed")
 
-        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        if "[/INST]" in generated_text:
-            generated_text = generated_text.split("[/INST]", 1)[-1].strip()
+        logger.debug(f"[generate_response] Starting vLLM generation...")
+
+        outputs = llm.generate(inputs, sampling_params)
+        generated_text = outputs[0].outputs[0].text.strip()
 
         logger.debug(f"[generate_response] Raw generated text: {generated_text[:60]}...")
 

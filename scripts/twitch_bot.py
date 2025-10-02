@@ -3,6 +3,8 @@ import asyncio
 import random
 import re
 import time
+import json
+from pathlib import Path
 
 from gpt_utils import generate_response
 from tts_utils import speak_from_prompt
@@ -36,6 +38,23 @@ class Bot(commands.Bot):
             prefix="!",
             initial_channels=[TWITCH_CHANNEL]
         )
+
+        this_file = Path(__file__).resolve()
+        project_root = this_file.parent.parent  
+
+        self._root = project_root
+
+        cfg = self.load_config("config.json")
+
+        instr = cfg.get("instructions_file", "instructions.txt")
+        banned = cfg.get("banned_words_file", "banned_words.txt")
+
+        self.instructions_path = (self._root / instr).resolve()
+        self.banned_words_path = (self._root / banned).resolve()
+
+        self.prompt_template = self.load_file(self.instructions_path)
+        self.banned_words = self.load_banned_words(self.banned_words_path)
+
         self.tasks = []
         self.shutdown_event = asyncio.Event()
         self.startup_done = False
@@ -45,14 +64,13 @@ class Bot(commands.Bot):
         self.speech_queue = asyncio.Queue()
         self.processing_message = False
 
-        self.prompt_template = self.load_file("instructions.txt")
-        self.banned_words = self.load_banned_words("banned_words.txt")
-
         self.chat_history = []
         self.max_chat_history = 8
 
         self.shutting_down = False
 
+        self.generation_tasks = set()
+        
         self.starters = [
             "I was just thinking about",
             "Did you know that",
@@ -448,15 +466,29 @@ class Bot(commands.Bot):
 
         return prompt
 
-    def load_file(self, path: str) -> str:
-        with open(path, "r", encoding="utf-8") as file:
-            return file.read()
-
-    def load_banned_words(self, path: str) -> list:
+    def load_config(self, cfg_name: str) -> dict:
+        cfg_path = (self._root / cfg_name).resolve()
+        if not cfg_path.is_file():
+            logger.warning(f"Config file not found at {cfg_path}, using defaults.")
+            return {}
         try:
-            with open(path, "r", encoding="utf-8") as file:
-                words = [line.strip().lower() for line in file if line.strip()]
-            return words
+            text = cfg_path.read_text(encoding="utf-8")
+            return json.loads(text)
+        except Exception as e:
+            logger.error(f"Error reading config {cfg_path}: {e}")
+            return {}
+        
+    def load_file(self, path: str) -> str:
+        try:
+            return path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.error(f"Could not load file {path}: {e}")
+            raise
+
+    def load_banned_words(self, path: Path) -> list[str]:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+            return [w.strip().lower() for w in lines if w.strip()]
         except Exception as e:
             logger.error(f"Error loading banned words from {path}: {e}")
             return []
