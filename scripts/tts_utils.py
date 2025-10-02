@@ -217,8 +217,6 @@ async def speak_from_prompt(text):
         stream.close()
         pa.terminate()
 
-    print(dir(tts.synthesizer))
-    print(dir(tts))
     await loop.run_in_executor(
         None, 
         play_audio, 

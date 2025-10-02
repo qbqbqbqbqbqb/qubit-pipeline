@@ -1,7 +1,14 @@
 import logging
 from colorlog import ColoredFormatter
+from logging.handlers import RotatingFileHandler
 
-def get_logger(name: str = "default") -> logging.Logger:
+def get_logger(name: str = "default", 
+               log_file: str = "app.log",
+               warn_log_file: str = "app_warnings.log",
+               max_bytes: int = 5 * 1024 * 1024,
+               backup_count: int = 3) -> logging.Logger:
+    
+    logger = logging.getLogger(name)
     """
     Creates and returns a logger with colored, timestamped output.
 
@@ -30,14 +37,30 @@ def get_logger(name: str = "default") -> logging.Logger:
             }
         )
         console_handler.setFormatter(formatter)
+        console_handler.setLevel(logging.DEBUG)
         logger.addHandler(console_handler)
 
-        file_handler = logging.FileHandler('app.log', mode='a')
-        file_formatter = logging.Formatter(
-            "[%(asctime)s][%(name)s][%(levelname)s] %(message)s"
+        file_handler_all = RotatingFileHandler(
+            log_file, 
+            mode='a', 
+            maxBytes=max_bytes, 
+            backupCount=backup_count, 
+            encoding='utf-8'
         )
-        file_handler.setFormatter(file_formatter)
-        logger.addHandler(file_handler)
+        fmt = logging.Formatter("[%(asctime)s][%(name)s][%(levelname)s] %(message)s")
+        file_handler_all.setFormatter(fmt)
+        file_handler_all.setLevel(logging.DEBUG)
+        logger.addHandler(file_handler_all)
+
+        file_handler_warn = RotatingFileHandler(
+            warn_log_file, mode='a', 
+            maxBytes=max_bytes, 
+            backupCount=backup_count,
+            encoding='utf-8'
+        )
+        file_handler_warn.setFormatter(fmt)
+        file_handler_warn.setLevel(logging.WARNING)
+        logger.addHandler(file_handler_warn)
 
         logger.setLevel(logging.DEBUG)
 
