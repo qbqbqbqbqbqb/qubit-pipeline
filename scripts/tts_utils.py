@@ -6,7 +6,12 @@ import pyaudio
 import asyncio
 import numpy as np
 from obs_controller import update_obs_text, set_text_scroll_speed
-
+import wave
+from piper import PiperVoice
+from pathlib import Path
+import io
+import json
+from piper import SynthesisConfig
 # === Load environment variables ===
 import os
 from dotenv import load_dotenv
@@ -20,9 +25,13 @@ logger = get_logger("TTS_Utils")
 
 # === Import TTS model ===
 p = inflect.engine()
-tts = TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", progress_bar=False, gpu=False)
-tts.synthesizer.tts_model.decoder.max_decoder_steps = 2000
-executor = concurrent.futures.ThreadPoolExecutor()
+
+this_file = Path(__file__).resolve()
+project_root = this_file.parent.parent
+
+model = project_root / "en_GB-vctk-medium.onnx"
+
+voice = PiperVoice.load(model)
 
 # === Normalise text for TTS ===
 def remove_unsupported_chars(text: str) -> str:
@@ -167,58 +176,55 @@ async def speak_from_prompt(text):
     Args:
         text (str): Text to be spoken.
     """
-    
-    
     normalised_text = normalise_text(text, p.number_to_words)
 
     if not normalised_text or re.fullmatch(r'[.!?]+', normalised_text.strip()):
         logger.warning("[TTS] No valid text to speak after normalisation.")
         return
-      
+
     logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
-    
-    set_text_scroll_speed(TTS_SUBTITLE_NAME, "Scroll", normalised_text)  
+
+    set_text_scroll_speed(TTS_SUBTITLE_NAME, "Scroll", normalised_text)
     update_obs_text(TTS_SUBTITLE_NAME, normalised_text)
 
     loop = asyncio.get_running_loop()
-    wav = await loop.run_in_executor(None, lambda: tts.tts(normalised_text))
 
-    if isinstance(wav, list):
-        wav = np.array(wav)
+    model_path = Path("en_GB-vctk-medium.onnx")
+    with open(model_path.with_suffix(".onnx.json")) as f:
+        config = json.load(f)
+    speaker_id = config["speaker_id_map"]["p236"]  # For example
 
-    wav = np.array(wav)
-    if wav.ndim > 1:
-        wav = wav.mean(axis=1)
-    
-    if len(wav) == 0:
-        logger.warning("[TTS] Generated empty audio, skipping playback.")
-        return
-    
-    max_val = np.max(np.abs(wav))
-    if max_val > 0:
-        wav = wav / max_val
-    wav = np.clip(wav, -1.0, 1.0)
+    syn_config = SynthesisConfig(
+        speaker_id=speaker_id,
+        length_scale=1.0,
+        noise_scale=0.667,
+        noise_w_scale=0.8,
+        volume=1.0,
+        normalize_audio=True
+    )
 
-    logger.debug(f"[TTS] Audio waveform length: {len(wav)}, min: {wav.min()}, max: {wav.max()}")
+    with io.BytesIO() as wav_io:
+        with wave.open(wav_io, "wb") as wav_file:
+            voice.synthesize_wav(normalised_text, wav_file, syn_config=syn_config)
 
-    audio_data = (wav * 32767).astype(np.int16)
+        wav_io.seek(0)
 
-    def play_audio(audio_data: np.ndarray, sample_rate: int):
+        with wave.open(wav_io, "rb") as wav_file:
+            sample_rate = wav_file.getframerate()
+            audio_data = wav_file.readframes(wav_file.getnframes())
+            audio_np = np.frombuffer(audio_data, dtype=np.int16)
+
+    def play_audio(audio_np):
         pa = pyaudio.PyAudio()
-
         stream = pa.open(
             format=pyaudio.paInt16,
             channels=1,
             rate=sample_rate,
             output=True
         )
-        stream.write(audio_data.tobytes())
+        stream.write(audio_np.tobytes())
         stream.stop_stream()
         stream.close()
         pa.terminate()
 
-    await loop.run_in_executor(
-        None, 
-        play_audio, 
-        audio_data, 
-        tts.synthesizer.output_sample_rate)
+    await loop.run_in_executor(None, play_audio, audio_np)

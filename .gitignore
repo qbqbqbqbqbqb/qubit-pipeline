@@ -185,3 +185,4 @@ cython_debug/
 *.wav
 *.txt
 /vllm
+en_GB-vctk-medium.onnx
