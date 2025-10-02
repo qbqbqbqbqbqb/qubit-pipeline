@@ -150,7 +150,7 @@ def generate_response(user_prompt, max_new_tokens=100):
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=False,
+            do_sample=True,
             top_k=50,
             top_p=0.95,
             temperature=0.7,
