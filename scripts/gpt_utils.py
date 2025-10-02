@@ -1,4 +1,4 @@
-from transformers import GPT2LMHeadModel, GPT2Tokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import re
 import torch
 
@@ -17,18 +17,31 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt2-xl")
+MODEL_NAME = os.getenv("MODEL_NAME", "TheBloke/Llama-2-7b-chat-GPTQ")
 
-# === Load GPT-2 model ===
+# === Load LLAMA2 model ===
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-logger.info(f"[GPT_Utils] Using device: {device}")
+logger.info(f"[Speech_Model_Utils] Using device: {device}")
 
-model_name = MODEL_NAME
-logger.info(f"[GPT_Utils] Loading model: {model_name}")
-model = GPT2LMHeadModel.from_pretrained(model_name)
-tokeniser = GPT2Tokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    MODEL_NAME,
+    device_map="auto",
+    trust_remote_code=False,
+    dtype=torch.float16
+)
 
-logger.info("[GPT_Utils] Module loaded")
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
+tokenizer.pad_token = tokenizer.eos_token
+logger.info(f"[Speech_Model_Utils] Loaded model: {MODEL_NAME}")
+
+# === Prompt Formatting ===
+def format_prompt(system_prompt: str, user_prompt: str) -> str:
+    return f"""<s>[INST] <<SYS>>
+{system_prompt}
+<</SYS>>
+
+{user_prompt} [/INST]
+"""
 
 # === Utility Functions ===
 def trim_to_last_sentence(text):
@@ -87,7 +100,7 @@ def clean_generated_text(text):
     return '. '.join(sentences).strip()
 
 # === Core Function ===
-def generate_response(prompt, max_new_tokens=200):
+def generate_response(user_prompt, max_new_tokens=100):
     """
     Generates a text response from a model given an input prompt, while filtering out URLs and limiting output length.
 
@@ -108,52 +121,54 @@ def generate_response(prompt, max_new_tokens=200):
         str: The cleaned, limited generated text response, or an error message if generation fails.
     """
     try:
-        logger.info(f"[generate_response] Received prompt: {prompt[:60]}...")
-
-        bad_words = ["http", "www", "https", ".com"]
-        bad_words_ids = [tokeniser.encode(word, add_special_tokens=False) for word in bad_words]
-        logger.debug(f"[generate_response] bad_words_ids: {bad_words_ids}")
+        logger.info(f"[generate_response] Received prompt: {user_prompt[:60]}...")
 
         system_instruction = "Please respond without including any links, URLs, or web addresses.\n\n"
-        full_prompt = system_instruction + prompt
+        prompt = format_prompt(system_instruction, user_prompt)
         logger.debug(f"[generate_response] Created full prompt")
 
-        inputs = tokeniser(full_prompt, return_tensors="pt")
-        inputs = {k: v.to(device) for k, v in inputs.items()}
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True)
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
         logger.debug(f"[generate_response] Tokenised input")
 
-        max_context_len = 1024
-        input_ids = inputs["input_ids"][0]
+        max_context_len = 4096
+        if inputs["input_ids"].size(1) > max_context_len - max_new_tokens:
+                inputs["input_ids"] = inputs["input_ids"][:, -(max_context_len - max_new_tokens):]
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        logger.debug(f"[generate_response] Truncated input_ids to fit context length")
+            
+        bad_words = ["http", "www", "https", ".com"]
+        bad_words_ids = [
+            tokenizer.encode(word, add_special_tokens=False) 
+            for word in bad_words
+            if len(tokenizer.encode(word, add_special_tokens=False)) > 0
+            ]
+        logger.debug(f"[generate_response] bad_words_ids: {bad_words_ids}")
 
-        if len(input_ids) > max_context_len - max_new_tokens:
-            input_ids = input_ids[-(max_context_len - max_new_tokens):]
-            inputs = {"input_ids": input_ids.unsqueeze(0).to(device)}
-            logger.debug(f"[generate_response] Truncated input_ids to fit context length")
-        
-        model.to(device)
+        #model.to(device)
         logger.debug(f"[generate_response] Calling model.generate()...")
         outputs = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=True,
+            do_sample=False,
             top_k=50,
             top_p=0.95,
             temperature=0.7,
-            pad_token_id=tokeniser.eos_token_id,
+            pad_token_id=tokenizer.eos_token_id,
             repetition_penalty=1.2,
             no_repeat_ngram_size=2,
             bad_words_ids=bad_words_ids,
         )
         logger.debug(f"[generate_response] Model generation completed")
 
-        generated_text = tokeniser.decode(outputs[0], skip_special_tokens=True)
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        if "[/INST]" in generated_text:
+            generated_text = generated_text.split("[/INST]", 1)[-1].strip()
+
         logger.debug(f"[generate_response] Raw generated text: {generated_text[:60]}...")
 
-        if generated_text.startswith(full_prompt):
-            generated_text = generated_text[len(full_prompt):].strip()
-            logger.debug(f"[generate_response] Removed prompt prefix from generated text")
-
         final_response = clean_and_limit_text(generated_text, max_sentences=3, max_chars=300)
+
         if not final_response.strip():
             logger.warning("[generate_response] Generated empty response, returning fallback text.")
             final_response = "Sorry, I couldn't generate a response. Please try again."
