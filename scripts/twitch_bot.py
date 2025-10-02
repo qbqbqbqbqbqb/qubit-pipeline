@@ -6,7 +6,7 @@ import time
 import json
 from pathlib import Path
 
-from gpt_utils import generate_response
+from scripts.dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
 
 # === Load environment variables ===
