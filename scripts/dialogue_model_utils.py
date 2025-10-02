@@ -77,19 +77,6 @@ def clean_generated_text(text):
     return '. '.join(sentences).strip()
 
 # === Core Function ===
-def build_chat_prompt(user_prompt: str, system_instruction: str = None) -> str:
-    """
-    Constructs a prompt using a chat template, including optional system instructions.
-    """
-    if not system_instruction:
-        system_instruction = "Please respond without including any links, URLs, or web addresses.\n\n"
-    
-    chat = [
-        {"role": "user", "content": [{"type": "text", "text": system_instruction + user_prompt}]},
-        {"role": "assistant", "content": []},
-    ]
-    return processor.apply_chat_template(chat, add_generation_prompt=True)
-
 def get_sampling_params(max_tokens: int) -> SamplingParams:
     """
     Configures and returns sampling parameters for generation.
@@ -115,22 +102,31 @@ def generate_text(prompt: str, max_tokens: int) -> str:
     logger.debug(f"[generate_text] Raw output: {text[:60]}...")
     return text
 
-def safe_clean_response(text: str, fallback: str = "Sorry, I couldn't generate a response.") -> str:
+def clean_response(text: str, fallback: str = "Sorry, I couldn't generate a response.") -> str:
     """
     Cleans, limits, and safely returns the final response.
     """
     cleaned = clean_and_limit_text(text, max_sentences=3, max_chars=300)
     return cleaned if cleaned.strip() else fallback
 
-def generate_response(user_prompt: str, max_new_tokens: int = 100) -> str:
+def apply_chat_template(chat: dict) -> dict:
+    """
+    Applies the Gemma 3 chat template to the provided chat dictionary.
+    """
+    return processor.apply_chat_template(chat, add_generation_prompt=True)
+    
+def generate_response(prompt: str, max_new_tokens: int = 100) -> str:
     """
     Orchestrates the generation of a cleaned and constrained model response.
     """
     try:
-        logger.info(f"[generate_response] Prompt received: {user_prompt[:60]}...")
-        full_prompt = build_chat_prompt(user_prompt)
+        logger.info(f"[generate_response] Prompt received: {prompt[:60]}...")
+        
+        full_prompt = apply_chat_template(chat=prompt)
+        
         raw_output = generate_text(full_prompt, max_new_tokens)
-        final_response = safe_clean_response(raw_output)
+        final_response = clean_response(raw_output)
+
         logger.info(f"[generate_response] Final response: {final_response}")
         return final_response
 

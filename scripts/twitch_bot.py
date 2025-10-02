@@ -6,8 +6,9 @@ import time
 import json
 from pathlib import Path
 
-from scripts.dialogue_model_utils import generate_response
+from dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
+from prompt_manager import PromptManager
 
 # === Load environment variables ===
 import os
@@ -20,7 +21,6 @@ TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
 TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
 
 IGNORED_USERS = ['nightbot', 'streamelements']
-
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -52,7 +52,6 @@ class Bot(commands.Bot):
         self.instructions_path = (self._root / instr).resolve()
         self.banned_words_path = (self._root / banned).resolve()
 
-        self.prompt_template = self.load_file(self.instructions_path)
         self.banned_words = self.load_banned_words(self.banned_words_path)
 
         self.tasks = []
@@ -63,9 +62,12 @@ class Bot(commands.Bot):
         self.message_queue = asyncio.Queue(maxsize=50)
         self.speech_queue = asyncio.Queue()
         self.processing_message = False
+        self.max_chat_history = cfg.get("max_chat_history", 8)
 
-        self.chat_history = []
-        self.max_chat_history = 8
+        self.prompt_manager = PromptManager(
+            system_instructions = self.load_file(self.instructions_path),
+            max_history = self.max_chat_history
+        )
 
         self.shutting_down = False
 
@@ -96,36 +98,37 @@ class Bot(commands.Bot):
             "For example: 'Hey everyone! Welcome to the Qubit stream!"
             "I'm so excited to hang out with you all today. Let's have some fun!'"
         )
-        logger.debug(f"[Start] Intro prompt: {intro_prompt}")
+        
+        logger.debug(f"[event_ready] Intro prompt: {intro_prompt}")
 
-        if not self.chat_history:
-            self.chat_history.append(("bot", "Ready to start the stream!"))
+        self.prompt_manager.add_user(f"System: {intro_prompt}")
 
-        loop = asyncio.get_running_loop()
-        prompt = self.build_prompt(intro_prompt) 
+        prompt = self.prompt_manager.build_prompt(base_prompt=intro_prompt)
 
         max_attempts = 3
         intro_text = ""
 
+        loop = asyncio.get_running_loop()
         for attempt in range(max_attempts):
             try:
                 intro_text = await loop.run_in_executor(None, generate_response, prompt)
-                logger.info(f"[Start] Intro response (attempt {attempt+1}): {intro_text}")
+                logger.info(f"[event_ready] Intro response (attempt {attempt+1}): {intro_text}")
 
                 if not intro_text.strip() or "couldn't generate" in intro_text.lower() or "something went wrong" in intro_text.lower():
-                    logger.warning(f"[Start] Invalid intro response on attempt {attempt+1}")
+                    logger.warning(f"[event_ready] Invalid intro response on attempt {attempt+1}")
                     continue
                 break 
             except Exception as e:
-                logger.error(f"[Start] Error generating intro response: {e}")
+                logger.error(f"[event_ready] Error generating intro response: {e}")
                 intro_text = "I'm Qubit. This is my stream"
                 break
-
             
         if not intro_text.strip():
             intro_text = "I'm Qubit. This is my stream"
 
         await speak_from_prompt(intro_text)
+
+        self.prompt_manager.add_bot(intro_text)
 
         self.startup_done = True
         await self.background_tasks()
@@ -214,47 +217,47 @@ class Bot(commands.Bot):
                 self.message_queue.task_done()
                 continue
 
-            logger.info(f"[Twitch] Generating response to: {message_content}")
+            logger.info(f"[process_messages] Generating response to: {message_content}")
 
             try:
                 if self.contains_banned_words(message_content.lower()):
                     logger.warning(f"[Filter] Blocked user message with banned words: {message_content}")
                     continue
-
-                loop = asyncio.get_running_loop()
                 
                 if self.contains_banned_words(author.lower()):
-                    prompt = self.build_prompt(
-                        f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
-                    )
-                    self.chat_history.append(("user", f"Censored Name: {message_content}"))
+                    user_record = f"Censored Name: {message_content}"
+                    base_prompt = f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
                 else:
-                    prompt = self.build_prompt(
-                        f"A user named {message.author.name} said: \"{message_content}\". Respond to this Twitch chat message."
-                    )
-                    self.chat_history.append(("user", f"{author}: {message_content}"))
+                    user_record = f"{author}: {message_content}"
+                    base_prompt = f"A user named {author} said: \"{message_content}\". Respond to this Twitch chat message."
 
+                self.prompt_manager.add_user(user_record)
+                prompt = self.prompt_manager.build_prompt(base_prompt=base_prompt)
+
+                loop = asyncio.get_running_loop()
                 response = await loop.run_in_executor(None, generate_response, prompt)
 
-                if (
-                    response.strip().lower().startswith("sorry, i couldn't generate a response") or
-                    "something went wrong" in response.lower()
-                ):
-                    logger.warning(f"[GPT] Skipping response due to fallback message: {response}")
-                    self.message_queue.task_done()
-                    continue 
-                
+                if is_fallback_text(response):
+                                    logger.warning(f"[process_messages] Skipping response due to fallback message: {response}")
+                                    self.message_queue.task_done()
+                                    continue
+                                
                 if self.contains_banned_words(response):
-                    logger.warning(f"[Filter] Response contains banned words, skipping speech: {response}")
+                    logger.warning(f"[process_messages] Response contains banned words, skipping speech: {response}")
                     continue
 
                 if self.contains_banned_words(author.lower()):
-                    await self.speech_queue.put({"type": "chat_response", "text": f"A censored name says {message_content}"})
+                    await self.speech_queue.put({
+                        "type": "chat_response", 
+                        "text": user_record
+                        })
                 else:
-                    await self.speech_queue.put({"type": "chat_response", "text": f"{author} says {message_content}"})
-                
-                await self.speech_queue.put({"type": "chat_response", "text": response})
-                self.chat_history.append(("bot", response))
+                    await self.speech_queue.put({
+                        "type": "chat_response", 
+                        "text": response
+                        })
+
+                self.prompt_manager.add_bot(response)
                 
             except Exception as e:
                 logger.error(f"Error processing message: {e}")
@@ -277,6 +280,9 @@ class Bot(commands.Bot):
             return
         
         if author.lower() in IGNORED_USERS:
+            return
+        
+        if content.startswith("@"):
             return
         
         min_length = 3
@@ -345,7 +351,8 @@ class Bot(commands.Bot):
                 logger.debug("[Monologue] Starting new cycle")
                 starter_prompt = random.choice(self.starters)
                 logger.info(f"[Monologue] Prompt: {starter_prompt}")
-                prompt = self.build_prompt(starter_prompt)
+                prompt = self.prompt_manager.build_prompt(base_prompt=starter_prompt)
+
                 loop = asyncio.get_running_loop()
 
                 max_attempts = 2
@@ -356,9 +363,7 @@ class Bot(commands.Bot):
                         response = await loop.run_in_executor(None, generate_response, prompt)
                         logger.info(f"[Monologue] Response (attempt {attempt + 1}): {response}")
 
-                        if not response.strip() or \
-                        "couldn't generate" in response.lower() or \
-                        "something went wrong" in response.lower():
+                        if not response.strip() or is_fallback_text(response):
                             logger.warning(f"[Monologue] Invalid response on attempt {attempt + 1}")
                             continue
                         break
@@ -373,6 +378,7 @@ class Bot(commands.Bot):
                     continue
 
                 logger.info(f"[Monologue] Response:\n{response}")
+                
                 if self.contains_banned_words(response):
                     logger.warning(f"[Filter] Blocked response due to banned words:\n{response}")
                     continue
@@ -436,36 +442,7 @@ class Bot(commands.Bot):
             finally:
                 self.speech_queue.task_done()
 
-    # === Heh.... Prompt Engineering... ===
-    def build_prompt(self, base_prompt: str, mood: str = "energetic", 
-                     interaction_level: str = "high",
-                     tone: str = "casual and humorous"
-                     ) -> str:
-        """
-        Wraps a base prompt with instructions to generate a lively,
-        fun, casual Twitch streamer style response.
-        """
-        history = self.chat_history[-self.max_chat_history:]
-        history_text = "".join(f"{role}: {content}\n" for role, content, in history)
-
-        interaction_instruction = {
-            "low": "Focus mostly on monologue style, little audience interaction.",
-            "medium": "Engage with the audience occasionally, reacting to chat.",
-            "high": "Frequently interact with the audience, asking questions, "
-                    "responding to chat, and making jokes about chat messages."
-        }.get(interaction_level, "Frequently interact with the audience.")
-
-
-        instructions =  self.prompt_template.format(
-            mood=mood,
-            tone=tone,
-            interaction_instruction=interaction_instruction
-        )
-
-        prompt = f"{instructions}\nChat History: {history_text}\nNow talk about: {base_prompt}"
-
-        return prompt
-
+    # === Utility Functions ===
     def load_config(self, cfg_name: str) -> dict:
         cfg_path = (self._root / cfg_name).resolve()
         if not cfg_path.is_file():
