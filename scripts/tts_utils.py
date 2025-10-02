@@ -7,11 +7,11 @@ import asyncio
 import numpy as np
 from obs_controller import update_obs_text, set_text_scroll_speed
 import wave
-from piper import PiperVoice
+from piper import PiperVoice, SynthesisConfig
 from pathlib import Path
 import io
 import json
-from piper import SynthesisConfig
+
 # === Load environment variables ===
 import os
 from dotenv import load_dotenv
@@ -29,9 +29,10 @@ p = inflect.engine()
 this_file = Path(__file__).resolve()
 project_root = this_file.parent.parent
 
-model = project_root / "en_GB-vctk-medium.onnx"
+MODEL_PATH = project_root / "en_GB-vctk-medium.onnx"
+SPEAKER_NAME = "p236"
 
-voice = PiperVoice.load(model)
+voice = PiperVoice.load(MODEL_PATH)
 
 # === Normalise text for TTS ===
 def remove_unsupported_chars(text: str) -> str:
@@ -169,6 +170,62 @@ def normalise_text(text: str, number_converter) -> str:
     return text
 
 # === TTS Output ===
+def get_speaker_id(model_path: Path, speaker_name: str) -> int:
+    """
+    Retrieves the speaker ID for the given speaker name from the model's JSON configuration.
+    """
+    json_path = model_path.with_suffix(".onnx.json")
+    with open(json_path, "r") as f:
+        config = json.load(f)
+    return config["speaker_id_map"][speaker_name]
+
+def build_synthesis_config(speaker_id: int) -> SynthesisConfig:
+    """
+    Builds a SynthesisConfig object with specified parameters.
+    """
+    return SynthesisConfig(
+        speaker_id=speaker_id,
+        length_scale=1.0,
+        noise_scale=0.667,
+        noise_w_scale=0.8,
+        volume=1.0,
+        normalize_audio=True
+    )
+
+def generate_wav_bytes(text: str, syn_config: SynthesisConfig) -> bytes:
+    """
+    Generates WAV audio bytes from the given text using the specified synthesis configuration.
+    """
+    with io.BytesIO() as wav_io:
+        with wave.open(wav_io, "wb") as wav_file:
+            voice.synthesize_wav(text, wav_file, syn_config=syn_config)
+        return wav_io.getvalue()
+
+def decode_wav_bytes(wav_data: bytes) -> tuple[int, np.ndarray]:
+    """
+    Decodes WAV byte data into a sample rate and NumPy array of audio samples."""
+    with io.BytesIO(wav_data) as wav_io:
+        with wave.open(wav_io, "rb") as wav_file:
+            sample_rate = wav_file.getframerate()
+            audio_data = wav_file.readframes(wav_file.getnframes())
+            audio_np = np.frombuffer(audio_data, dtype=np.int16)
+    return sample_rate, audio_np
+
+def play_audio(sample_rate: int, audio_np: np.ndarray):
+    """
+    Plays the given audio NumPy array using PyAudio."""
+    pa = pyaudio.PyAudio()
+    stream = pa.open(
+        format=pyaudio.paInt16,
+        channels=1,
+        rate=sample_rate,
+        output=True
+    )
+    stream.write(audio_np.tobytes())
+    stream.stop_stream()
+    stream.close()
+    pa.terminate()
+
 async def speak_from_prompt(text):
     """
     Normalises text, converts it to speech, plays the audio.
@@ -183,48 +240,13 @@ async def speak_from_prompt(text):
         return
 
     logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
-
     set_text_scroll_speed(TTS_SUBTITLE_NAME, "Scroll", normalised_text)
     update_obs_text(TTS_SUBTITLE_NAME, normalised_text)
 
+    speaker_id = get_speaker_id(MODEL_PATH, SPEAKER_NAME)
+    syn_config = build_synthesis_config(speaker_id)
+    wav_bytes = generate_wav_bytes(normalised_text, syn_config)
+    sample_rate, audio_np = decode_wav_bytes(wav_bytes)
+
     loop = asyncio.get_running_loop()
-
-    model_path = Path("en_GB-vctk-medium.onnx")
-    with open(model_path.with_suffix(".onnx.json")) as f:
-        config = json.load(f)
-    speaker_id = config["speaker_id_map"]["p236"]  # For example
-
-    syn_config = SynthesisConfig(
-        speaker_id=speaker_id,
-        length_scale=1.0,
-        noise_scale=0.667,
-        noise_w_scale=0.8,
-        volume=1.0,
-        normalize_audio=True
-    )
-
-    with io.BytesIO() as wav_io:
-        with wave.open(wav_io, "wb") as wav_file:
-            voice.synthesize_wav(normalised_text, wav_file, syn_config=syn_config)
-
-        wav_io.seek(0)
-
-        with wave.open(wav_io, "rb") as wav_file:
-            sample_rate = wav_file.getframerate()
-            audio_data = wav_file.readframes(wav_file.getnframes())
-            audio_np = np.frombuffer(audio_data, dtype=np.int16)
-
-    def play_audio(audio_np):
-        pa = pyaudio.PyAudio()
-        stream = pa.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=sample_rate,
-            output=True
-        )
-        stream.write(audio_np.tobytes())
-        stream.stop_stream()
-        stream.close()
-        pa.terminate()
-
-    await loop.run_in_executor(None, play_audio, audio_np)
+    await loop.run_in_executor(None, play_audio, sample_rate, audio_np)
