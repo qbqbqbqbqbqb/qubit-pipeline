@@ -9,6 +9,7 @@ from pathlib import Path
 from dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
 from prompt_manager import PromptManager
+from monologue_manager import MonologueManager
 from bot_utils import load_config, load_file, load_banned_words, contains_banned_words, is_fallback_text
 
 # === Load environment variables ===
@@ -68,6 +69,12 @@ class Bot(commands.Bot):
         self.prompt_manager = PromptManager(
             system_instructions = load_file(self.instructions_path),
             max_history = self.max_chat_history
+        )
+
+        self.monologue_manager = MonologueManager(
+            prompt_manager=self.prompt_manager,
+            speech_queue=self.speech_queue,
+            banned_words_checker=contains_banned_words
         )
 
         self.shutting_down = False
@@ -139,7 +146,7 @@ class Bot(commands.Bot):
         Launches background tasks, and waits for shutdown signal.
         """
         logger.info("[Start] Launching background tasks...")
-        self.tasks.append(asyncio.create_task(self.monologue_loop()))
+        await self.monologue_manager.start()
         self.tasks.append(asyncio.create_task(self.process_messages()))
         self.tasks.append(asyncio.create_task(self.speech_consumer()))
 
@@ -149,6 +156,7 @@ class Bot(commands.Bot):
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
+        await self.monologue_manager.stop()
         logger.info("[Start] All tasks cancelled. Exiting.")
 
     async def stop(self):
@@ -338,65 +346,11 @@ class Bot(commands.Bot):
             pass
 
     # === Monologue Functionality ===
-    async def monologue_loop(self):
-        """
-        Continuously generates and speaks monologues based on starter prompts until cancelled or paused.
-        """
-        try:
-            while True:
-                if not self.monologue_running:
-                    logger.debug("[Monologue] Monologue paused: Sleeping.")
-                    await asyncio.sleep(1) 
-                    continue
-
-                logger.debug("[Monologue] Starting new cycle")
-                starter_prompt = random.choice(self.starters)
-                logger.info(f"[Monologue] Prompt: {starter_prompt}")
-                prompt = self.prompt_manager.build_prompt(base_prompt=starter_prompt)
-
-                loop = asyncio.get_running_loop()
-
-                max_attempts = 2
-                response = ""
-
-                for attempt in range(max_attempts):
-                    try:
-                        response = await loop.run_in_executor(None, generate_response, prompt)
-                        logger.info(f"[Monologue] Response (attempt {attempt + 1}): {response}")
-
-                        if not response.strip() or is_fallback_text(response):
-                            logger.warning(f"[Monologue] Invalid response on attempt {attempt + 1}")
-                            continue
-                        break
-                    except Exception as e:
-                        logger.error(f"[Monologue] Error during response generation: {e}")
-                        response = "Something went wrong!"
-                        break
-                
-                if not response.strip():
-                    logger.warning("[Monologue] Skipping empty or invalid response")
-                    await asyncio.sleep(5)  
-                    continue
-
-                logger.info(f"[Monologue] Response:\n{response}")
-                
-                if contains_banned_words(response, banned_words=self.banned_words):
-                    logger.warning(f"[Filter] Blocked response due to banned words:\n{response}")
-                    continue
-
-                await self.speech_queue.put({"type": "monologue", "text": response})
-
-                delay = 5
-                logger.debug(f"[Monologue] Waiting {delay} seconds before next cycle...")
-                await asyncio.sleep(delay)
-        except asyncio.CancelledError:
-            logger.warning("[Monologue] Monologue loop cancelled")
-
     async def pause_monologue(self, message):
         """
         Pauses the monologue loop and clears pending speech items to stop ongoing speech.
         """
-        self.monologue_running = False
+        await self.monologue_manager.pause()
 
         new_queue = asyncio.Queue()
         while not self.speech_queue.empty():
@@ -417,7 +371,7 @@ class Bot(commands.Bot):
         """
         Resumes the monologue loop.
         """
-        self.monologue_running = True
+        await self.monologue_manager.resume()
         await message.channel.send("Monologue resumed.")
         logger.info("[Monologue] Resumed.")
 

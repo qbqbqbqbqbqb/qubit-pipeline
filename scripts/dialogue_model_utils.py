@@ -82,9 +82,9 @@ def get_sampling_params(max_tokens: int) -> SamplingParams:
     Configures and returns sampling parameters for generation.
     """
     return SamplingParams(
-        temperature=0.7,
-        top_p=0.95,
-        top_k=50,
+        temperature=1.1,
+        top_p=0.9,
+        top_k=80,
         max_tokens=max_tokens,
         bad_words=["http", "https", "www", ".com", ".net", ".org", ".io", ".gov", ".edu"],
         repetition_penalty=1.2,
