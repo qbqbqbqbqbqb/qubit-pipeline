@@ -13,6 +13,8 @@ from config_manager import ConfigManager
 from log_utils import get_logger
 logger = get_logger("MonologueManager")
 
+MAX_MONOLOGUES = 3
+
 class MonologueManager:
     def __init__(self, prompt_manager, speech_queue, starters_file: Path =None):
         """
@@ -64,7 +66,18 @@ class MonologueManager:
         """
         Pause monologue generation.
         """        
-        self.monologue_running = False
+        await self.monologue_manager.pause()
+
+        new_queue = asyncio.Queue()
+        while not self.speech_queue.empty():
+            try:
+                item = self.speech_queue.get_nowait()
+                if item["type"] != "monologue":
+                    await new_queue.put(item)
+                self.speech_queue.task_done()
+            except asyncio.QueueEmpty:
+                break
+        self.speech_queue = new_queue
         logger.info("[pause] Monologue paused")
 
     async def resume(self):
@@ -160,6 +173,25 @@ class MonologueManager:
         """
         Adds the given response to the queue.
         """
+        temp_items = []
+        monologue_count = 0
+
+        while not self.speech_queue.empty():
+            item = await self.speech_queue.get()
+            if item["type"] == "monologue":
+                monologue_count += 1
+            temp_items.append(item)
+
+        while monologue_count >= MAX_MONOLOGUES:
+            for i, item in enumerate(temp_items):
+                if item["type"] == "monologue":
+                    del temp_items[i]
+                    monologue_count -= 1
+                    break
+                          
+        for item in temp_items:
+            await self.speech_queue.put(item)
+
         await self.speech_queue.put({"type": "monologue", "text": response})
         logger.info("[run] Response queued to speech queue")
 

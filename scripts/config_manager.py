@@ -3,6 +3,9 @@ from bot_utils import (
     contains_banned_words, is_fallback_text, load_config
 )
 
+from log_utils import get_logger
+logger = get_logger("ConfigManager")
+
 class ConfigManager:
     def __init__(self):
         root = get_root()

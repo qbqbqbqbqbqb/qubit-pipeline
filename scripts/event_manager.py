@@ -22,7 +22,6 @@ load_dotenv()
 TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
 TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
 
-
 class EventManager(commands.Bot):
     """
     Manages Twitch chat events and bot lifecycle events such as ready, message handling, and command processing.

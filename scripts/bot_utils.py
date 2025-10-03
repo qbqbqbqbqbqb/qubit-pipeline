@@ -4,7 +4,7 @@ from pathlib import Path
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
-logger = get_logger("Bot")
+logger = get_logger("Bot_Utils")
 
 def load_config(root: Path, cfg_name: str) -> dict:
     """

@@ -5,7 +5,7 @@ import concurrent.futures
 import pyaudio
 import asyncio
 import numpy as np
-from obs_controller import update_obs_text, set_text_scroll_speed
+from obs_controller import update_obs_text, set_subtitle_position, update_subtitle_text_and_style
 import wave
 from piper import PiperVoice, SynthesisConfig
 from pathlib import Path
@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TTS_SUBTITLE_NAME = os.getenv("TTS_SUBTITLE_NAME", "TTS_Subtitles")
+SCENE_NAME = os.getenv("SCENE_NAME")
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -240,8 +241,18 @@ async def speak_from_prompt(text):
         return
 
     logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
-    set_text_scroll_speed(TTS_SUBTITLE_NAME, "Scroll", normalised_text)
-    update_obs_text(TTS_SUBTITLE_NAME, normalised_text)
+
+    update_subtitle_text_and_style(
+    source_name=TTS_SUBTITLE_NAME,
+    new_text=normalised_text,
+    font_face="Arial",
+    font_size=50,
+    width=1920,
+    height=400,
+    valign="center",
+    word_wrap=True
+)
+
 
     speaker_id = get_speaker_id(MODEL_PATH, SPEAKER_NAME)
     syn_config = build_synthesis_config(speaker_id)

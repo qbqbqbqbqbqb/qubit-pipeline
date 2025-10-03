@@ -5,6 +5,7 @@ import re
 import time
 import json
 from pathlib import Path
+from queue import Empty
 
 from dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
@@ -12,6 +13,9 @@ from prompt_manager import PromptManager
 from monologue_manager import MonologueManager
 from event_manager import EventManager
 from config_manager import ConfigManager
+from message_manager import MessageManager
+from speech_manager import SpeechManager
+from task_manager import TaskManager
 
 from bot_utils import (
     load_file, load_banned_words, get_file_path, get_root,
@@ -43,17 +47,16 @@ class Bot(commands.Bot):
             initial_channels=[TWITCH_CHANNEL]
         )
 
-        self.tasks = []
         self.shutdown_event = asyncio.Event()
         self.startup_done = False
         self.monologue_running = True
 
         self.message_queue = asyncio.Queue(maxsize=50)
         self.speech_queue = asyncio.Queue()
-        self.processing_message = False
 
         self.config = ConfigManager()
-
+        self.task_manager = TaskManager()
+        
         self.prompt_manager = PromptManager(
             system_instructions = self.config.instructions,
             max_history = self.config.max_chat_history
@@ -67,10 +70,19 @@ class Bot(commands.Bot):
 
         self.event_manager = EventManager(bot=self)
 
-        self.shutting_down = False
-
-        self.generation_tasks = set()
         
+        self.message_manager = MessageManager(
+            prompt_manager=self.prompt_manager,
+            speech_queue=self.speech_queue,
+            banned_words=self.config.banned_words
+        )
+
+        self.speech_manager = SpeechManager(
+            speech_queue=self.speech_queue,
+            banned_words=self.config.banned_words
+        )
+
+        self.shutting_down = False
 
     # === Bot Controls ===
     async def event_ready(self):
@@ -88,8 +100,8 @@ class Bot(commands.Bot):
         """
         logger.info("[Start] Launching background tasks...")
         await self.monologue_manager.start()
-        self.tasks.append(asyncio.create_task(self.process_messages()))
-        self.tasks.append(asyncio.create_task(self.speech_consumer()))
+        self.task_manager.add_task(self.process_messages())
+        self.task_manager.add_task(self.speech_manager.consume())
 
         await self.shutdown_event.wait()
 
@@ -115,7 +127,7 @@ class Bot(commands.Bot):
                 self.message_queue.get_nowait()
                 self.message_queue.task_done()
                 cleared_messages += 1
-            except asyncio.QueueEmpty:
+            except Empty:
                 break
 
         logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
@@ -127,7 +139,7 @@ class Bot(commands.Bot):
                 self.speech_queue.get_nowait()
                 self.speech_queue.task_done()
                 cleared_speech += 1
-            except asyncio.QueueEmpty:
+            except Empty:
                 break
 
         self.speech_queue = new_speech_queue
@@ -137,7 +149,7 @@ class Bot(commands.Bot):
             ending_prompt = "This is the last thing you will say before the stream ends. Say a short, vtuber-esque sign-off to say goodbye to your audience."
             logger.debug(f"[Stop] Ending prompt: {ending_prompt}")
             
-            prompt = self.build_prompt(ending_prompt)
+            prompt = self.prompt_manager.build_prompt(base_prompt=ending_prompt)
             loop = asyncio.get_running_loop()
             end_txt = await loop.run_in_executor(None, generate_response, prompt)
 
@@ -146,74 +158,22 @@ class Bot(commands.Bot):
         except Exception as e:
             logger.error(f"[Stop] Error during shutdown message: {e}")
 
+        await self.task_manager.cancel_all()
         self.shutdown_event.set()
 
     # === Message Functionality ===
-    async def process_messages(self):
+    async def process_messages(self) -> None:
         """
         Continuously processes messages from the message queue by generating TTS responses.
         """
-        while True:
-            message_data = await self.message_queue.get()
-            message = message_data["message"]
-            timestamp = message_data.get("timestamp", time.time())
-
-            author = message.author.name
-            message_content = message.content
-            age = time.time() - timestamp
-
-            if age > 120:
-                logger.info(f"Dropped stale message from {author} ({int(age)}s old)")
+        try:
+            while True:
+                message_data = await self.message_queue.get()
+                await self.message_manager.process_message(message_data)
                 self.message_queue.task_done()
-                continue
-
-            logger.info(f"[process_messages] Generating response to: {message_content}")
-
-            try:
-                if contains_banned_words(message_content.lower(), banned_words=self.config.banned_words):
-                    logger.warning(f"[Filter] Blocked user message with banned words: {message_content}")
-                    continue
-                
-                if contains_banned_words(author.lower(), banned_words=self.config.banned_words):
-                    message_author = f"Censored Name"
-                    user_record = f"Censored Name: {message_content}"
-                    base_prompt = f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
-                else:
-                    message_author = f"{author}"
-                    user_record = f"{author}: {message_content}"
-                    base_prompt = f"A user named {author} said: \"{message_content}\". Respond to this Twitch chat message."
-
-                self.prompt_manager.add_user(user_record)
-                prompt = self.prompt_manager.build_prompt(base_prompt=base_prompt)
-
-                loop = asyncio.get_running_loop()
-                response = await loop.run_in_executor(None, generate_response, prompt)
-
-                if is_fallback_text(response):
-                                    logger.warning(f"[process_messages] Skipping response due to fallback message: {response}")
-                                    self.message_queue.task_done()
-                                    continue
-                                
-                if contains_banned_words(response, banned_words=self.config.banned_words):
-                    logger.warning(f"[process_messages] Response contains banned words, skipping speech: {response}")
-                    continue
-
-                await self.speech_queue.put({
-                    "type": "chat_message",
-                    "text": f"{message_author} said {message_content}"
-                })
-                await self.speech_queue.put({
-                    "type": "chat_response", 
-                    "text": response
-                })
-
-                self.prompt_manager.add_bot(response)
-                
-            except Exception as e:
-                logger.error(f"Error processing message: {e}")
-            finally:
-                self.message_queue.task_done() 
-
+        except asyncio.CancelledError:
+            logger.info("process_messages task cancelled")
+            raise
 
     async def event_message(self, message):
         """
@@ -238,22 +198,9 @@ class Bot(commands.Bot):
         """
         Pauses the monologue loop and clears pending speech items to stop ongoing speech.
         """
-        await self.monologue_manager.pause()
-
-        new_queue = asyncio.Queue()
-        while not self.speech_queue.empty():
-            try:
-                item = self.speech_queue.get_nowait()
-                if item["type"] != "monologue":
-                    await new_queue.put(item)
-                self.speech_queue.task_done()
-            except asyncio.QueueEmpty:
-                break
-        self.speech_queue = new_queue
-
-        await message.channel.send("Monologue paused and speech queue cleared.")
-        logger.info("[Monologue] Paused and speech queue cleared.")
-
+        await self.monologue_controller.pause()
+        await message.channel.send("Monologue paused.")
+        logger.info("[Monologue] Paused.")
 
     async def resume_monologue(self, message):
         """
@@ -262,25 +209,3 @@ class Bot(commands.Bot):
         await self.monologue_manager.resume()
         await message.channel.send("Monologue resumed.")
         logger.info("[Monologue] Resumed.")
-
-    # === Handling Speech Queue ===
-    async def speech_consumer(self):
-        """
-        Continuously consumes text messages from the speech queue and processes them for speech synthesis.
-        """
-        while True:
-            item = await self.speech_queue.get()
-            try:
-                if item["type"] == "monologue" and not self.monologue_running:
-                    logger.debug("[Speech] Monologue paused, skipping speech.")
-                else:
-                    text = item['text'] 
-                    if contains_banned_words(text, banned_words=self.config.banned_words):
-                        logger.warning(f"[Speech Filter] Blocked TTS due to banned content:\n{text}")
-                        continue
-                    await speak_from_prompt(text)
-
-            except Exception as e:
-                logger.error(f"Error during speech playback: {e}")
-            finally:
-                self.speech_queue.task_done()
