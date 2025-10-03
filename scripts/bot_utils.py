@@ -20,7 +20,7 @@ def load_config(root: Path, cfg_name: str) -> dict:
     except Exception as e:
         logger.error(f"Error reading config {cfg_path}: {e}")
         return {}
-        
+
 def load_file(path: Path) -> str:
     """
     Loads and returns the content of a text file.
@@ -30,6 +30,20 @@ def load_file(path: Path) -> str:
     except Exception as e:
         logger.error(f"Could not load file {path}: {e}")
         raise
+
+def get_file_path(cfg: dict, root: Path, config_key: str, default_filename: str) -> Path:
+    """
+    Returns a resolved file path from config or default.
+    """
+    filename = cfg.get(config_key, default_filename)
+    return (root / filename).resolve()
+
+def get_root() -> Path:
+    """
+    Gets the project root
+    """
+    this_file = Path(__file__).resolve()
+    return this_file.parent.parent
 
 def load_banned_words(path: Path) -> list[str]:
     """
@@ -41,7 +55,7 @@ def load_banned_words(path: Path) -> list[str]:
     except Exception as e:
         logger.error(f"Error loading banned words from {path}: {e}")
         return []
-        
+
 def contains_banned_words(text: str, banned_words: list[str]) -> bool:
     """
     Checks if the given text contains any banned words as whole words,

@@ -120,7 +120,7 @@ def generate_response(prompt: str, max_new_tokens: int = 100) -> str:
     Orchestrates the generation of a cleaned and constrained model response.
     """
     try:
-        logger.info(f"[generate_response] Prompt received: {prompt[:60]}...")
+        #logger.info(f"[generate_response] Prompt received: {prompt[:60]}...")
         
         full_prompt = apply_chat_template(chat=prompt)
         

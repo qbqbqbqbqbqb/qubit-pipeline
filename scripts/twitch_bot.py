@@ -10,7 +10,10 @@ from dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
 from prompt_manager import PromptManager
 from monologue_manager import MonologueManager
-from bot_utils import load_config, load_file, load_banned_words, contains_banned_words, is_fallback_text
+from bot_utils import (
+    load_file, load_banned_words, get_file_path, get_root,
+    contains_banned_words, is_fallback_text, load_config
+)
 
 # === Load environment variables ===
 import os
@@ -41,20 +44,13 @@ class Bot(commands.Bot):
             initial_channels=[TWITCH_CHANNEL]
         )
 
-        this_file = Path(__file__).resolve()
-        project_root = this_file.parent.parent  
+        root = get_root()
+        cfg = load_config(root, "config.json")
 
-        self._root = project_root
+        instructions_path = get_file_path(cfg, root, "instructions_file", "instructions.txt")
+        banned_words_path = get_file_path(cfg, root, "banned_words_file", "banned_words.txt")
 
-        cfg = load_config(self._root, "config.json")
-
-        instr = cfg.get("instructions_file", "instructions.txt")
-        banned = cfg.get("banned_words_file", "banned_words.txt")
-
-        self.instructions_path = (self._root / instr).resolve()
-        self.banned_words_path = (self._root / banned).resolve()
-
-        self.banned_words = load_banned_words(self.banned_words_path)
+        self.banned_words = load_banned_words(banned_words_path)
 
         self.tasks = []
         self.shutdown_event = asyncio.Event()
@@ -67,14 +63,13 @@ class Bot(commands.Bot):
         self.max_chat_history = cfg.get("max_chat_history", 8)
 
         self.prompt_manager = PromptManager(
-            system_instructions = load_file(self.instructions_path),
+            system_instructions = load_file(instructions_path),
             max_history = self.max_chat_history
         )
 
         self.monologue_manager = MonologueManager(
             prompt_manager=self.prompt_manager,
-            speech_queue=self.speech_queue,
-            banned_words_checker=contains_banned_words
+            speech_queue=self.speech_queue
         )
 
         self.shutting_down = False
@@ -234,9 +229,11 @@ class Bot(commands.Bot):
                     continue
                 
                 if contains_banned_words(author.lower(), banned_words=self.banned_words):
+                    message_author = f"Censored Name"
                     user_record = f"Censored Name: {message_content}"
                     base_prompt = f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
                 else:
+                    message_author = f"{author}"
                     user_record = f"{author}: {message_content}"
                     base_prompt = f"A user named {author} said: \"{message_content}\". Respond to this Twitch chat message."
 
@@ -255,16 +252,14 @@ class Bot(commands.Bot):
                     logger.warning(f"[process_messages] Response contains banned words, skipping speech: {response}")
                     continue
 
-                if contains_banned_words(author.lower(), banned_words=self.banned_words):
-                    await self.speech_queue.put({
-                        "type": "chat_response", 
-                        "text": user_record
-                        })
-                else:
-                    await self.speech_queue.put({
-                        "type": "chat_response", 
-                        "text": response
-                        })
+                await self.speech_queue.put({
+                    "type": "chat_message",
+                    "text": f"{message_author} said {message_content}"
+                })
+                await self.speech_queue.put({
+                    "type": "chat_response", 
+                    "text": response
+                })
 
                 self.prompt_manager.add_bot(response)
                 

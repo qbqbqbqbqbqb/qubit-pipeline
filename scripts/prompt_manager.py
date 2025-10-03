@@ -9,6 +9,17 @@ class PromptManager:
         default_tone: str = "casual and humorous",
         default_interaction: str = "high",
     ):
+        """
+        Initialize the PromptManager with optional system instructions and default parameters.
+
+        Args:
+            system_instructions (Optional[str]): Template string with placeholders for mood, tone, and interaction instructions.
+            max_history (int): Maximum number of chat history entries to retain.
+            default_mood (str): Default mood descriptor for prompt generation.
+            default_tone (str): Default tone/style descriptor for prompt generation.
+            default_interaction (str): Default level of audience interaction ("low", "medium", or "high").
+        """
+        
         self.system_instructions = system_instructions
         self.max_history = max_history
         self.default_mood = default_mood
@@ -18,17 +29,18 @@ class PromptManager:
         self.chat_history: List[Tuple[str, str]] = []
     
     def add_user(self, content: str) -> None:
+        """
+        Add a user message to the chat history.
+        """
         self.chat_history.append(("user", content))
-        self.trim_history()
+        self._trim_history()
     
     def add_bot(self, content: str) -> None:
+        """
+        Add a bot (Vtuber) message to the chat history.
+        """
         self.chat_history.append(("vtuber", content))
-        self.trim_history()
-    
-    def trim_history(self) -> None:
-        if len(self.chat_history) > self.max_history:
-            excess = len(self.chat_history) - self.max_history
-            self.chat_history = self.chat_history[excess:]
+        self._trim_history()
     
     def build_prompt(self, base_prompt: str,
                     mood: str = "energetic", 
@@ -70,3 +82,11 @@ class PromptManager:
             {"role": "user", "content": [{"type": "text", "text": full_prompt}]},
             {"role": "Vtuber", "content": []}
         ]
+
+    def _trim_history(self) -> None:
+        """
+        Trim the chat history to ensure it does not exceed max_history entries.
+        """
+        if len(self.chat_history) > self.max_history:
+            excess = len(self.chat_history) - self.max_history
+            self.chat_history = self.chat_history[excess:]
