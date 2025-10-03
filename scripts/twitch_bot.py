@@ -11,6 +11,7 @@ from tts_utils import speak_from_prompt
 from prompt_manager import PromptManager
 from monologue_manager import MonologueManager
 from event_manager import EventManager
+from config_manager import ConfigManager
 
 from bot_utils import (
     load_file, load_banned_words, get_file_path, get_root,
@@ -24,10 +25,6 @@ load_dotenv()
 
 TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
-TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
-TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
-
-IGNORED_USERS = ['nightbot', 'streamelements']
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -46,15 +43,6 @@ class Bot(commands.Bot):
             initial_channels=[TWITCH_CHANNEL]
         )
 
-        root = get_root()
-        cfg = load_config(root, "config.json")
-
-        instructions_path = get_file_path(cfg, root, "instructions_file", "instructions.txt")
-        banned_words_path = get_file_path(cfg, root, "banned_words_file", "banned_words.txt")
-        starters_path = get_file_path(cfg, root, "starters_file", "starters.txt")
-
-        self.banned_words = load_banned_words(banned_words_path)
-
         self.tasks = []
         self.shutdown_event = asyncio.Event()
         self.startup_done = False
@@ -63,17 +51,18 @@ class Bot(commands.Bot):
         self.message_queue = asyncio.Queue(maxsize=50)
         self.speech_queue = asyncio.Queue()
         self.processing_message = False
-        self.max_chat_history = cfg.get("max_chat_history", 8)
+
+        self.config = ConfigManager()
 
         self.prompt_manager = PromptManager(
-            system_instructions = load_file(instructions_path),
-            max_history = self.max_chat_history
+            system_instructions = self.config.instructions,
+            max_history = self.config.max_chat_history
         )
 
         self.monologue_manager = MonologueManager(
             prompt_manager=self.prompt_manager,
             speech_queue=self.speech_queue,
-            starters_file=starters_path
+            starters_file=self.config.starters_path
         )
 
         self.event_manager = EventManager(bot=self)
@@ -181,11 +170,11 @@ class Bot(commands.Bot):
             logger.info(f"[process_messages] Generating response to: {message_content}")
 
             try:
-                if contains_banned_words(message_content.lower(), banned_words=self.banned_words):
+                if contains_banned_words(message_content.lower(), banned_words=self.config.banned_words):
                     logger.warning(f"[Filter] Blocked user message with banned words: {message_content}")
                     continue
                 
-                if contains_banned_words(author.lower(), banned_words=self.banned_words):
+                if contains_banned_words(author.lower(), banned_words=self.config.banned_words):
                     message_author = f"Censored Name"
                     user_record = f"Censored Name: {message_content}"
                     base_prompt = f"A user with a censored name said: \"{message_content}\". Respond to this Twitch chat message."
@@ -205,7 +194,7 @@ class Bot(commands.Bot):
                                     self.message_queue.task_done()
                                     continue
                                 
-                if contains_banned_words(response, banned_words=self.banned_words):
+                if contains_banned_words(response, banned_words=self.config.banned_words):
                     logger.warning(f"[process_messages] Response contains banned words, skipping speech: {response}")
                     continue
 
@@ -230,7 +219,7 @@ class Bot(commands.Bot):
         """
         Called when any message is received in chat.
         """
-        if self.event_handler.should_ignore_message(message):
+        if self.event_manager.should_ignore_message(message):
             return
 
         author = message.author.name
@@ -238,11 +227,11 @@ class Bot(commands.Bot):
 
         logger.info(f"[event_message] Message from {author}: {content}")
 
-        if self.event_handler.is_streamer_or_bot(author):
-            if await self.event_handler.handle_command(content.lower(), message):
+        if self.event_manager.is_streamer_or_bot(author):
+            if await self.event_manager.handle_command(content.lower(), message):
                 return
 
-        await self.event_handler.queue_message(message)
+        await self.event_manager.queue_message(message)
 
     # === Monologue Functionality ===
     async def pause_monologue(self, message):
@@ -286,7 +275,7 @@ class Bot(commands.Bot):
                     logger.debug("[Speech] Monologue paused, skipping speech.")
                 else:
                     text = item['text'] 
-                    if contains_banned_words(text, banned_words=self.banned_words):
+                    if contains_banned_words(text, banned_words=self.config.banned_words):
                         logger.warning(f"[Speech Filter] Blocked TTS due to banned content:\n{text}")
                         continue
                     await speak_from_prompt(text)

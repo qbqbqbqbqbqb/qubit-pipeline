@@ -14,6 +14,15 @@ logger = get_logger("EventManager")
 
 IGNORED_USERS = ['nightbot', 'streamelements']
 
+# === Load environment variables ===
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
+TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
+
+
 class EventManager(commands.Bot):
     """
     Manages Twitch chat events and bot lifecycle events such as ready, message handling, and command processing.
@@ -99,8 +108,8 @@ class EventManager(commands.Bot):
         Checks if a given username corresponds to the streamer or the bot itself.
         """
         return (
-            author.lower() == self.bot.TWITCH_STREAMER_NAME.lower()
-            or author.lower() == self.bot.TWITCH_BOT_NAME.lower()
+            author.lower() == TWITCH_STREAMER_NAME.lower()
+            or author.lower() == TWITCH_BOT_NAME.lower()
         )
 
     async def handle_command(self, cmd: str, message) -> bool:

@@ -7,6 +7,7 @@ from bot_utils import (
     is_fallback_text, load_config, load_banned_words, 
     get_file_path, get_root, contains_banned_words
 )
+from config_manager import ConfigManager
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -26,12 +27,8 @@ class MonologueManager:
         self.prompt_manager = prompt_manager
         self.speech_queue = speech_queue
 
-        root = get_root()
-        cfg = load_config(root, "config.json")
+        self.config = ConfigManager()
 
-        banned_words_path = get_file_path(cfg, root, "banned_words_file", "banned_words.txt")
-        self.banned_words = load_banned_words(banned_words_path)
-        
         self.monologue_running = True
         if starters_file and starters_file.exists():
             with open(starters_file, "r", encoding="utf-8") as f:
@@ -154,7 +151,7 @@ class MonologueManager:
         if is_fallback_text(response):
             logger.warning("[run] Fallback text detected")
             return False
-        if contains_banned_words(response, banned_words=self.banned_words):
+        if contains_banned_words(response, banned_words=self.config.banned_words):
             logger.warning(f"[run] Banned words found in response: {response}")
             return False
         return True
