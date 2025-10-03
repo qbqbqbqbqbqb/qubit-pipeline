@@ -13,7 +13,7 @@ from log_utils import get_logger
 logger = get_logger("MonologueManager")
 
 class MonologueManager:
-    def __init__(self, prompt_manager, speech_queue, starters=None):
+    def __init__(self, prompt_manager, speech_queue, starters_file: Path =None):
         """
         Handles the monologue generation loop.
 
@@ -33,14 +33,15 @@ class MonologueManager:
         self.banned_words = load_banned_words(banned_words_path)
         
         self.monologue_running = True
-        self.starters = starters or [
-            "I was just thinking about",
-            "Did you know that",
-            "It's funny how",
-            "Sometimes I wonder if",
-            "Have you ever noticed",
-            "Let me tell you about"
-        ]
+        if starters_file and starters_file.exists():
+            with open(starters_file, "r", encoding="utf-8") as f:
+                self.starters = [line.strip() for line in f if line.strip()]
+            logger.info(f"Loaded {len(self.starters)} starter phrases from {starters_file}")
+        else:
+            self.starters = starters_file or [
+                ""
+            ]
+            
         self.task = None
 
     async def start(self):

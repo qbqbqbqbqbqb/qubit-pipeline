@@ -43,9 +43,9 @@ class PromptManager:
         self._trim_history()
     
     def build_prompt(self, base_prompt: str,
-                    mood: str = "energetic", 
+                    mood: str = "laid-back", 
                     interaction_level: str = "high", 
-                    tone: str = "casual and humorous",
+                    tone: str = "casual, funny, and edgy",
     ) -> List[dict]:
         """
         Builds a full prompt for generating streamer-style responses using a base prompt,

@@ -10,6 +10,8 @@ from dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
 from prompt_manager import PromptManager
 from monologue_manager import MonologueManager
+from event_manager import EventManager
+
 from bot_utils import (
     load_file, load_banned_words, get_file_path, get_root,
     contains_banned_words, is_fallback_text, load_config
@@ -49,6 +51,7 @@ class Bot(commands.Bot):
 
         instructions_path = get_file_path(cfg, root, "instructions_file", "instructions.txt")
         banned_words_path = get_file_path(cfg, root, "banned_words_file", "banned_words.txt")
+        starters_path = get_file_path(cfg, root, "starters_file", "starters.txt")
 
         self.banned_words = load_banned_words(banned_words_path)
 
@@ -69,70 +72,24 @@ class Bot(commands.Bot):
 
         self.monologue_manager = MonologueManager(
             prompt_manager=self.prompt_manager,
-            speech_queue=self.speech_queue
+            speech_queue=self.speech_queue,
+            starters_file=starters_path
         )
+
+        self.event_manager = EventManager(bot=self)
 
         self.shutting_down = False
 
         self.generation_tasks = set()
         
-        self.starters = [
-            "I was just thinking about",
-            "Did you know that",
-            "It's funny how",
-            "Sometimes I wonder if",
-            "Have you ever noticed",
-            "Let me tell you about"
-        ]
 
     # === Bot Controls ===
     async def event_ready(self):
         """
-        Called when the bot is ready. Speaks an intro message once.
+        Called when the bot connects to Twitch and is ready.
         """
-        if self.startup_done:
-            return 
+        await self.event_manager.on_ready()
         
-        logger.info(f"[Twitch] Logged in as {self.nick}")
-
-        intro_prompt = (
-            "This is the first thing you will say this stream. "
-            "Write a short, cheerful greeting to welcome viewers to the stream. "
-            "For example: 'Hey everyone! Welcome to the Qubit stream!"
-            "I'm so excited to hang out with you all today. Let's have some fun!'"
-        )
-        
-        logger.debug(f"[event_ready] Intro prompt: {intro_prompt}")
-
-        self.prompt_manager.add_user(f"System: {intro_prompt}")
-
-        prompt = self.prompt_manager.build_prompt(base_prompt=intro_prompt)
-
-        max_attempts = 3
-        intro_text = ""
-
-        loop = asyncio.get_running_loop()
-        for attempt in range(max_attempts):
-            try:
-                intro_text = await loop.run_in_executor(None, generate_response, prompt)
-                logger.info(f"[event_ready] Intro response (attempt {attempt+1}): {intro_text}")
-
-                if not intro_text.strip() or "couldn't generate" in intro_text.lower() or "something went wrong" in intro_text.lower():
-                    logger.warning(f"[event_ready] Invalid intro response on attempt {attempt+1}")
-                    continue
-                break 
-            except Exception as e:
-                logger.error(f"[event_ready] Error generating intro response: {e}")
-                intro_text = "I'm Qubit. This is my stream"
-                break
-            
-        if not intro_text.strip():
-            intro_text = "I'm Qubit. This is my stream"
-
-        await speak_from_prompt(intro_text)
-
-        self.prompt_manager.add_bot(intro_text)
-
         self.startup_done = True
         await self.background_tasks()
 
@@ -271,74 +228,21 @@ class Bot(commands.Bot):
 
     async def event_message(self, message):
         """
-        Handles incoming Twitch chat messages.
+        Called when any message is received in chat.
         """
-        content = message.content
+        if self.event_handler.should_ignore_message(message):
+            return
+
         author = message.author.name
+        content = message.content.strip()
 
-        if self.shutting_down:
-            logger.info(f"[Shutdown] Ignored message from {author} because bot is shutting down.")
-            return
-    
-        if message.echo and not content.startswith("!"):
-            return
-        
-        if author.lower() in IGNORED_USERS:
-            return
-        
-        if content.startswith("@"):
-            return
-        
-        min_length = 3
-        word_count = len(content.strip().split())
-        if word_count < min_length:
-            logger.info(f"[Filter] Ignored short message from {author}: {content}")
-            return
-        
-        logger.info(f"[Twitch] Message from {author}: {content}")
+        logger.info(f"[event_message] Message from {author}: {content}")
 
-        if (author.lower() == TWITCH_STREAMER_NAME.lower() or
-            author.lower() == TWITCH_BOT_NAME.lower()):
-            if content.lower() == "!pause":
-                if callable(self.pause_monologue):
-                    await self.pause_monologue(message)
-                else:
-                    logger.error(f"pause_monologue is not callable: {self.pause_monologue}")
-                return
-            
-            if content.lower() == "!resume":
-                if callable(self.resume_monologue):
-                    await self.resume_monologue(message)
-                else:
-                    logger.error(f"resume_monologue is not callable: {self.resume_monologue}")
+        if self.event_handler.is_streamer_or_bot(author):
+            if await self.event_handler.handle_command(content.lower(), message):
                 return
 
-            if content.lower() == "!stop":
-                if callable(self.stop):
-                    await self.stop(message)
-                else:
-                    logger.error(f"stop is not callable: {self.stop}")
-                return
-            
-            if content.lower() == "!stop":
-                await self.stop()
-                return
-        
-        response_chance = 0.8
-
-        if random.random() < response_chance:
-            try:
-                logger.info(f"[Twitch] Queuing message from {author} for response.")
-                message_data = {
-                    "message": message,
-                    "timestamp": time.time()
-                }
-                await self.message_queue.put(message_data)
-            except asyncio.QueueFull:
-                logger.warning(f"[Twitch] Queue Full. Dropping message.")
-        else:
-            logger.info(f"[Twitch] Ignoring message from {author} (chance).")   
-            pass
+        await self.event_handler.queue_message(message)
 
     # === Monologue Functionality ===
     async def pause_monologue(self, message):
