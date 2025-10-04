@@ -8,6 +8,7 @@ from bot_utils import (
     is_fallback_text, contains_banned_words
 )
 from config_manager import ConfigManager
+from queue_manager import QueueManager
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -18,7 +19,7 @@ logger = get_logger("MonologueManager")
 class MonologueManager:
     def __init__(self, 
                  prompt_manager, 
-                 speech_queue: asyncio.Queue, 
+                 monologue_queue: QueueManager, 
                  response_generator: ResponseGen,
                  starters_file: Path =None,
                  ):
@@ -27,16 +28,22 @@ class MonologueManager:
 
         Args:
             prompt_manager: object with method build_prompt(base_prompt)
-            speech_queue: asyncio.Queue to send speech text to
+            monologue_queue: QueueManager to send speech text to
             banned_words_checker: callable(text) -> bool to check banned words
             starters: list of strings to start monologues with
         """
         self.prompt_manager = prompt_manager
-        self.speech_queue = speech_queue
+        
         self.response_generator = response_generator
         self.config = ConfigManager()
 
         self.monologue_running = True
+
+        if isinstance(monologue_queue, QueueManager):
+                self.monologue_queue = monologue_queue
+        else:
+                self.monologue_queue = QueueManager(maxsize=0, cap=None)
+
         if starters_file and starters_file.exists():
             with open(starters_file, "r", encoding="utf-8") as f:
                 self.starters = [line.strip() for line in f if line.strip()]
@@ -45,10 +52,8 @@ class MonologueManager:
             self.starters = starters_file or [
                 ""
             ]
-            
+    
         self.task = None
-
-
     async def start(self):
         """
         Start the monologue background task.
@@ -73,17 +78,7 @@ class MonologueManager:
         Pause monologue generation.
         """        
         self.monologue_running = False
-
-        new_queue = asyncio.Queue()
-        while not self.speech_queue.empty():
-            try:
-                item = self.speech_queue.get_nowait()
-                if item["type"] != "monologue":
-                    await new_queue.put(item)
-                self.speech_queue.task_done()
-            except asyncio.QueueEmpty:
-                break
-        self.speech_queue = new_queue
+        await self.monologue_queue.pause()
         logger.info("[pause] Monologue paused")
 
     async def resume(self):
@@ -91,6 +86,7 @@ class MonologueManager:
         Resume monologue generation.
         """        
         self.monologue_running = True
+        await self.monologue_queue.resume()
         logger.info("[resume] Monologue resumed")
 
     async def run(self):
@@ -103,7 +99,7 @@ class MonologueManager:
 
         Handles task cancellation gracefully.
         """
-        logger.debug(f"[run] Queue size: {self.speech_queue.qsize()}, monologue_running={self.monologue_running}")
+        logger.debug(f"[run] Queue size: {self.monologue_queue.qsize()}, monologue_running={self.monologue_running}")
 
         try:
             while True:
@@ -112,7 +108,7 @@ class MonologueManager:
                     await asyncio.sleep(1)
                     continue
                 
-                logger.debug(f"[run] Queue size: {self.speech_queue.qsize()}, monologue_running={self.monologue_running}")
+                logger.debug(f"[run] Queue size: {self.monologue_queue.qsize()}, monologue_running={self.monologue_running}")
                 starter_prompt = self._choose_starter_prompt()
                 prompt = self.prompt_manager.build_prompt(base_prompt=starter_prompt)
 
@@ -128,6 +124,10 @@ class MonologueManager:
                 await self._wait_between_monologues()
         except asyncio.CancelledError:
             logger.info("[run] Monologue task cancelled")
+        except Exception as e:
+            logger.exception(f"f[run] Error: {e}")
+            await asyncio.sleep(2)
+            await self.run()
 
     def _choose_starter_prompt(self) -> str:
         """
@@ -173,12 +173,7 @@ class MonologueManager:
         temp_items = []
         monologue_count = 0
 
-        """         
-        while not self.speech_queue.empty():
-            item = await self.speech_queue.get()
-            if item["type"] == "monologue":
-                monologue_count += 1
-            temp_items.append(item)
+        MAX_MONOLOGUES = 5
 
         while monologue_count >= MAX_MONOLOGUES:
             logger.info(f"[_queue_response] Monologue limit hit ({monologue_count}), removing oldest monologue(s)")
@@ -186,31 +181,25 @@ class MonologueManager:
             removed = 0
 
             for item in temp_items:
-                if item["type"] == "monologue" and removed < (monologue_count - MAX_MONOLOGUES + 1):
+                if removed < (monologue_count - MAX_MONOLOGUES + 1):
                     removed +=1
                     continue
                 new_temp.append(item)
             temp_items = new_temp
 
-        inserted = False
         final_queue = []
         for i, item in enumerate(temp_items):
             final_queue.append(item)
-            if not inserted and item["type"] == "chat":
-                final_queue.append({"type": "monologue", "text": response})          
-                inserted = True
-
-        if not inserted:
-            final_queue.append({"type": "monologue", "text": response})
 
         for item in final_queue:
-            await self.speech_queue.put(item) """
+            await self.monologue_queue.put(item) 
 
         logger.debug(f"[_queue_response] Queueing monologue: {response}")
-        logger.debug(f"[_queue_response] Queue size before put: {self.speech_queue.qsize()}")
+        logger.debug(f"[_queue_response] Queue size before put: {self.monologue_queue.qsize()}")
 
-        await self.speech_queue.put({"type": "monologue", "text": response})
-        logger.debug(f"[_queue_response] Queue size after put: {self.speech_queue.qsize()}")
+        await self.monologue_queue.put({"type": "monologue", "text": response})
+        logger.debug(
+            f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
         logger.info("[run] Response queued to speech queue")
 
     async def _wait_between_monologues(self, delay: int = 15):

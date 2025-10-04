@@ -154,7 +154,7 @@ class EventManager(commands.Bot):
                     "message": message,
                     "timestamp": time.time()
                 }
-                await self.bot.message_queue.put(message_data)
+                await self.bot.unprocessed_message_queue.put(message_data)
             except asyncio.QueueFull:
                 logger.warning("[event_message] Queue full. Dropping message.")
         else:

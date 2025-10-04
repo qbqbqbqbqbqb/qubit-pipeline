@@ -3,6 +3,7 @@ import nltk
 from nltk.tokenize import sent_tokenize
 
 from vllm import LLM, SamplingParams
+
 from transformers import AutoProcessor
 
 def download_nltk_data():
@@ -38,7 +39,8 @@ class ModelManager:
                 model=MODEL_NAME, 
                 trust_remote_code=False,
                 tensor_parallel_size = 1,
-                gpu_memory_utilization=0.9
+                gpu_memory_utilization=0.9,
+                #max_model_len=4096
             )
 
             logger.info(f"[Dialogue_Model_Utils] Loaded model: {MODEL_NAME}")

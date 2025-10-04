@@ -2,7 +2,7 @@ import asyncio
 import re
 from typing import Optional
 import torch
-from vllm import LLM, SamplingParams
+
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -11,6 +11,10 @@ logger = get_logger("ResponseGen")
 from model_manager import ModelManager
 from text_processor import TextProcessor
 
+import os
+os.environ["VLLM_LOGGING_LEVEL"] = "DEBUG"
+
+from vllm import SamplingParams, LLM
 
 class ResponseGen:
     def __init__(self, model_manager: Optional[ModelManager] = None):
@@ -40,7 +44,6 @@ class ResponseGen:
         try:
             logger.debug("[generate_text] Starting generation...")
             loop = asyncio.get_running_loop()
-
             async def gen():
                 inputs = {"prompt": prompt, "multi_modal_data": {}}
                 sampling_params = self.get_sampling_params(max_tokens)
@@ -50,8 +53,9 @@ class ResponseGen:
                     inputs,
                     sampling_params
                 )
+                logger.debug("[generate_text] samplings params done...")
                 return outputs[0].outputs[0].text.strip()
-            
+
             text = await asyncio.wait_for(gen(), timeout)
             logger.debug(f"[generate_text] Raw output: {text[:60]}...")
             return text

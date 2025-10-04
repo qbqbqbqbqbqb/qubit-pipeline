@@ -11,11 +11,19 @@ class QueueManager:
                  ):
         self._queue = asyncio.Queue(maxsize=maxsize)
         self._paused = asyncio.Event()
-        self._paused = set()
+        self._paused.set()
 
         self._cap: Optional[int] = cap
 
+    async def _wait_if_paused(self) -> None:
+        if not self._paused.is_set():
+            logger.debug("q paused")
+        await self._paused.wait()
+
     async def put(self, item: Any) -> None:
+
+        await self._wait_if_paused()
+
         if self._cap is not None:
             await self._reduce(item)
 
@@ -31,7 +39,7 @@ class QueueManager:
         self._queue.task_done()
 
     def empty(self) -> bool:
-        self._queue.empty()
+        return self._queue.empty()
 
     async def pause(self) -> None:
         if self._paused.is_set():
@@ -46,7 +54,7 @@ class QueueManager:
     def qsize(self) -> int:
         return self._queue.qsize()
     
-    async def reduce(self):
+    async def _reduce(self):
         while self.qsize() > self._cap:
             try:
                 dropped = self._queue.get_nowait()

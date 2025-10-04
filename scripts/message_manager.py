@@ -6,9 +6,9 @@ from log_utils import get_logger
 logger = get_logger("MessageManager")
 
 class MessageManager:
-    def __init__(self, prompt_manager, speech_queue, banned_words, response_generator):
+    def __init__(self, prompt_manager, message_queue, banned_words, response_generator):
         self.prompt_manager = prompt_manager
-        self.speech_queue = speech_queue
+        self.message_queue = message_queue
         self.banned_words = banned_words
         self.response_generator = response_generator
 
@@ -55,11 +55,11 @@ class MessageManager:
                 logger.warning(f"[process_message] Response contains banned words, skipping speech.")
                 return
 
-            await self.speech_queue.put({
+            await self.message_queue.put({
                 "type": "chat_message",
                 "text": f"{message_author} said {content}"
             })
-            await self.speech_queue.put({
+            await self.message_queue.put({
                 "type": "chat_response",
                 "text": response
             })

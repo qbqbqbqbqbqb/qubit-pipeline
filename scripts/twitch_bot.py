@@ -1,5 +1,6 @@
 
 
+from typing import Any
 from twitchio.ext import commands
 print(f"[DEBUG] Using base class: {commands.Bot}")
 import asyncio
@@ -15,6 +16,7 @@ from speech_manager import SpeechManager
 from task_manager import TaskManager
 from response_gen import ResponseGen
 from model_manager import ModelManager
+from queue_manager import QueueManager
 
 # === Load environment variables ===
 import os
@@ -27,6 +29,16 @@ TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 # === Setup colorlog logger ===
 from log_utils import get_logger
 logger = get_logger("Bot")
+
+# Put this near the top of your file (after you create `logger`)
+async def dump_queue_sizes(bot):
+    while not bot.shutdown_event.is_set():
+        logger.debug(
+            f"[QUEUE DUMP] msg:{bot.message_queue.qsize()} "
+            f"mono:{bot.monologue_queue.qsize()} "
+            f"speech:{bot.speech_queue.qsize()}"
+        )
+        await asyncio.sleep(2)   # adjust interval as you like
 
 class Bot(commands.Bot):
     """
@@ -45,8 +57,11 @@ class Bot(commands.Bot):
         self.startup_done = False
         self.monologue_running = True
 
-        self.message_queue = asyncio.Queue(maxsize=50)
-        self.speech_queue = asyncio.Queue()
+        # Qqqqqqqqqqqqqqqqqqq
+        self.unprocessed_message_queue = QueueManager(maxsize=50)
+        self.message_queue = QueueManager()
+        self.monologue_queue = QueueManager()
+        self.speech_queue = QueueManager()
 
         self.config = ConfigManager()
         self.task_manager = TaskManager()
@@ -69,17 +84,19 @@ class Bot(commands.Bot):
 
         self.monologue_manager = MonologueManager(
             prompt_manager=self.prompt_manager,
-            speech_queue=self.speech_queue,
+            monologue_queue=self.monologue_queue,
             response_generator=self.response_generator,
             starters_file=self.config.starters_path
         )
 
-        self.event_manager = EventManager(bot=self,
-                                          response_generator=self.response_generator)
+        self.event_manager = EventManager(
+            bot=self,
+            response_generator=self.response_generator
+            )
         
         self.message_manager = MessageManager(
             prompt_manager=self.prompt_manager,
-            speech_queue=self.speech_queue,
+            message_queue=self.message_queue,
             banned_words=self.config.banned_words,
             response_generator=self.response_generator            
         )
@@ -87,6 +104,22 @@ class Bot(commands.Bot):
         self.shutting_down = False
 
     # === Bot Controls ===
+    async def merge_queues(self):
+        while True:
+            if not self.message_queue.empty():
+                item = await self.message_queue.get()
+                self.message_queue.task_done()
+            elif not self.monologue_queue.empty():
+                item = await self.monologue_queue.get()
+                self.monologue_queue.task_done()
+            else:
+                await asyncio.sleep(0.1)
+                continue
+
+            await self.speech_queue.put(item)
+            logger.debug(f"{item} added 2 qqqqq")
+                
+
     async def event_ready(self):
         """
         Called when the bot connects to Twitch and is ready.
@@ -104,6 +137,7 @@ class Bot(commands.Bot):
         await self.monologue_manager.start()
         self.task_manager.add_task(self.process_messages())
         self.task_manager.add_task(self.speech_manager.consume())
+        self.task_manager.add_task(self.merge_queues())
 
         await self.shutdown_event.wait()
 
@@ -114,6 +148,14 @@ class Bot(commands.Bot):
         await self.monologue_manager.stop()
         logger.info("[Start] All tasks cancelled. Exiting.")
 
+    async def clear_queues(self, queue_placeholder: Any) -> int:
+        cleared_items = 0
+        while not queue_placeholder.empty():
+            queue_placeholder.get()
+            queue_placeholder.task_done()
+            cleared_items += 1
+        return cleared_items
+
     async def stop(self):
         """
         Signals the bot to shutdown by speaking a sign-off message and setting the shutdown event.
@@ -123,29 +165,14 @@ class Bot(commands.Bot):
         self.shutting_down = True
         self.monologue_running = False
 
-        cleared_messages = 0
-        while not self.message_queue.empty():
-            try:
-                self.message_queue.get_nowait()
-                self.message_queue.task_done()
-                cleared_messages += 1
-            except Empty:
-                break
-
+        cleared_unprocessed_messages = self.clear_queues(self.unprocessed_message_queue)
+        logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from message queue.")
+        cleared_messages = self.clear_queues(self.message_queue)
         logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
+        cleared_speech = self.clear_queues(self.speech_queue)
+        logger.info(f"[Stop] Cleared {cleared_speech} items from message queue.")
 
-        cleared_speech = 0
-        new_speech_queue = asyncio.Queue()
-        while not self.speech_queue.empty():
-            try:
-                self.speech_queue.get_nowait()
-                self.speech_queue.task_done()
-                cleared_speech += 1
-            except Empty:
-                break
-
-        self.speech_queue = new_speech_queue
-        logger.info(f"[Stop] Cleared {cleared_speech} items from speech queue.")
+        self.speech_queue = QueueManager()
 
         try:
             ending_prompt = "This is the last thing you will say before the stream ends. Say a short, vtuber-esque sign-off to say goodbye to your audience."
@@ -169,9 +196,9 @@ class Bot(commands.Bot):
         """
         try:
             while True:
-                message_data = await self.message_queue.get()
+                message_data = await self.unprocessed_message_queue.get()
                 await self.message_manager.process_message(message_data)
-                self.message_queue.task_done()
+                self.unprocessed_message_queue.task_done()
         except asyncio.CancelledError:
             logger.info("process_messages task cancelled")
             raise
