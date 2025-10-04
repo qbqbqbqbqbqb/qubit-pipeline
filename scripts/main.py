@@ -1,13 +1,11 @@
 import asyncio
-from twitch_bot import Bot as TwitchBot
+from scripts.bot.twitch_bot import Bot as TwitchBot
 print(f"[DEBUG] Bot class: {TwitchBot}, module: {TwitchBot.__module__}, file: {TwitchBot.__module__}")
-import twitch_bot
-print(f"[DEBUG] twitch_bot module path: {twitch_bot.__file__}")
 
-from refresh_token import refresh_twitch_token 
+from scripts.io.refresh_token import refresh_twitch_token 
 
 # === Setup colorlog logger ===
-from log_utils import get_logger
+from scripts.io.log_utils import get_logger
 logger = get_logger("Main")
 
 async def token_refresher_loop():

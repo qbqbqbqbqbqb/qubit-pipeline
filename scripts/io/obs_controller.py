@@ -4,7 +4,7 @@ import json
 import websocket
 
 # === Setup colorlog logger ===
-from log_utils import get_logger
+from scripts.io.log_utils import get_logger
 logger = get_logger("OBS_Websocket_Controller")
 
 # === Load environment variables ===

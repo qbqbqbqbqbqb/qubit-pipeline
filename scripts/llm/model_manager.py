@@ -14,7 +14,7 @@ def download_nltk_data():
         nltk.download('punkt_tab')
 
 # === Setup colorlog logger ===
-from log_utils import get_logger
+from scripts.io.log_utils import get_logger
 logger = get_logger("ModelManager")
 
 MODEL_NAME = "RedHatAI/gemma-3-4b-it-quantized.w4a16"

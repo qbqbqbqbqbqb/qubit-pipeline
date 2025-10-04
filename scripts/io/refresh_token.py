@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # === Setup colorlog logger ===
-from log_utils import get_logger
+from scripts.io.log_utils import get_logger
 logger = get_logger("RefreshToken")
 
 def update_env_var(key, value, env_path=".env"):
