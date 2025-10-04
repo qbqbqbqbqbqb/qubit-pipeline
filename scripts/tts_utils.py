@@ -186,12 +186,21 @@ def build_synthesis_config(speaker_id: int) -> SynthesisConfig:
     """
     return SynthesisConfig(
         speaker_id=speaker_id,
-        length_scale=1.0,
-        noise_scale=0.667,
-        noise_w_scale=0.8,
-        volume=1.0,
+        length_scale=0.9,
+        noise_scale=0.3,
+        noise_w_scale=0.5,
+        volume=0.8,
         normalize_audio=True
     )
+""" 
+def preprocess_audio(audio_np):
+    audio_np = audio_np / np.max(np.abs(audio_np))
+
+    audio_np = np.tanh(audio_np) * 0.9
+
+    audio_np = np.int16(audio_np * 32767)
+
+    return audio_np """
 
 def generate_wav_bytes(text: str, syn_config: SynthesisConfig) -> bytes:
     """
@@ -210,6 +219,9 @@ def decode_wav_bytes(wav_data: bytes) -> tuple[int, np.ndarray]:
             sample_rate = wav_file.getframerate()
             audio_data = wav_file.readframes(wav_file.getnframes())
             audio_np = np.frombuffer(audio_data, dtype=np.int16)
+
+            #audio_np = preprocess_audio(audio_np)
+
     return sample_rate, audio_np
 
 def play_audio(sample_rate: int, audio_np: np.ndarray):
@@ -220,7 +232,10 @@ def play_audio(sample_rate: int, audio_np: np.ndarray):
         format=pyaudio.paInt16,
         channels=1,
         rate=sample_rate,
-        output=True
+        output=True,
+        frames_per_buffer=1024,
+        input_device_index=None,
+        output_device_index=None
     )
     stream.write(audio_np.tobytes())
     stream.stop_stream()
@@ -251,8 +266,7 @@ async def speak_from_prompt(text):
     height=400,
     valign="center",
     word_wrap=True
-)
-
+    )
 
     speaker_id = get_speaker_id(MODEL_PATH, SPEAKER_NAME)
     syn_config = build_synthesis_config(speaker_id)
