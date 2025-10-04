@@ -4,9 +4,10 @@ import random
 from twitchio.ext import commands
 from bot_utils import contains_banned_words
 
-from dialogue_model_utils import generate_response
 from bot_utils import is_fallback_text
 from tts_utils import speak_from_prompt
+
+from dialogue_model_utils import ResponseGen
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -30,8 +31,11 @@ class EventManager(commands.Bot):
     Attributes:
         bot (commands.Bot): Reference to the main Twitch bot instance.
     """
-    def __init__(self, bot):
+    def __init__(self, 
+                 bot,
+                 response_generator):
         self.bot = bot
+        self.response_generator = response_generator
 
     async def on_ready(self):
         """
@@ -57,7 +61,7 @@ class EventManager(commands.Bot):
 
         for attempt in range(3):
             try:
-                response = await loop.run_in_executor(None, generate_response, prompt)
+                response = await self.response_generator.generate_response_safely(prompt)
                 if not response.strip() or is_fallback_text(response):
                     logger.warning(f"[event_ready] Invalid intro response on attempt {attempt+1}")
                     continue
@@ -94,7 +98,7 @@ class EventManager(commands.Bot):
         if content.startswith("@"):
             return True
 
-        min_length = 3
+        min_length = 2
         word_count = len(content.strip().split())
         if word_count < min_length:
             logger.info(f"[event_message] Ignored short message from {author}: {content}")
@@ -146,7 +150,7 @@ class EventManager(commands.Bot):
         Queues a chat message for processing and response generation with a probabilistic chance.
         """
         author = message.author.name
-        response_chance = 0.8
+        response_chance = 1
 
         if random.random() < response_chance:
             try:

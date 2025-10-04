@@ -158,7 +158,7 @@ def normalise_text(text: str, number_converter) -> str:
     text = ensure_spacing_after_punctuation(text)
     text = re.sub(r'\s+', ' ', text).strip()
     text = remove_unsupported_chars(text)
-    text = collapse_repeated_words(text)
+    #text = collapse_repeated_words(text)
 
     acronyms = ["PC", "CPU", "GPU", "RAM", "QB", "QBOT", "USB", "HTTP", "HTTPS", "API", "ID", "TV", "LOL", "BRB", "GTG", "AFK", 
                 "IMHO", "FYI", "DIY", "ETA", "ASAP", "TTS", "AI", "VR", "AR", "IP", "LAN", "WAN", "SSID", "DM", "PM", "GMT", 

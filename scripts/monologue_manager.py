@@ -2,7 +2,7 @@ import random
 import asyncio
 from pathlib import Path
 
-from dialogue_model_utils import generate_response
+from dialogue_model_utils import ResponseGen, ModelManager
 from bot_utils import (
     is_fallback_text, load_config, load_banned_words, 
     get_file_path, get_root, contains_banned_words
@@ -13,10 +13,15 @@ from config_manager import ConfigManager
 from log_utils import get_logger
 logger = get_logger("MonologueManager")
 
-MAX_MONOLOGUES = 3
+#MAX_MONOLOGUES = 5
 
 class MonologueManager:
-    def __init__(self, prompt_manager, speech_queue, starters_file: Path =None):
+    def __init__(self, 
+                 prompt_manager, 
+                 speech_queue: asyncio.Queue, 
+                 response_generator: ResponseGen,
+                 starters_file: Path =None,
+                 ):
         """
         Handles the monologue generation loop.
 
@@ -28,7 +33,7 @@ class MonologueManager:
         """
         self.prompt_manager = prompt_manager
         self.speech_queue = speech_queue
-
+        self.response_generator = response_generator
         self.config = ConfigManager()
 
         self.monologue_running = True
@@ -42,6 +47,7 @@ class MonologueManager:
             ]
             
         self.task = None
+
 
     async def start(self):
         """
@@ -66,7 +72,7 @@ class MonologueManager:
         """
         Pause monologue generation.
         """        
-        await self.monologue_manager.pause()
+        self.monologue_running = False
 
         new_queue = asyncio.Queue()
         while not self.speech_queue.empty():
@@ -97,13 +103,16 @@ class MonologueManager:
 
         Handles task cancellation gracefully.
         """
+        logger.debug(f"[run] Queue size: {self.speech_queue.qsize()}, monologue_running={self.monologue_running}")
+
         try:
             while True:
                 if not self.monologue_running:
                     logger.debug("[run] Monologue paused: Sleeping.")
                     await asyncio.sleep(1)
                     continue
-
+                
+                logger.debug(f"[run] Queue size: {self.speech_queue.qsize()}, monologue_running={self.monologue_running}")
                 starter_prompt = self._choose_starter_prompt()
                 prompt = self.prompt_manager.build_prompt(base_prompt=starter_prompt)
 
@@ -125,29 +134,17 @@ class MonologueManager:
         Selects and returns a random starter prompt from the available starters.
         """        
         choice = random.choice(self.starters)
-        logger.info(f"[run] Selected starter prompt: {choice}")
+        logger.info(f"[_choose_starter_prompt] Selected starter prompt: {choice}")
         return choice
 
-    async def _generate_response_with_retries(self, prompt: str, max_attempts: int = 2) -> str:
-        """
-        Generate a response from the dialogue model, retrying up to max_attempts times if invalid.
-
-        """        
-        loop = asyncio.get_running_loop()
-        response = ""
-        for attempt in range(max_attempts):
-            try:
-                response = await loop.run_in_executor(None, generate_response, prompt)
-                logger.info(f"[run] Generated response (attempt {attempt + 1}): {response}")
-
-                if not response.strip() or is_fallback_text(response):
-                    logger.warning(f"[run] Response invalid on attempt {attempt + 1}")
-                    continue
-                return response
-            except Exception as e:
-                logger.error(f"[run] Error generating response on attempt {attempt + 1}: {e}")
-                return "Something went wrong!"
-        return response
+    async def _generate_response_with_retries(self, prompt):
+        try:
+            # Use await when calling an async method
+            response = await self.response_generator.generate_response_safely(prompt)
+            return response
+        except Exception as e:
+            logger.exception(f"Error in generate response with retries: {e}")
+            return "Something went wrong!"
 
     def _is_valid_response(self, response: str) -> bool:
         """
@@ -159,13 +156,13 @@ class MonologueManager:
         - Response does not contain banned words.
         """
         if not response.strip():
-            logger.warning("[run] Empty response")
+            logger.warning("[_is_valid_response] Empty response")
             return False
         if is_fallback_text(response):
-            logger.warning("[run] Fallback text detected")
+            logger.warning("[_is_valid_response] Fallback text detected")
             return False
         if contains_banned_words(response, banned_words=self.config.banned_words):
-            logger.warning(f"[run] Banned words found in response: {response}")
+            logger.warning(f"[_is_valid_response] Banned words found in response: {response}")
             return False
         return True
 
@@ -176,6 +173,7 @@ class MonologueManager:
         temp_items = []
         monologue_count = 0
 
+        """         
         while not self.speech_queue.empty():
             item = await self.speech_queue.get()
             if item["type"] == "monologue":
@@ -183,19 +181,39 @@ class MonologueManager:
             temp_items.append(item)
 
         while monologue_count >= MAX_MONOLOGUES:
-            for i, item in enumerate(temp_items):
-                if item["type"] == "monologue":
-                    del temp_items[i]
-                    monologue_count -= 1
-                    break
-                          
-        for item in temp_items:
-            await self.speech_queue.put(item)
+            logger.info(f"[_queue_response] Monologue limit hit ({monologue_count}), removing oldest monologue(s)")
+            new_temp = []
+            removed = 0
+
+            for item in temp_items:
+                if item["type"] == "monologue" and removed < (monologue_count - MAX_MONOLOGUES + 1):
+                    removed +=1
+                    continue
+                new_temp.append(item)
+            temp_items = new_temp
+
+        inserted = False
+        final_queue = []
+        for i, item in enumerate(temp_items):
+            final_queue.append(item)
+            if not inserted and item["type"] == "chat":
+                final_queue.append({"type": "monologue", "text": response})          
+                inserted = True
+
+        if not inserted:
+            final_queue.append({"type": "monologue", "text": response})
+
+        for item in final_queue:
+            await self.speech_queue.put(item) """
+
+        logger.debug(f"[_queue_response] Queueing monologue: {response}")
+        logger.debug(f"[_queue_response] Queue size before put: {self.speech_queue.qsize()}")
 
         await self.speech_queue.put({"type": "monologue", "text": response})
+        logger.debug(f"[_queue_response] Queue size after put: {self.speech_queue.qsize()}")
         logger.info("[run] Response queued to speech queue")
 
-    async def _wait_between_monologues(self, delay: int = 5):
+    async def _wait_between_monologues(self, delay: int = 15):
         """
         Wait for a specified delay before generating the next monologue.
         """

@@ -1,16 +1,16 @@
 import time
 import asyncio
 from bot_utils import contains_banned_words, is_fallback_text
-from dialogue_model_utils import generate_response
 
 from log_utils import get_logger
 logger = get_logger("MessageManager")
 
 class MessageManager:
-    def __init__(self, prompt_manager, speech_queue, banned_words):
+    def __init__(self, prompt_manager, speech_queue, banned_words, response_generator):
         self.prompt_manager = prompt_manager
         self.speech_queue = speech_queue
         self.banned_words = banned_words
+        self.response_generator = response_generator
 
     async def process_message(self, message_data):
         """
@@ -42,11 +42,10 @@ class MessageManager:
                 user_record = f"{author}: {content}"
                 base_prompt = f"A user named {author} said: \"{content}\". Respond to this Twitch chat message."
 
-            self.prompt_manager.add_user(user_record)
             prompt = self.prompt_manager.build_prompt(base_prompt=base_prompt)
 
             loop = asyncio.get_running_loop()
-            response = await loop.run_in_executor(None, generate_response, prompt)
+            response = await self.response_generator.generate_response_safely(prompt)
 
             if is_fallback_text(response):
                 logger.warning(f"[process_message] Skipping fallback response: {response}")
@@ -65,7 +64,8 @@ class MessageManager:
                 "text": response
             })
 
+            self.prompt_manager.add_user(user_record)
             self.prompt_manager.add_bot(response)
-
+            
         except Exception as e:
             logger.error(f"Error processing message: {e}")

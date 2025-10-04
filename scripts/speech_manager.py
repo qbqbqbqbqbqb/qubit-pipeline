@@ -16,21 +16,46 @@ class SpeechManager:
         Consume the speech queue and perform TTS on queued items.
         Skips monologue speech if paused.
         """
+
         while True:
             item = await self.speech_queue.get()
-            try:
-                if item["type"] == "monologue" and not self.monologue_running:
-                    logger.debug("[SpeechManager] Monologue paused, skipping speech.")
-                else:
-                    text = item["text"]
-                    if contains_banned_words(text, banned_words=self.banned_words):
-                        logger.warning(f"[SpeechManager] Blocked TTS due to banned content: {text}")
-                        continue
-                    await speak_from_prompt(text)
+            logger.debug(f"[SpeechManager] Dequeued item: {item}")
 
-                    if(["type"] != "chat_response"):
-                        await asyncio.sleep(3)
+            try:
+                text = item.get("text", "").strip()
+                item_type = item.get("type", "unknown")
+
+                if not text:
+                    logger.warning("[SpeechManager] Empty text received, skipping.")
+                    self.speech_queue.task_done()
+                    continue
+               
+                if contains_banned_words(text, banned_words=self.banned_words):
+                    logger.warning(f"[SpeechManager] Blocked TTS due to banned content: {text}")
+                    self.speech_queue.task_done()
+                    continue
+                
+                if item["type"] == "monologue":
+                    if not self.monologue_running:
+                        logger.debug("[SpeechManager] Monologue paused, skipping speech.")
+                        continue
+                    logger.info(f"[SpeechManager] Speaking monologue: {text}")
+                else:
+                    logger.info(f"[SpeechManager] Speaking ({item_type}): {text}")
+
+                await speak_from_prompt(text)
+
+                if item_type != "chat_message":
+                    await asyncio.sleep(3)
             except Exception as e:
                 logger.error(f"Error during speech playback: {e}")
             finally:
                 self.speech_queue.task_done()
+
+    def pause_monologues(self):
+        self.monologue_running = False
+        logger.info("[SpeechManager] Monologue paused.")
+
+    def resume_monologues(self):
+        self.monologue_running = True
+        logger.info("[SpeechManager] Monologue resumed.")

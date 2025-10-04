@@ -1,5 +1,9 @@
 import asyncio
-from twitch_bot import Bot
+from twitch_bot import Bot as TwitchBot
+print(f"[DEBUG] Bot class: {TwitchBot}, module: {TwitchBot.__module__}, file: {TwitchBot.__module__}")
+import twitch_bot
+print(f"[DEBUG] twitch_bot module path: {twitch_bot.__file__}")
+
 from refresh_token import refresh_twitch_token 
 
 # === Setup colorlog logger ===
@@ -27,7 +31,7 @@ async def main():
     - Logs a warning if the bot's start method returns unexpectedly.
     - Catches and logs any critical exceptions that occur during execution.
     """
-    bot = Bot()
+    bot = TwitchBot()
 
     try:
         logger.info("[Main] Refreshing token before bot start...")

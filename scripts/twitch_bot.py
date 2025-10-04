@@ -1,4 +1,7 @@
+
+
 from twitchio.ext import commands
+print(f"[DEBUG] Using base class: {commands.Bot}")
 import asyncio
 import random
 import re
@@ -7,7 +10,6 @@ import json
 from pathlib import Path
 from queue import Empty
 
-from dialogue_model_utils import generate_response
 from tts_utils import speak_from_prompt
 from prompt_manager import PromptManager
 from monologue_manager import MonologueManager
@@ -16,11 +18,7 @@ from config_manager import ConfigManager
 from message_manager import MessageManager
 from speech_manager import SpeechManager
 from task_manager import TaskManager
-
-from bot_utils import (
-    load_file, load_banned_words, get_file_path, get_root,
-    contains_banned_words, is_fallback_text, load_config
-)
+from dialogue_model_utils import ResponseGen, ModelManager
 
 # === Load environment variables ===
 import os
@@ -62,24 +60,39 @@ class Bot(commands.Bot):
             max_history = self.config.max_chat_history
         )
 
-        self.monologue_manager = MonologueManager(
-            prompt_manager=self.prompt_manager,
-            speech_queue=self.speech_queue,
-            starters_file=self.config.starters_path
-        )
 
-        self.event_manager = EventManager(bot=self)
+
+
 
         
-        self.message_manager = MessageManager(
-            prompt_manager=self.prompt_manager,
-            speech_queue=self.speech_queue,
-            banned_words=self.config.banned_words
-        )
+
 
         self.speech_manager = SpeechManager(
             speech_queue=self.speech_queue,
             banned_words=self.config.banned_words
+        )
+
+        self.model_manager = ModelManager()
+
+        self.response_generator = ResponseGen(
+            model_manager=self.model_manager
+        )
+
+        self.monologue_manager = MonologueManager(
+            prompt_manager=self.prompt_manager,
+            speech_queue=self.speech_queue,
+            response_generator=self.response_generator,
+            starters_file=self.config.starters_path
+        )
+
+        self.event_manager = EventManager(bot=self,
+                                          response_generator=self.response_generator)
+        
+        self.message_manager = MessageManager(
+            prompt_manager=self.prompt_manager,
+            speech_queue=self.speech_queue,
+            banned_words=self.config.banned_words,
+            response_generator=self.response_generator            
         )
 
         self.shutting_down = False
@@ -150,8 +163,7 @@ class Bot(commands.Bot):
             logger.debug(f"[Stop] Ending prompt: {ending_prompt}")
             
             prompt = self.prompt_manager.build_prompt(base_prompt=ending_prompt)
-            loop = asyncio.get_running_loop()
-            end_txt = await loop.run_in_executor(None, generate_response, prompt)
+            end_txt = await self.response_generator.generate_response_safely(prompt)
 
             logger.info(f"[Stop] Sign-off message: {end_txt}")
             await speak_from_prompt(end_txt)
@@ -198,7 +210,8 @@ class Bot(commands.Bot):
         """
         Pauses the monologue loop and clears pending speech items to stop ongoing speech.
         """
-        await self.monologue_controller.pause()
+        await self.monologue_manager.pause()
+        await self.speech_manager.pause()
         await message.channel.send("Monologue paused.")
         logger.info("[Monologue] Paused.")
 
@@ -207,5 +220,6 @@ class Bot(commands.Bot):
         Resumes the monologue loop.
         """
         await self.monologue_manager.resume()
+        await self.speech_manager.resume()
         await message.channel.send("Monologue resumed.")
         logger.info("[Monologue] Resumed.")
