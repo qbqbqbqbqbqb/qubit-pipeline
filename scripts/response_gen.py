@@ -36,7 +36,7 @@ class ResponseGen:
     async def generate_text(self, 
                             prompt: str, 
                             max_tokens: int,
-                            timeout: float = 120.0
+                            timeout: float = 60.0
                             ) -> str:
         """
         Performs the text generation call using the LLM.

@@ -8,7 +8,7 @@ from bot_utils import (
     is_fallback_text, contains_banned_words
 )
 from config_manager import ConfigManager
-from queue_manager import QueueManager
+from queue_manager import Queue
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -19,7 +19,7 @@ logger = get_logger("MonologueManager")
 class MonologueManager:
     def __init__(self, 
                  prompt_manager, 
-                 monologue_queue: QueueManager, 
+                 monologue_queue: Queue, 
                  response_generator: ResponseGen,
                  starters_file: Path =None,
                  ):
@@ -39,10 +39,10 @@ class MonologueManager:
 
         self.monologue_running = True
 
-        if isinstance(monologue_queue, QueueManager):
+        if isinstance(monologue_queue, Queue):
                 self.monologue_queue = monologue_queue
         else:
-                self.monologue_queue = QueueManager(maxsize=0, cap=None)
+                self.monologue_queue = Queue(maxsize=0, cap=None)
 
         if starters_file and starters_file.exists():
             with open(starters_file, "r", encoding="utf-8") as f:
@@ -202,7 +202,7 @@ class MonologueManager:
             f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
         logger.info("[run] Response queued to speech queue")
 
-    async def _wait_between_monologues(self, delay: int = 15):
+    async def _wait_between_monologues(self, delay: int = 5):
         """
         Wait for a specified delay before generating the next monologue.
         """

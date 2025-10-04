@@ -16,7 +16,7 @@ from speech_manager import SpeechManager
 from task_manager import TaskManager
 from response_gen import ResponseGen
 from model_manager import ModelManager
-from queue_manager import QueueManager
+from queue_manager import Queue, QueueManager
 
 # === Load environment variables ===
 import os
@@ -34,9 +34,9 @@ logger = get_logger("Bot")
 async def dump_queue_sizes(bot):
     while not bot.shutdown_event.is_set():
         logger.debug(
-            f"[QUEUE DUMP] msg:{bot.message_queue.qsize()} "
-            f"mono:{bot.monologue_queue.qsize()} "
-            f"speech:{bot.speech_queue.qsize()}"
+            f"[QUEUE DUMP] msg:{bot.queue_manager.message_queue.qsize()} "
+            f"mono:{bot.queue_manager.monologue_queue.qsize()} "
+            f"speech:{bot.queue_manager.speech_queue.qsize()}"
         )
         await asyncio.sleep(2)   # adjust interval as you like
 
@@ -57,11 +57,8 @@ class Bot(commands.Bot):
         self.startup_done = False
         self.monologue_running = True
 
-        # Qqqqqqqqqqqqqqqqqqq
-        self.unprocessed_message_queue = QueueManager(maxsize=50)
-        self.message_queue = QueueManager()
-        self.monologue_queue = QueueManager()
-        self.speech_queue = QueueManager()
+        self.unprocessed_message_queue = Queue(maxsize=50)
+        self.queue_manager = QueueManager()
 
         self.config = ConfigManager()
         self.task_manager = TaskManager()
@@ -72,7 +69,7 @@ class Bot(commands.Bot):
         )
 
         self.speech_manager = SpeechManager(
-            speech_queue=self.speech_queue,
+            speech_queue=self.queue_manager.speech_queue,
             banned_words=self.config.banned_words
         )
 
@@ -84,7 +81,7 @@ class Bot(commands.Bot):
 
         self.monologue_manager = MonologueManager(
             prompt_manager=self.prompt_manager,
-            monologue_queue=self.monologue_queue,
+            monologue_queue=self.queue_manager.monologue_queue,
             response_generator=self.response_generator,
             starters_file=self.config.starters_path
         )
@@ -96,7 +93,7 @@ class Bot(commands.Bot):
         
         self.message_manager = MessageManager(
             prompt_manager=self.prompt_manager,
-            message_queue=self.message_queue,
+            queue_manager=self.queue_manager,
             banned_words=self.config.banned_words,
             response_generator=self.response_generator            
         )
@@ -104,28 +101,11 @@ class Bot(commands.Bot):
         self.shutting_down = False
 
     # === Bot Controls ===
-    async def merge_queues(self):
-        while True:
-            if not self.message_queue.empty():
-                item = await self.message_queue.get()
-                self.message_queue.task_done()
-            elif not self.monologue_queue.empty():
-                item = await self.monologue_queue.get()
-                self.monologue_queue.task_done()
-            else:
-                await asyncio.sleep(0.1)
-                continue
-
-            await self.speech_queue.put(item)
-            logger.debug(f"{item} added 2 qqqqq")
-                
-
     async def event_ready(self):
         """
         Called when the bot connects to Twitch and is ready.
         """
         await self.event_manager.on_ready()
-        
         self.startup_done = True
         await self.background_tasks()
 
@@ -135,10 +115,11 @@ class Bot(commands.Bot):
         """
         logger.info("[Start] Launching background tasks...")
         await self.monologue_manager.start()
+
         self.task_manager.add_task(self.process_messages())
         self.task_manager.add_task(self.speech_manager.consume())
-        self.task_manager.add_task(self.merge_queues())
-
+        self.task_manager.add_task(self.queue_manager.merge_queues())
+        self.task_manager.add_task(dump_queue_sizes(self))
         await self.shutdown_event.wait()
 
         logger.info("[Start] Shutdown signal received. Cancelling tasks...")
@@ -148,13 +129,6 @@ class Bot(commands.Bot):
         await self.monologue_manager.stop()
         logger.info("[Start] All tasks cancelled. Exiting.")
 
-    async def clear_queues(self, queue_placeholder: Any) -> int:
-        cleared_items = 0
-        while not queue_placeholder.empty():
-            queue_placeholder.get()
-            queue_placeholder.task_done()
-            cleared_items += 1
-        return cleared_items
 
     async def stop(self):
         """
@@ -165,14 +139,9 @@ class Bot(commands.Bot):
         self.shutting_down = True
         self.monologue_running = False
 
-        cleared_unprocessed_messages = self.clear_queues(self.unprocessed_message_queue)
-        logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from message queue.")
-        cleared_messages = self.clear_queues(self.message_queue)
-        logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
-        cleared_speech = self.clear_queues(self.speech_queue)
-        logger.info(f"[Stop] Cleared {cleared_speech} items from message queue.")
+        cleared = await self.queue_manager.clear_all()
 
-        self.speech_queue = QueueManager()
+        self.speech_queue = Queue()
 
         try:
             ending_prompt = "This is the last thing you will say before the stream ends. Say a short, vtuber-esque sign-off to say goodbye to your audience."

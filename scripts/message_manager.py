@@ -6,9 +6,13 @@ from log_utils import get_logger
 logger = get_logger("MessageManager")
 
 class MessageManager:
-    def __init__(self, prompt_manager, message_queue, banned_words, response_generator):
+    def __init__(self, 
+                 prompt_manager, 
+                 queue_manager, 
+                 banned_words, 
+                 response_generator):
         self.prompt_manager = prompt_manager
-        self.message_queue = message_queue
+        self.queue_manager = queue_manager
         self.banned_words = banned_words
         self.response_generator = response_generator
 
@@ -24,7 +28,7 @@ class MessageManager:
         author = message.author.name
         content = message.content
 
-        if age > 120:
+        if age > 300:
             logger.info(f"Dropped stale message from {author} ({int(age)}s old)")
             return
 
@@ -55,11 +59,11 @@ class MessageManager:
                 logger.warning(f"[process_message] Response contains banned words, skipping speech.")
                 return
 
-            await self.message_queue.put({
+            await self.queue_manager.enqueue_chat({
                 "type": "chat_message",
                 "text": f"{message_author} said {content}"
             })
-            await self.message_queue.put({
+            await self.queue_manager.enqueue_chat({
                 "type": "chat_response",
                 "text": response
             })
