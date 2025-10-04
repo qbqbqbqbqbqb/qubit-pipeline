@@ -2,10 +2,10 @@ import random
 import asyncio
 from pathlib import Path
 
-from dialogue_model_utils import ResponseGen, ModelManager
+from response_gen import ResponseGen
+
 from bot_utils import (
-    is_fallback_text, load_config, load_banned_words, 
-    get_file_path, get_root, contains_banned_words
+    is_fallback_text, contains_banned_words
 )
 from config_manager import ConfigManager
 

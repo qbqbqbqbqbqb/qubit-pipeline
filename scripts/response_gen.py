@@ -3,120 +3,14 @@ import re
 from typing import Optional
 import torch
 from vllm import LLM, SamplingParams
-from transformers import AutoProcessor
-
-# === Setup sentence tokenisation ===
-import nltk
-from nltk.tokenize import sent_tokenize
-
-def download_nltk_data():
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt') 
-        nltk.download('punkt_tab')
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
-logger = get_logger("Dialogue_Model_Utils")
+logger = get_logger("ResponseGen")
 
-MODEL_NAME = "RedHatAI/gemma-3-4b-it-quantized.w4a16"
+from model_manager import ModelManager
+from text_processor import TextProcessor
 
-class ModelManager:
-    __instance = None
-    def __new__(cls):
-        if not cls.__instance:
-            cls.__instance = super().__new__(cls)
-            cls.__instance._init()
-        return cls.__instance
-    
-    def _init(self):
-        download_nltk_data()
-        # === Load LLAMA2 model ===
-        try:
-            self.processor = AutoProcessor.from_pretrained(
-                MODEL_NAME, 
-                trust_remote_code=False
-            )
-            self.llm = LLM(
-                model=MODEL_NAME, 
-                trust_remote_code=False,
-                tensor_parallel_size = 1,
-                gpu_memory_utilization=0.9
-            )
-
-            logger.info(f"[Dialogue_Model_Utils] Loaded model: {MODEL_NAME}")
-
-        except Exception as e:
-            logger.error(f"[init] Model initialisation failed.")
-
-    @classmethod
-    def get_instance(cls):
-        return cls()
-
-# === Utility Functions ===
-class TextProcessor:
-    @staticmethod
-    def trim_to_last_sentence(text: str) -> str:
-        """
-        Returns text trimmed to the last full sentence according to the sentence tokeniser.
-        """
-        sentences = sent_tokenize(text)
-        if not sentences:
-            return ""
-        if not text.endswith(('.', '!', '?')):
-            sentences = sentences[:-1]
-        return ' '.join(sentences).strip()
-
-    @staticmethod
-    def limit_sentences(text: str, max_sentences: int=3) -> str:
-        """
-        Limits text to a maximum number of sentences using the sentence tokeniser.
-        """
-        sentences = sent_tokenize(text)
-        return ' '.join(sentences[:max_sentences]).strip()
-
-    @staticmethod
-    def limit_chars(text: str, max_chars: int=300) -> str:
-        """
-        Truncates the input text to a maximum character length without cutting off words abruptly.
-        """
-        if len(text) > max_chars:
-            return text[:max_chars].rsplit(' ', 1)[0] + '...'
-        return text
-
-    @staticmethod
-    def clean_and_limit_text(text: str, 
-                             max_sentences: int=3, 
-                             max_chars: int=300) -> str:
-        """
-        Cleans and limits the input text by trimming to full sentences, limiting sentence count, and truncating characters.
-        """
-        text = TextProcessor.trim_to_last_sentence(text)
-        text = TextProcessor.limit_sentences(text, max_sentences)
-        text = TextProcessor.limit_chars(text, max_chars)
-        return text
-
-    @staticmethod
-    def contains_url(text: str) -> bool:
-        """
-        Checks if the input text contains a URL pattern.
-        """
-        url_pattern = re.compile(r'https?://\S+|www\.\S+|.com\S*', re.IGNORECASE)
-        return bool(url_pattern.search(text))
-
-    @staticmethod
-    def clean_generated_text(text: str) -> str:
-        """
-        Cleans generated text by removing text consisting only of punctuation and stripping trailing punctuation,
-        and removes sentences containing URLs.
-        """
-        if re.fullmatch(r"[:;,.!?\-]+", text.strip()):
-            return ""
-        text = text.strip().strip(":;,.!?-")
-        sentences = text.split('. ')
-        sentences = [s for s in sentences if not contains_url(s)]
-        return '. '.join(sentences).strip()
 
 class ResponseGen:
     def __init__(self, model_manager: Optional[ModelManager] = None):
@@ -217,7 +111,7 @@ class ResponseGen:
     async def generate_response_safely(
         self,
         prompt: dict,
-        max_new_tokens: int = 100,
+        max_new_tokens: int =50,
         timeout: float = 15.0
     ) -> str:
         try:

@@ -3,11 +3,6 @@
 from twitchio.ext import commands
 print(f"[DEBUG] Using base class: {commands.Bot}")
 import asyncio
-import random
-import re
-import time
-import json
-from pathlib import Path
 from queue import Empty
 
 from tts_utils import speak_from_prompt
@@ -18,7 +13,8 @@ from config_manager import ConfigManager
 from message_manager import MessageManager
 from speech_manager import SpeechManager
 from task_manager import TaskManager
-from dialogue_model_utils import ResponseGen, ModelManager
+from response_gen import ResponseGen
+from model_manager import ModelManager
 
 # === Load environment variables ===
 import os
@@ -59,13 +55,6 @@ class Bot(commands.Bot):
             system_instructions = self.config.instructions,
             max_history = self.config.max_chat_history
         )
-
-
-
-
-
-        
-
 
         self.speech_manager = SpeechManager(
             speech_queue=self.speech_queue,

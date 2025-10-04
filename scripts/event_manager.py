@@ -2,12 +2,9 @@ import asyncio
 import time
 import random
 from twitchio.ext import commands
-from bot_utils import contains_banned_words
 
 from bot_utils import is_fallback_text
 from tts_utils import speak_from_prompt
-
-from dialogue_model_utils import ResponseGen
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -47,10 +44,8 @@ class EventManager(commands.Bot):
         logger.info(f"[event_ready] Logged in as {self.bot.nick}")
 
         intro_prompt = (
-            "This is the first thing you will say this stream. "
             "Write a short, cheerful greeting to welcome viewers to the stream. "
-            "For example: 'Hey everyone! Welcome to the Qubit stream! "
-            "I'm so excited to hang out with you all today. Let's have some fun!'"
+            "Let's have some fun!'"
         )
 
         self.bot.prompt_manager.add_user(f"System: {intro_prompt}")
