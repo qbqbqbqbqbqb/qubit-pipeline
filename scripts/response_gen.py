@@ -26,7 +26,6 @@ class ResponseGen:
             top_p=0.9,
             top_k=80,
             max_tokens=max_tokens,
-            bad_words=["http", "https", "www", ".com", ".net", ".org", ".io", ".gov", ".edu"],
             repetition_penalty=1.2,
         )
 
@@ -88,7 +87,7 @@ class ResponseGen:
         
     async def generate_response(self, 
                                 prompt: str, 
-                                max_new_tokens: int = 100
+                                max_new_tokens: int = 30
                                 ) -> str:
         """
         Orchestrates the generation of a cleaned and constrained model response.
@@ -111,7 +110,7 @@ class ResponseGen:
     async def generate_response_safely(
         self,
         prompt: dict,
-        max_new_tokens: int =50,
+        max_new_tokens: int =30,
         timeout: float = 15.0
     ) -> str:
         try:
