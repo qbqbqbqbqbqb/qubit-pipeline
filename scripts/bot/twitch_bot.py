@@ -30,7 +30,6 @@ TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 from scripts.utils.log_utils import get_logger
 logger = get_logger("Bot")
 
-# Put this near the top of your file (after you create `logger`)
 async def dump_queue_sizes(bot):
     while not bot.shutdown_event.is_set():
         logger.debug(
@@ -38,7 +37,7 @@ async def dump_queue_sizes(bot):
             f"mono:{bot.queue_manager.monologue_queue.qsize()} "
             f"speech:{bot.queue_manager.speech_queue.qsize()}"
         )
-        await asyncio.sleep(2)   # adjust interval as you like
+        await asyncio.sleep(2)
 
 class Bot(commands.Bot):
     """
@@ -79,11 +78,15 @@ class Bot(commands.Bot):
             model_manager=self.model_manager
         )
 
+        from scripts.memory_manager import MemoryManager
+        self.memory_manager = MemoryManager(response_generator=self.response_generator)
+
         self.monologue_manager = MonologueManager(
             prompt_manager=self.prompt_manager,
             monologue_queue=self.queue_manager.monologue_queue,
             response_generator=self.response_generator,
-            starters_file=self.config.starters_path
+            starters_file=self.config.starters_path,
+            memory_manager=self.memory_manager
         )
 
         self.event_manager = EventManager(
@@ -95,7 +98,9 @@ class Bot(commands.Bot):
             prompt_manager=self.prompt_manager,
             queue_manager=self.queue_manager,
             banned_words=self.config.banned_words,
-            response_generator=self.response_generator            
+            response_generator=self.response_generator,
+            memory_manager=self.memory_manager,
+            bot=self
         )
 
         self.shutting_down = False
@@ -120,6 +125,7 @@ class Bot(commands.Bot):
         self.task_manager.add_task(self.speech_manager.consume())
         self.task_manager.add_task(self.queue_manager.merge_queues())
         self.task_manager.add_task(dump_queue_sizes(self))
+        self.task_manager.add_task(self.memory_cleanup_task())
         await self.shutdown_event.wait()
 
         logger.info("[Start] Shutdown signal received. Cancelling tasks...")
@@ -199,6 +205,15 @@ class Bot(commands.Bot):
         await self.speech_manager.pause()
         await message.channel.send("Monologue paused.")
         logger.info("[Monologue] Paused.")
+    async def memory_cleanup_task(self):
+        """Periodically clean up old memories."""
+        while not self.shutdown_event.is_set():
+            try:
+                self.memory_manager.cleanup_old_memories()
+                await asyncio.sleep(60)
+            except Exception as e:
+                logger.error(f"Error during memory cleanup: {e}")
+                await asyncio.sleep(60)
 
     async def resume_monologue(self, message):
         """

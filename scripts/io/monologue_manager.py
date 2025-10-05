@@ -14,14 +14,14 @@ from scripts.bot.queue_manager import Queue
 from scripts.utils.log_utils import get_logger
 logger = get_logger("MonologueManager")
 
-#MAX_MONOLOGUES = 5
 
 class MonologueManager:
-    def __init__(self, 
-                 prompt_manager, 
-                 monologue_queue: Queue, 
+    def __init__(self,
+                 prompt_manager,
+                 monologue_queue: Queue,
                  response_generator: ResponseGen,
                  starters_file: Path =None,
+                 memory_manager=None,
                  ):
         """
         Handles the monologue generation loop.
@@ -31,11 +31,13 @@ class MonologueManager:
             monologue_queue: QueueManager to send speech text to
             banned_words_checker: callable(text) -> bool to check banned words
             starters: list of strings to start monologues with
+            memory_manager: MemoryManager for logging monologue responses
         """
         self.prompt_manager = prompt_manager
-        
+
         self.response_generator = response_generator
         self.config = ConfigManager()
+        self.memory_manager = memory_manager
 
         self.monologue_running = True
 
@@ -110,7 +112,15 @@ class MonologueManager:
                 
                 logger.debug(f"[run] Queue size: {self.monologue_queue.qsize()}, monologue_running={self.monologue_running}")
                 starter_prompt = self._choose_starter_prompt()
-                prompt = self.prompt_manager.build_prompt(base_prompt=starter_prompt)
+
+                memory_context = ""
+                if self.memory_manager:
+                    memory_context = self.memory_manager.get_memory_context()
+
+                prompt = self.prompt_manager.build_prompt(
+                    base_prompt=starter_prompt,
+                    memory_context=memory_context
+                )
 
                 response = await self._generate_response_with_retries(prompt)
 
@@ -139,7 +149,6 @@ class MonologueManager:
 
     async def _generate_response_with_retries(self, prompt):
         try:
-            # Use await when calling an async method
             response = await self.response_generator.generate_response_safely(prompt)
             return response
         except Exception as e:
@@ -200,6 +209,10 @@ class MonologueManager:
         await self.monologue_queue.put({"type": "monologue", "text": response})
         logger.debug(
             f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
+
+        if self.memory_manager:
+            self.memory_manager.add_chat_message("assistant", response, user_id=None, metadata={"type": "monologue"})
+
         logger.info("[run] Response queued to speech queue")
 
     async def _wait_between_monologues(self, delay: int = 5):

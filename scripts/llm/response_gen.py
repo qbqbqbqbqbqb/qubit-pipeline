@@ -109,18 +109,23 @@ class ResponseGen:
             add_generation_prompt=True
         )
         
-    async def generate_response(self, 
-                                prompt: str, 
+    async def generate_response(self,
+                                prompt,
                                 max_new_tokens: int = 30
                                 ) -> str:
         """
         Orchestrates the generation of a cleaned and constrained model response.
         """
         try:
-            #logger.info(f"[generate_response] Prompt received: {prompt[:60]}...")
-            
-            full_prompt = await self.apply_chat_template(chat=prompt)
-            
+            #logger.info(f"[generate_response] Prompt received: {str(prompt)[:60]}...")
+
+            if isinstance(prompt, str):
+                chat_messages = [{"role": "user", "content": prompt}]
+            else:
+                chat_messages = prompt
+
+            full_prompt = await self.apply_chat_template(chat=chat_messages)
+
             raw_output = await self.generate_text(full_prompt, max_new_tokens)
             final_response = await self.clean_response(raw_output)
 

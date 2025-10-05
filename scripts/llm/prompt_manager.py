@@ -46,24 +46,28 @@ class PromptManager:
                     mood: str = "laid-back",
                     interaction_level: str = "high",
                     tone: str = "casual, funny, and edgy",
+                    memory_context: str = "",
+                    user_id: str = None
     ) -> List[dict]:
         """
-        Builds a full prompt for generating streamer-style responses using a base prompt,
-        a prompt template, and recent chat history.
+        Builds a chat-style prompt using Llama-3-Instruct format for Sao10K model.
+        Includes memory context for personalized responses.
 
         Args:
             base_prompt (str): The main idea to talk about.
             mood (str): Mood descriptor for the model's voice.
             interaction_level (str): Level of interaction with the audience.
             tone (str): Style or personality tone for the generation.
+            memory_context (str): Additional context from memory system.
+            user_id (str): User ID for personalized context.
 
         Returns:
             List[dict]: Chat messages in Llama-3-Instruct format.
         """
 
         chat_messages = []
-        for role, content in self.chat_history[-self.max_history:]:  
-                chat_messages.append({"role": role, "content": content})
+        for role, content in self.chat_history[-self.max_history:]:
+            chat_messages.append({"role": role, "content": content})
 
         interaction_instruction = {
             "low": "Focus mostly on monologue style, little audience interaction.",
@@ -78,9 +82,21 @@ class PromptManager:
             interaction_instruction=interaction_instruction
         )
 
+        if memory_context:
+            system_prompt += f"\n\nMemory Context:\n{memory_context}"
+
         chat_messages.insert(0, {"role": "system", "content": system_prompt})
 
-        current_prompt = f"Now talk about: {base_prompt}"
+        history_text = ""
+        if self.chat_history:
+            history_text = "\n".join(f"{role}: {content}" for role, content in self.chat_history[-3:])
+            history_text = f"\nRecent chat history:\n{history_text}\n"
+
+        current_prompt = f"{history_text}Now talk about: {base_prompt}"
+
+        if user_id:
+            current_prompt += f"\n\nResponding to user: {user_id}"
+
         chat_messages.append({"role": "user", "content": current_prompt})
 
         return chat_messages

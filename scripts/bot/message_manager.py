@@ -6,15 +6,19 @@ from scripts.utils.log_utils import get_logger
 logger = get_logger("MessageManager")
 
 class MessageManager:
-    def __init__(self, 
-                 prompt_manager, 
-                 queue_manager, 
-                 banned_words, 
-                 response_generator):
+    def __init__(self,
+                 prompt_manager,
+                 queue_manager,
+                 banned_words,
+                 response_generator,
+                 memory_manager=None,
+                 bot=None):
         self.prompt_manager = prompt_manager
         self.queue_manager = queue_manager
         self.banned_words = banned_words
         self.response_generator = response_generator
+        self.memory_manager = memory_manager
+        self.bot = bot
 
     async def process_message(self, message_data):
         """
@@ -37,6 +41,9 @@ class MessageManager:
             return
 
         try:
+            if self.memory_manager:
+                self.memory_manager.update_user_profile(author, username=author)
+
             if contains_banned_words(author.lower(), banned_words=self.banned_words):
                 message_author = "Censored Name"
                 user_record = f"Censored Name: {content}"
@@ -46,7 +53,15 @@ class MessageManager:
                 user_record = f"{author}: {content}"
                 base_prompt = f"A user named {author} said: \"{content}\". Respond to this Twitch chat message."
 
-            prompt = self.prompt_manager.build_prompt(base_prompt=base_prompt)
+            memory_context = ""
+            if self.memory_manager:
+                memory_context = self.memory_manager.get_memory_context(user_id=author, current_topic=content)
+
+            prompt = self.prompt_manager.build_prompt(
+                base_prompt=base_prompt,
+                memory_context=memory_context,
+                user_id=author
+            )
 
             loop = asyncio.get_running_loop()
             response = await self.response_generator.generate_response_safely(prompt)
@@ -70,6 +85,11 @@ class MessageManager:
 
             self.prompt_manager.add_user(user_record)
             self.prompt_manager.add_bot(response)
+
+            # Add to persistent memory
+            if self.memory_manager:
+                self.memory_manager.add_chat_message("user", content, author)
+                self.memory_manager.add_chat_message("assistant", response, self.bot.nick if self.bot else None)
             
         except Exception as e:
             logger.error(f"Error processing message: {e}")
