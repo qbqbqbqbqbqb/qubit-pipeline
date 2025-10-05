@@ -176,7 +176,7 @@ def get_speaker_id(model_path: Path, speaker_name: str) -> int:
     Retrieves the speaker ID for the given speaker name from the model's JSON configuration.
     """
     json_path = model_path.with_suffix(".onnx.json")
-    with open(json_path, "r") as f:
+    with open(json_path, "r", encoding="utf-8") as f:
         config = json.load(f)
     return config["speaker_id_map"][speaker_name]
 

@@ -1,8 +1,6 @@
 import asyncio
-import re
-from typing import Optional
-import torch
 
+from typing import Optional
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -11,57 +9,75 @@ logger = get_logger("ResponseGen")
 from model_manager import ModelManager
 from text_processor import TextProcessor
 
-import os
-os.environ["VLLM_LOGGING_LEVEL"] = "DEBUG"
-
-from vllm import SamplingParams, LLM
-
 class ResponseGen:
     def __init__(self, model_manager: Optional[ModelManager] = None):
         self.model_manager = model_manager or ModelManager.get_instance()
         self.text_processor = TextProcessor()
 
-    def get_sampling_params(self, max_tokens: int) -> SamplingParams:
+    def get_generation_config(self, max_tokens: int):
         """
-        Configures and returns sampling parameters for generation.
+        Returns generation configuration parameters.
         """
-        return SamplingParams(
-            temperature=1.1,
-            top_p=0.9,
-            top_k=80,
-            max_tokens=max_tokens,
-            repetition_penalty=1.2,
-        )
+        return {
+            'temperature': 1.17,  
+            'top_p': 0.9, 
+            'top_k': 50,
+            'max_new_tokens': max_tokens,
+            'repetition_penalty': 1.1,
+            'do_sample': True,
+            'pad_token_id': self.model_manager.tokenizer.eos_token_id,
+            'eos_token_id': [
+                self.model_manager.tokenizer.eos_token_id,
+                self.model_manager.tokenizer.convert_tokens_to_ids("<|eot_id|>"),
+                self.model_manager.tokenizer.convert_tokens_to_ids("<|end_of_text|>")
+            ] if "<|eot_id|>" in self.model_manager.tokenizer.get_vocab() else self.model_manager.tokenizer.eos_token_id
+        }
 
-    async def generate_text(self, 
-                            prompt: str, 
+    async def generate_text(self,
+                            prompt: str,
                             max_tokens: int,
                             timeout: float = 60.0
                             ) -> str:
         """
-        Performs the text generation call using the LLM.
+        Performs the text generation call using transformers.
         """
         try:
             logger.debug("[generate_text] Starting generation...")
-            loop = asyncio.get_running_loop()
-            async def gen():
-                inputs = {"prompt": prompt, "multi_modal_data": {}}
-                sampling_params = self.get_sampling_params(max_tokens)
-                outputs = await loop.run_in_executor(
-                    None,
-                    self.model_manager.llm.generate,
-                    inputs,
-                    sampling_params
-                )
-                logger.debug("[generate_text] samplings params done...")
-                return outputs[0].outputs[0].text.strip()
 
-            text = await asyncio.wait_for(gen(), timeout)
-            logger.debug(f"[generate_text] Raw output: {text[:60]}...")
-            return text
+            inputs = self.model_manager.tokenizer(
+                prompt,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=2048
+            ).to(self.model_manager.model.device)
+
+            loop = asyncio.get_running_loop()
+            gen_config = self.get_generation_config(max_tokens)
+
+            outputs = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: self.model_manager.model.generate(
+                        **inputs,
+                        **gen_config
+                    )
+                ),
+                timeout
+            )
+
+            generated_text = self.model_manager.tokenizer.decode(
+                outputs[0][inputs['input_ids'].shape[1]:],
+                skip_special_tokens=True
+            ).strip()
+
+            logger.debug("[generate_text] Generation completed...")
+            logger.debug(f"[generate_text] Raw output: {generated_text[:60]}...")
+            return generated_text
+
         except asyncio.TimeoutError:
             logger.warning(f"Text gen timed out after {timeout}")
-            return "Timed otu"
+            return "Timed out"
         except Exception as e:
             logger.warning(f"Failed generating text. {e}")
             return "Something went wrong!"
@@ -81,13 +97,17 @@ class ResponseGen:
             max_chars=max_chars)
         return cleaned if cleaned.strip() else fallback
 
-    async def apply_chat_template(self, 
-                                  chat: dict,
-                                  ) -> dict:
+    async def apply_chat_template(self,
+                                  chat: list,
+                                  ) -> str:
         """
-        Applies the Gemma 3 chat template to the provided chat dictionary.
+        Applies the Gemma 3 chat template to the provided chat messages.
         """
-        return self.model_manager.processor.apply_chat_template(chat, add_generation_prompt=True)
+        return self.model_manager.tokenizer.apply_chat_template(
+            chat,
+            tokenize=False,
+            add_generation_prompt=True
+        )
         
     async def generate_response(self, 
                                 prompt: str, 
@@ -118,7 +138,6 @@ class ResponseGen:
         timeout: float = 15.0
     ) -> str:
         try:
-            # Directly await the generate_response method
             output = await self.generate_response(prompt, max_new_tokens)
             return output
         
