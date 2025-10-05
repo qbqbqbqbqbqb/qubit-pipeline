@@ -3,10 +3,14 @@ import os
 import hashlib
 import asyncio
 import re
+import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import numpy as np
+
+import chromadb
+from chromadb.config import Settings
 
 from scripts.utils.log_utils import get_logger
 
@@ -101,6 +105,23 @@ class MemoryManager:
         self.memories_dir = self.base_path / "memories"
         self.memories_dir.mkdir(exist_ok=True)
         self.response_generator = response_generator
+
+        self.chroma_client = chromadb.PersistentClient(
+            path=str(self.base_path / "memories" / "chroma.db"),
+            settings=Settings(
+                anonymized_telemetry=False,
+                chroma_server_host=None,
+                chroma_server_http_port=None
+            )
+        )
+        self.collection = self.chroma_client.get_or_create_collection(
+            name="reflections_collection",
+            metadata={"hnsw:space": "cosine"}
+        )
+
+
+        logger.info(f"ChromaDB initialized with {self.collection.count()} reflection memories")
+
 
         self.memories: Dict[str, Memory] = {}
         self.user_profiles: Dict[str, Dict] = {}
@@ -441,12 +462,18 @@ A3: [Answer]
 
             for i, (question, answer) in enumerate(qa_pairs, 1):
                 qa_memory = f"Q: {question}\nA: {answer}"
-                self.store_memory(
-                    content=qa_memory,
-                    memory_type="semantic",
-                    importance=2.5,
-                    tags=["reflection", "qa", f"reflection_{i}"],
-                    metadata={"type": "short-term", "reflection_batch": self.message_counter}
+                reflection_id = str(uuid.uuid4())
+
+                self.collection.upsert(
+                    ids=[reflection_id],
+                    documents=[qa_memory],
+                    metadatas=[{
+                        "type": "short-term",
+                        "reflection_batch": self.message_counter,
+                        "question": question,
+                        "answer": answer,
+                        "created_at": datetime.now().isoformat()
+                    }]
                 )
                 logger.info(f"Stored reflection memory Q{i}: {question[:50]}...")
 
@@ -578,11 +605,23 @@ A3: [Answer]
         """Generate memory context for prompts (enhanced version)."""
         context_parts = []
 
+        if current_topic:
+            try:
+                reflection_results = self.collection.query(
+                    query_texts=[current_topic],
+                    n_results=2
+                )
+                if reflection_results["documents"]:
+                    reflections = reflection_results["documents"][0]
+                    context_parts.append(f"Key insights: {'; '.join(reflections)}")
+            except Exception as e:
+                logger.debug(f"Error querying ChromaDB reflections: {e}")
+
         if user_id:
             user_memories = self.retrieve_memories(
                 user_id=user_id,
                 memory_type="episodic",
-                limit=3
+                limit=2
             )
             if user_memories:
                 memory_texts = [m.content for m in user_memories]
@@ -591,20 +630,20 @@ A3: [Answer]
         if current_topic:
             topic_memories = self.retrieve_memories(
                 query=current_topic,
-                limit=2,
+                limit=1,
                 min_relevance=0.1
             )
             if topic_memories:
                 memory_texts = [m.content for m in topic_memories]
-                context_parts.append(f"Relevant context: {'; '.join(memory_texts)}")
+                context_parts.append(f"Related memories: {'; '.join(memory_texts)}")
 
         recent_memories = self.retrieve_memories(
             memory_type="episodic",
-            limit=2
+            limit=1
         )
         if recent_memories:
             memory_texts = [m.content for m in recent_memories]
-            context_parts.append(f"Recent activity: {'; '.join(memory_texts)}")
+            context_parts.append(f"Recent context: {'; '.join(memory_texts)}")
 
         return "\n".join(context_parts) if context_parts else ""
 
