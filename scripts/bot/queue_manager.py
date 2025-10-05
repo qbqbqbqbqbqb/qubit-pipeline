@@ -5,10 +5,26 @@ from scripts.utils.log_utils import get_logger
 logger = get_logger("QueueManager")
 
 class Queue:
+    """
+    Enhanced asyncio.Queue with pause/resume functionality and capacity management.
+
+    This queue supports:
+    - Pausing/resuming operations to control flow
+    - Capacity limits with automatic oldest-item removal
+    - Async-safe operations for concurrent access
+    """
+
     def __init__(self,
                  maxsize: int = 0,
                  cap: Optional[int] = None,
                  ):
+        """
+        Initialize the enhanced queue.
+
+        Args:
+            maxsize: Maximum queue size (0 = unlimited)
+            cap: Capacity limit - when exceeded, oldest items are automatically removed
+        """
         self._queue = asyncio.Queue(maxsize=maxsize)
         self._paused = asyncio.Event()
         self._paused.set()
@@ -65,7 +81,19 @@ class Queue:
 
 MAX_CONSECUTIVE_MONOLOGUES = 3 
 
-class QueueManager():
+class QueueManager:
+    """
+    Manages multiple async queues for the VTuber bot's message processing pipeline.
+
+    Coordinates three main queues:
+    - message_queue: User chat messages waiting for AI processing
+    - monologue_queue: AI-generated monologue text waiting for speech synthesis
+    - speech_queue: Final speech items ready for TTS output
+
+    Handles queue merging logic to prioritize user messages over monologues
+    and prevent monologue spam during active conversations.
+    """
+
     def __init__(self):
         self.message_queue = Queue()
         self.monologue_queue = Queue()
@@ -74,7 +102,7 @@ class QueueManager():
         self._consecutive_monologues = 0
 
         self._chat_arrived = asyncio.Event()
-        self._chat_arrived.clear() 
+        self._chat_arrived.clear()
     
     async def enqueue_chat(self, item: dict) -> None:
         await self.message_queue.put(item)
@@ -138,8 +166,8 @@ class QueueManager():
     
     async def clear_all(self):
         cleared_unprocessed_messages = self.clear_queues(self.unprocessed_message_queue)
-        logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from scriptsssage queue.")
+        logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from unprocessed message queue.")
         cleared_messages = self.clear_queues(self.message_queue)
-        logger.info(f"[Stop] Cleared {cleared_messages} items from scriptsssage queue.")
+        logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
         cleared_speech = self.clear_queues(self.speech_queue)
-        logger.info(f"[Stop] Cleared {cleared_speech} items from scriptsssage queue.")
+        logger.info(f"[Stop] Cleared {cleared_speech} items from speech queue.")

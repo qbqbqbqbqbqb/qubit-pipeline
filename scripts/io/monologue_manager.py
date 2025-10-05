@@ -17,22 +17,38 @@ logger = get_logger("MonologueManager")
 
 
 class MonologueManager:
+    """
+    Manages AI monologue generation for VTuber stream conversations.
+
+    This class continuously generates contextual monologue responses based on
+    conversation starters and current memory context. It handles the full
+    monologue pipeline: prompt generation, AI response creation, content
+    validation, and speech queue management.
+
+    Key Features:
+    - Continuous monologue generation with configurable delays
+    - Content validation against banned words and quality filters
+    - Memory integration for contextual responses
+    - Queue management with monologue limits
+    - Automatic ChromaDB storage of generated monologues
+    """
+
     def __init__(self,
                  prompt_manager,
                  monologue_queue: Queue,
                  response_generator: ResponseGen,
-                 starters_file: Path =None,
+                 starters_file: Path = None,
                  memory_manager=None,
                  ):
         """
-        Handles the monologue generation loop.
+        Initialize the monologue manager with required components.
 
         Args:
-            prompt_manager: object with method build_prompt(base_prompt)
-            monologue_queue: QueueManager to send speech text to
-            banned_words_checker: callable(text) -> bool to check banned words
-            starters: list of strings to start monologues with
-            memory_manager: MemoryManager for logging monologue responses
+            prompt_manager: Prompt manager with build_prompt() method for context generation
+            monologue_queue: Queue for sending generated speech text to TTS system
+            response_generator: AI response generator for monologue creation
+            starters_file: Path to file containing monologue starter phrases (optional)
+            memory_manager: MemoryManager for context and conversation logging
         """
         self.prompt_manager = prompt_manager
 
@@ -142,13 +158,28 @@ class MonologueManager:
 
     def _choose_starter_prompt(self) -> str:
         """
-        Selects and returns a random starter prompt from scriptse available starters.
-        """        
+        Selects and returns a random starter prompt from available monologue starters.
+
+        Uses the configured starters file or falls back to default prompts.
+        Logged for debugging monologue generation flow.
+        """
         choice = random.choice(self.starters)
         logger.info(f"[_choose_starter_prompt] Selected starter prompt: {choice}")
         return choice
 
-    async def _generate_response_with_retries(self, prompt):
+    async def _generate_response_with_retries(self, prompt) -> str:
+        """
+        Generate AI response with error handling and retries.
+
+        Attempts to generate a monologue response using the AI response generator.
+        Falls back to a generic error message if generation fails.
+
+        Args:
+            prompt: The formatted prompt for monologue generation
+
+        Returns:
+            Generated monologue text or fallback error message
+        """
         try:
             response = await self.response_generator.generate_response_safely(prompt)
             return response
@@ -178,7 +209,14 @@ class MonologueManager:
 
     async def _queue_response(self, response: str):
         """
-        Adds the given response to the queue.
+        Queue the generated monologue for speech synthesis and memory storage.
+
+        Manages monologue queue limits, sends response to TTS system,
+        and logs the monologue to ChromaDB conversation collection
+        for memory and retrieval purposes.
+
+        Args:
+            response: The generated monologue text to queue
         """
         temp_items = []
         monologue_count = 0

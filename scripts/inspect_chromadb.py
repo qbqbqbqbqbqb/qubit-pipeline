@@ -11,7 +11,13 @@ import chromadb
 from chromadb.config import Settings
 
 def inspect_chromadb():
-    """Inspect all ChromaDB collections and their contents."""
+    """
+    Inspect and display contents of all ChromaDB collections.
+
+    Connects to the bot's ChromaDB instance and prints detailed information
+    about each collection including item counts, content previews, and metadata.
+    Useful for debugging memory storage and verifying data persistence.
+    """
 
     base_path = Path(__file__).parent.parent
     chroma_client = chromadb.PersistentClient(

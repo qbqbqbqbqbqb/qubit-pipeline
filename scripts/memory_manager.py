@@ -18,7 +18,29 @@ from scripts.utils.log_utils import get_logger
 logger = get_logger("MemoryManager")
 
 class Memory:
-    """Individual memory unit with metadata."""
+    """
+    Represents an individual memory unit with rich metadata.
+
+    This class encapsulates semantic memories that persist in JSON format.
+    Each memory has content, type, user association, importance scoring,
+    tags, and various metadata for retrieval and decay calculations.
+
+    Attributes:
+        id (str): Unique 8-character hash identifier
+        content (str): The actual memory content/text
+        memory_type (str): Type of memory ('semantic', 'procedural', etc.)
+        user_id (str): Associated user ID, if any
+        importance (float): Importance score (0.0-1.0, higher = more important)
+        tags (List[str]): List of tag strings for categorization
+        metadata (Dict): Additional metadata dictionary
+        created_at (datetime): When memory was created
+        last_accessed (datetime): When memory was last retrieved
+        access_count (int): Number of times memory has been accessed
+        relevance_score (float): Computed relevance score for queries
+        emotional_valence (float): Emotional sentiment score
+        confidence (float): Confidence in memory accuracy
+        related_memories (List[str]): IDs of related memories
+    """
 
     def __init__(self, content: str, memory_type: str = "episodic",
                  user_id: str = None, importance: float = 1.0,
@@ -97,8 +119,21 @@ class Memory:
 
 class MemoryManager:
     """
-    Advanced memory system for VTuber AI bot.
-    Features episodic, semantic, and procedural memory with intelligent retrieval.
+    Simplified memory management system for VTuber AI bot.
+
+    This system maintains two types of storage:
+    - ChromaDB: Fast, vector-based storage for conversations (with 1-minute decay)
+      and AI-generated reflections (persistent)
+    - JSON files: Structured storage for semantic memories and user profiles
+
+    Key Components:
+    - conversation_collection: Chat messages and monologues (1-minute decay)
+    - reflections_collection: AI insights and learned patterns (persistent)
+    - user_profiles.json: User interaction data and personality tracking
+    - semantic memories: Long-term knowledge stored as JSON files
+
+    The system automatically cleans up old conversations while preserving
+    valuable semantic knowledge and user relationship data.
     """
 
     def __init__(self, base_path: str = ".", response_generator=None):

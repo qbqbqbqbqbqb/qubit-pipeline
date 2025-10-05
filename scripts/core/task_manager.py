@@ -4,6 +4,13 @@ from scripts.utils.log_utils import get_logger
 logger = get_logger("TaskManager")
 
 class TaskManager:
+    """
+    Manages async task lifecycle for the VTuber bot.
+
+    Provides centralized task creation, tracking, and cancellation
+    to ensure clean shutdown of all background operations.
+    """
+
     def __init__(self):
         self.tasks = []
 

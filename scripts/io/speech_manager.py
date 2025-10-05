@@ -6,6 +6,14 @@ from scripts.utils.log_utils import get_logger
 logger = get_logger("SpeechManager")
 
 class SpeechManager:
+    """
+    Manages text-to-speech conversion and audio playback for the VTuber bot.
+
+    Processes queued speech items, performs content filtering for banned words,
+    and handles monologue pause/resume functionality. Integrates with TTS
+    system to convert text to spoken audio output.
+    """
+
     def __init__(self, speech_queue, banned_words):
         self.speech_queue = speech_queue
         self.banned_words = banned_words

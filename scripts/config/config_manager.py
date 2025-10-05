@@ -7,6 +7,14 @@ from scripts.utils.log_utils import get_logger
 logger = get_logger("ConfigManager")
 
 class ConfigManager:
+    """
+    Manages application configuration loading and path resolution.
+
+    Loads configuration from config.json and resolves file paths for
+    instructions, banned words, starters, and other configurable assets.
+    Provides centralized access to configuration values throughout the application.
+    """
+
     def __init__(self):
         root = get_root()
         cfg = load_config(root, "config.json")

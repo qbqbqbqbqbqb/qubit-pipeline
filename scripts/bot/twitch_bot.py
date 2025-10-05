@@ -41,9 +41,19 @@ async def dump_queue_sizes(bot):
 
 class Bot(commands.Bot):
     """
-    Asynchronous bot that generates speech monologues and listens for input concurrently.
-    Also responds to twitch chat messages.
-    Manages startup, shutdown, and control of background tasks.
+    VTuber AI Twitch bot with real-time conversation and monologue generation.
+
+    This bot connects to Twitch chat and performs several key functions:
+    - Generates AI-powered monologue speech based on conversation starters
+    - Responds to user chat messages with contextual AI replies
+    - Manages memory of conversations with automatic cleanup (1-minute decay)
+    - Handles TTS (Text-to-Speech) for voice output
+    - Processes commands from streamers/moderators
+    - Maintains persistent user profiles and semantic memory
+
+    The bot uses ChromaDB for fast conversation storage and JSON files for
+    long-term user data and semantic knowledge. All conversations automatically
+    expire after 1 minute to prevent memory bloat during long streams.
     """
     def __init__(self):
         super().__init__(
@@ -197,7 +207,11 @@ class Bot(commands.Bot):
     # === Message Functionality ===
     async def process_messages(self) -> None:
         """
-        Continuously processes messages from scriptse message queue by generating TTS responses.
+        Continuously processes incoming chat messages from the message queue.
+
+        This background task runs indefinitely, pulling messages from the
+        unprocessed_message_queue and passing them to the message_manager
+        for AI response generation and TTS processing.
         """
         try:
             while True:
@@ -236,7 +250,14 @@ class Bot(commands.Bot):
         await message.channel.send("Monologue paused.")
         logger.info("[Monologue] Paused.")
     async def memory_cleanup_task(self):
-        """Periodically clean up old memories."""
+        """
+        Background task that periodically cleans up old memories and decayed conversations.
+
+        Runs every 60 seconds to:
+        - Remove old semantic memories from JSON files
+        - Clean up conversations older than 1 minute from ChromaDB
+        - Maintain memory system health during long streams
+        """
         while not self.shutdown_event.is_set():
             try:
                 self.memory_manager.cleanup_old_memories()

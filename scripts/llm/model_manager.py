@@ -19,6 +19,15 @@ logger = get_logger("ModelManager")
 MODEL_NAME = "Sao10K/L3-8B-Stheno-v3.2"
 
 class ModelManager:
+    """
+    Singleton manager for the AI language model and tokenizer.
+
+    Handles loading and caching of the Sao10K/L3-8B-Stheno-v3.2 model
+    with 4-bit quantization for memory efficiency. Uses singleton pattern
+    to ensure only one instance exists across the application.
+
+    Provides access to both the model and tokenizer for text generation tasks.
+    """
     __instance = None
     def __new__(cls):
         if cls.__instance is None:

@@ -1,6 +1,17 @@
 from typing import List, Tuple, Optional
 
 class PromptManager:
+    """
+    Manages prompt construction and chat history for AI conversations.
+
+    Builds structured prompts for the Llama model using conversation history,
+    system instructions, and memory context. Handles chat history management
+    with automatic trimming to prevent memory overflow.
+
+    Supports customizable mood, tone, and interaction levels for dynamic
+    personality adaptation.
+    """
+
     def __init__(
         self,
         system_instructions: Optional[str] = None,
