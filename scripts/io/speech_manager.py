@@ -48,6 +48,8 @@ class SpeechManager:
                         logger.debug("[SpeechManager] Monologue paused, skipping speech.")
                         continue
                     logger.info(f"[SpeechManager] Speaking monologue: {text}")
+                elif item_type in ["follow_response", "sub_response", "raid_response"]:
+                    logger.info(f"[SpeechManager] Speaking event response ({item_type}): {text}")
                 else:
                     logger.info(f"[SpeechManager] Speaking ({item_type}): {text}")
 

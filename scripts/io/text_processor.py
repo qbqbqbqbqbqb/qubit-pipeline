@@ -16,7 +16,7 @@ class TextProcessor:
         sentences = sent_tokenize(text)
         if not sentences:
             return ""
-        if not text.endswith(('.', '!', '?')):
+        if not text.endswith(('.', '!', '?', '...')):
             sentences = sentences[:-1]
         return ' '.join(sentences).strip()
 

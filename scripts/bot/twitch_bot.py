@@ -1,11 +1,11 @@
 
 
 from typing import Any
-from twitchio.ext import commands
-print(f"[DEBUG] Using base class: {commands.Bot}")
 import asyncio
 from queue import Empty
+from datetime import datetime
 
+from scripts.bot.twitch_client import TwitchClient
 from scripts.io.tts_utils import speak_from_prompt
 from scripts.llm.prompt_manager import PromptManager
 from scripts.io.monologue_manager import MonologueManager
@@ -23,7 +23,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 
 # === Setup colorlog logger ===
@@ -39,11 +38,11 @@ async def dump_queue_sizes(bot):
         )
         await asyncio.sleep(2)
 
-class Bot(commands.Bot):
+class Bot:
     """
     VTuber AI Twitch bot with real-time conversation and monologue generation.
 
-    This bot connects to Twitch chat and performs several key functions:
+    This bot connects to Twitch chat using direct API calls and performs several key functions:
     - Generates AI-powered monologue speech based on conversation starters
     - Responds to user chat messages with contextual AI replies
     - Manages memory of conversations with automatic cleanup (1-minute decay)
@@ -55,26 +54,21 @@ class Bot(commands.Bot):
     long-term user data and semantic knowledge. All conversations automatically
     expire after 1 minute to prevent memory bloat during long streams.
     """
-    def __init__(self):
-        super().__init__(
-            token=TWITCH_OAUTH_TOKEN,
-            prefix="!",
-            initial_channels=[TWITCH_CHANNEL]
-        )
 
+    def __init__(self):
         self.shutdown_event = asyncio.Event()
         self.startup_done = False
         self.monologue_running = True
 
         self.unprocessed_message_queue = Queue(maxsize=50)
-        self.queue_manager = QueueManager()
+        self.queue_manager = QueueManager(unprocessed_message_queue=self.unprocessed_message_queue)
 
         self.config = ConfigManager()
         self.task_manager = TaskManager()
-        
+
         self.prompt_manager = PromptManager(
-            system_instructions = self.config.instructions,
-            max_history = self.config.max_chat_history
+            system_instructions=self.config.instructions,
+            max_history=self.config.max_chat_history
         )
 
         self.speech_manager = SpeechManager(
@@ -99,11 +93,17 @@ class Bot(commands.Bot):
             memory_manager=self.memory_manager
         )
 
+        self.twitch_client = TwitchClient(
+            config=self.config,
+            message_handler=self._handle_chat_message,
+            event_handler=self._handle_event
+        )
+
         self.event_manager = EventManager(
             bot=self,
             response_generator=self.response_generator
-            )
-        
+        )
+
         self.message_manager = MessageManager(
             prompt_manager=self.prompt_manager,
             queue_manager=self.queue_manager,
@@ -114,12 +114,19 @@ class Bot(commands.Bot):
         )
 
         self.shutting_down = False
+        self.nick = os.getenv("TWITCH_BOT_NAME", "qubit_tan") 
 
     # === Bot Controls ===
-    async def event_ready(self):
+    async def start(self):
         """
-        Called when the bot connects to Twitch and is ready.
+        Start the bot by connecting to Twitch and launching background tasks.
         """
+        logger.info("[Bot] Starting VTuber AI Twitch bot...")
+
+        if not await self.twitch_client.connect():
+            logger.error("[Bot] Failed to connect to Twitch. Exiting.")
+            return
+
         await self.event_manager.on_ready()
         self.startup_done = True
         await self.background_tasks()
@@ -139,6 +146,64 @@ class Bot(commands.Bot):
         await self.shutdown_event.wait()
 
         await self._perform_graceful_shutdown()
+
+    # === Message and Event Handlers ===
+    async def _handle_chat_message(self, author: str, content: str, timestamp: datetime):
+        """
+        Handle incoming chat messages from the Twitch client.
+        """
+        try:
+            class MockMessage:
+                def __init__(self, author_name, content_text, msg_timestamp):
+                    self.author = type('Author', (), {'name': author_name})()
+                    self.content = content_text
+                    self.timestamp = msg_timestamp
+                    self.echo = False
+
+            message = MockMessage(author, content, timestamp)
+
+            if self.event_manager.should_ignore_message(message):
+                return
+
+            logger.info(f"[event_message] Message from {author}: {content}")
+
+            if self.event_manager.is_streamer_or_bot(author):
+                if await self.event_manager.handle_command(content.lower(), message):
+                    return
+
+            await self.event_manager.queue_message(message)
+        except Exception as e:
+            logger.error(f"Error handling chat message from {author}: {e}")
+
+    async def _handle_event(self, event_data: dict):
+        """
+        Handle EventSub events from the Twitch client.
+        """
+        try:
+            event_type = event_data.get('type')
+            logger.info(f"[EventSub] Received event: {event_type}")
+
+            if event_type == 'subscription':
+                user = event_data.get('user', 'unknown')
+                plan = event_data.get('plan', 'unknown')
+                await self.event_manager.handle_subscription(user, plan)
+
+            elif event_type == 'raid':
+                raider = event_data.get('raider', 'unknown')
+                viewers = event_data.get('viewers', 0)
+                await self.event_manager.handle_raid(raider, viewers)
+        except Exception as e:
+            logger.error(f"Error handling event {event_data}: {e}")
+
+    # === Message sending ===
+    async def send_message(self, message: str):
+        """
+        Send a message to the Twitch channel.
+        """
+        try:
+            await self.twitch_client.send_message(message)
+        except Exception as e:
+            logger.error(f"Error sending message '{message}': {e}")
 
     async def _perform_graceful_shutdown(self) -> None:
         """
@@ -184,25 +249,26 @@ class Bot(commands.Bot):
 
         self.shutting_down = True
         self.monologue_running = False
+        self.monologue_manager.monologue_running = False
+
+        if self.monologue_manager.task:
+            self.monologue_manager.task.cancel()
 
         cleared = await self.queue_manager.clear_all()
 
-        self.speech_queue = Queue()
+        logger.info("[Stop] About to speak sign-off message")
 
+        end_txt = "Goodbye everyone! Thanks for watching. This is Qubit signing off!"
+        logger.info(f"[Stop] Sign-off message: {end_txt}")
         try:
-            ending_prompt = "This is the last thing you will say before the stream ends. Say a short, vtuber-esque sign-off to say goodbye to your audience."
-            logger.debug(f"[Stop] Ending prompt: {ending_prompt}")
-            
-            prompt = self.prompt_manager.build_prompt(base_prompt=ending_prompt)
-            end_txt = await self.response_generator.generate_response_safely(prompt)
-
-            logger.info(f"[Stop] Sign-off message: {end_txt}")
-            await speak_from_prompt(end_txt)
+            asyncio.create_task(speak_from_prompt(end_txt))
+            import time
+            time.sleep(0.1)
         except Exception as e:
             logger.error(f"[Stop] Error during shutdown message: {e}")
 
-        await self.task_manager.cancel_all()
-        self.shutdown_event.set()
+        import os
+        os._exit(0)
 
     # === Message Functionality ===
     async def process_messages(self) -> None:
@@ -215,40 +281,27 @@ class Bot(commands.Bot):
         """
         try:
             while True:
-                message_data = await self.unprocessed_message_queue.get()
-                await self.message_manager.process_message(message_data)
-                self.unprocessed_message_queue.task_done()
+                try:
+                    message_data = await self.unprocessed_message_queue.get()
+                    await self.message_manager.process_message(message_data)
+                    self.unprocessed_message_queue.task_done()
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}")
         except asyncio.CancelledError:
             logger.info("process_messages task cancelled")
             raise
 
-    async def event_message(self, message):
-        """
-        Called when any message is received in chat.
-        """
-        if self.event_manager.should_ignore_message(message):
-            return
-
-        author = message.author.name
-        content = message.content.strip()
-
-        logger.info(f"[event_message] Message from {author}: {content}")
-
-        if self.event_manager.is_streamer_or_bot(author):
-            if await self.event_manager.handle_command(content.lower(), message):
-                return
-
-        await self.event_manager.queue_message(message)
 
     # === Monologue Functionality ===
-    async def pause_monologue(self, message):
+    async def pause_monologue(self):
         """
         Pauses the monologue loop and clears pending speech items to stop ongoing speech.
         """
         await self.monologue_manager.pause()
         await self.speech_manager.pause()
-        await message.channel.send("Monologue paused.")
+        await self.send_message("Monologue paused.")
         logger.info("[Monologue] Paused.")
+
     async def memory_cleanup_task(self):
         """
         Background task that periodically cleans up old memories and decayed conversations.
@@ -266,11 +319,11 @@ class Bot(commands.Bot):
                 logger.error(f"Error during memory cleanup: {e}")
                 await asyncio.sleep(60)
 
-    async def resume_monologue(self, message):
+    async def resume_monologue(self):
         """
         Resumes the monologue loop.
         """
         await self.monologue_manager.resume()
         await self.speech_manager.resume()
-        await message.channel.send("Monologue resumed.")
+        await self.send_message("Monologue resumed.")
         logger.info("[Monologue] Resumed.")

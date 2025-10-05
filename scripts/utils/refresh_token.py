@@ -39,43 +39,90 @@ def update_env_var(key, value, env_path=".env"):
 
 async def refresh_twitch_token():
     """
-    Refreshes the Twitch OAuth token asynchronously using the refresh token, updates environment variables, and persists them in the .env file.
+    Refreshes the Twitch OAuth tokens asynchronously for both bot and streamer accounts,
+    updates environment variables, and persists them in the .env file.
     """
 
-    logger.info("Starting refresh_twitch_token()")
-    
+    logger.info("Starting refresh_twitch_token() for dual accounts")
+
     client_id = os.getenv("TWITCH_CLIENT_ID")
     client_secret = os.getenv("TWITCH_CLIENT_SECRET")
-    refresh_token = os.getenv("TWITCH_REFRESH_TOKEN")
 
-    if not client_id or not client_secret or not refresh_token:
-        raise ValueError("One or more required environment variables are missing or None")
+    if not client_id or not client_secret:
+        raise ValueError("TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET are required")
 
     token_url = "https://id.twitch.tv/oauth2/token"
-    params = {
-        "grant_type": "refresh_token",
-        "refresh_token": refresh_token,
-        "client_id": client_id,
-        "client_secret": client_secret,
-    }
 
-    async with aiohttp.ClientSession() as session:
-        async with session.post(token_url, params=params) as response:
-            logger.info(f"HTTP Status: {response.status}")
-            data = await response.json()
-            #logger.info(f"Twitch token response: {data}")
-            # this will show token in terminal if uncommented
-            if "access_token" in data:
-                logger.debug("[Token Refreshed]")
-                new_access_token = data["access_token"]
-                new_refresh_token = data.get("refresh_token", refresh_token)
+    bot_refresh_token = os.getenv("BOT_REFRESH_TOKEN")
+    if bot_refresh_token:
+        logger.info("[Token Refresh] Refreshing bot account tokens...")
+        try:
+            bot_params = {
+                "grant_type": "refresh_token",
+                "refresh_token": bot_refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
 
-                os.environ["TWITCH_OAUTH_TOKEN"] = new_access_token
-                os.environ["TWITCH_REFRESH_TOKEN"] = new_refresh_token
+            async with aiohttp.ClientSession() as session:
+                async with session.post(token_url, params=bot_params) as response:
+                    logger.info(f"[Bot Token] HTTP Status: {response.status}")
+                    data = await response.json()
 
-                update_env_var("TWITCH_OAUTH_TOKEN", new_access_token)
-                update_env_var("TWITCH_REFRESH_TOKEN", new_refresh_token)
+                    if "access_token" in data:
+                        logger.debug("[Bot Token] Refreshed successfully")
+                        new_access_token = data["access_token"]
+                        new_refresh_token = data.get("refresh_token", bot_refresh_token)
 
-            else:
-                logger.critical(f"[Token Refresh Failed] {data}")
-                raise Exception("Failed to refresh Twitch token")
+                        os.environ["BOT_OAUTH_TOKEN"] = new_access_token
+                        os.environ["BOT_REFRESH_TOKEN"] = new_refresh_token
+
+                        update_env_var("BOT_OAUTH_TOKEN", new_access_token)
+                        update_env_var("BOT_REFRESH_TOKEN", new_refresh_token)
+                        logger.info("[Bot Token] Tokens updated successfully")
+                    else:
+                        logger.error(f"[Bot Token] Refresh failed: {data}")
+        except Exception as e:
+            logger.error(f"[Bot Token] Error refreshing bot tokens: {e}")
+    else:
+        logger.warning("[Bot Token] No BOT_REFRESH_TOKEN found, skipping bot token refresh")
+
+    streamer_refresh_token = os.getenv("STREAMER_REFRESH_TOKEN")
+    if streamer_refresh_token:
+        logger.info("[Token Refresh] Refreshing streamer account tokens...")
+        try:
+            streamer_params = {
+                "grant_type": "refresh_token",
+                "refresh_token": streamer_refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(token_url, params=streamer_params) as response:
+                    logger.info(f"[Streamer Token] HTTP Status: {response.status}")
+                    data = await response.json()
+
+                    if "access_token" in data:
+                        logger.debug("[Streamer Token] Refreshed successfully")
+                        new_access_token = data["access_token"]
+                        new_refresh_token = data.get("refresh_token", streamer_refresh_token)
+
+                        os.environ["STREAMER_OAUTH_TOKEN"] = new_access_token
+                        os.environ["STREAMER_REFRESH_TOKEN"] = new_refresh_token
+
+                        update_env_var("STREAMER_OAUTH_TOKEN", new_access_token)
+                        update_env_var("STREAMER_REFRESH_TOKEN", new_refresh_token)
+                        logger.info("[Streamer Token] Tokens updated successfully")
+                    else:
+                        logger.error(f"[Streamer Token] Refresh failed: {data}")
+        except Exception as e:
+            logger.error(f"[Streamer Token] Error refreshing streamer tokens: {e}")
+    else:
+        logger.info("[Streamer Token] No STREAMER_REFRESH_TOKEN found, skipping streamer token refresh")
+
+    if not bot_refresh_token and not streamer_refresh_token:
+        logger.warning("[Token Refresh] No refresh tokens found for either account")
+        raise Exception("No refresh tokens available for token refresh")
+
+    logger.info("[Token Refresh] Dual-account token refresh completed")

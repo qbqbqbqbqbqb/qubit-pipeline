@@ -8,11 +8,11 @@ logger = get_logger("MainController")
 async def token_refresher_loop():
     while True:
         try:
-            logger.info("[Token Refresh] Refreshing Twitch token...")
+            logger.info("[Token Refresh] Refreshing Twitch tokens for both accounts...")
             await refresh_twitch_token()
-            logger.info("[Token Refresh] Refresh complete")
+            logger.info("[Token Refresh] Token refresh complete")
         except Exception as e:
-            logger.error(f"[Token Refresh] Failed to refresh token: {e}")
+            logger.error(f"[Token Refresh] Failed to refresh tokens: {e}")
 
         await asyncio.sleep(3600)
 
@@ -27,10 +27,10 @@ class Controller:
 
         bot = TwitchBot()
 
-        logger.info("[run] Refreshing token before bot start...")
+        logger.info("[run] Refreshing tokens for both accounts...")
         await refresh_twitch_token()
 
-        logger.info("[run] Starting Bot and Token Refresher...")
+        logger.info("[run] Starting Bot with dual-account token refresh...")
 
         try:
             await asyncio.gather(

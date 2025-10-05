@@ -1,7 +1,6 @@
 import asyncio
 import time
 import random
-from twitchio.ext import commands
 
 from scripts.bot.bot_utils import is_fallback_text
 from scripts.io.tts_utils import speak_from_prompt
@@ -20,7 +19,7 @@ load_dotenv()
 TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
 TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
 
-class EventManager(commands.Bot):
+class EventManager:
     """
     Manages Twitch chat events and bot lifecycle events such as ready, message handling, and command processing.
     Handles filtering of messages, queuing chat messages for TTS response, and managing bot control commands.
@@ -93,9 +92,12 @@ class EventManager(commands.Bot):
         if content.startswith("@"):
             return True
 
+        if content.startswith("!") and not self.is_streamer_or_bot(author):
+            return True
+
         min_length = 2
         word_count = len(content.strip().split())
-        if word_count < min_length:
+        if not content.startswith("!") and word_count < min_length:
             logger.info(f"[event_message] Ignored short message from {author}: {content}")
             return True
 
@@ -139,6 +141,65 @@ class EventManager(commands.Bot):
             handled = True
 
         return handled
+
+
+    async def handle_subscription(self, user: str, plan: str):
+        """
+        Handles subscription events from the Twitch client.
+        Generates an AI response to thank the subscriber.
+        """
+        try:
+            logger.info(f"[event_sub] New subscriber: {user} (plan: {plan})")
+
+            sub_prompt = f"A user named {user} just subscribed to the channel with plan {plan}! Write a short, excited thank you message welcoming them as a subscriber."
+
+            response = await self.response_generator.generate_response_safely([{"role": "user", "content": sub_prompt}])
+
+            if response and not is_fallback_text(response):
+                await self.bot.queue_manager.enqueue_chat({
+                    "type": "sub_response",
+                    "text": response
+                })
+
+                if self.bot.memory_manager:
+                    self.bot.memory_manager.add_chat_message("assistant", response, self.bot.twitch_client.channel_name,
+                                                           metadata={"type": "sub_response"})
+
+                logger.info(f"[event_sub] Queued subscription response for {user}")
+            else:
+                logger.warning(f"[event_sub] Failed to generate subscription response for {user}")
+
+        except Exception as e:
+            logger.error(f"[event_sub] Error handling subscription event: {e}")
+
+    async def handle_raid(self, raider: str, viewers: int):
+        """
+        Handles raid events from the Twitch client.
+        Generates an AI response to welcome the raiding channel.
+        """
+        try:
+            logger.info(f"[event_raid] Raid from {raider} with {viewers} viewers")
+
+            raid_prompt = f"Channel {raider} just raided with {viewers} viewers! Write a short, excited welcome message thanking them and greeting their viewers."
+
+            response = await self.response_generator.generate_response_safely([{"role": "user", "content": raid_prompt}])
+
+            if response and not is_fallback_text(response):
+                await self.bot.queue_manager.enqueue_chat({
+                    "type": "raid_response",
+                    "text": response
+                })
+
+                if self.bot.memory_manager:
+                    self.bot.memory_manager.add_chat_message("assistant", response, self.bot.twitch_client.channel_name,
+                                                           metadata={"type": "raid_response"})
+
+                logger.info(f"[event_raid] Queued raid response for {raider}")
+            else:
+                logger.warning(f"[event_raid] Failed to generate raid response for {raider}")
+
+        except Exception as e:
+            logger.error(f"[event_raid] Error handling raid event: {e}")
 
     async def queue_message(self, message):
         """

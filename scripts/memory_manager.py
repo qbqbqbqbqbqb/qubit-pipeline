@@ -473,12 +473,17 @@ A3: [Answer]
     # === REFLECTION SYSTEM (Generative Agents Technique) ===
     async def _perform_reflection(self) -> None:
         """Perform reflection on recent messages to generate Q&A memories."""
+        logger.info("[Reflection] Starting reflection process...")
+
         if not self.response_generator:
             logger.warning("No response generator available for reflection")
             return
 
         recent_messages = self.get_recent_chat_history(limit=self.reflection_threshold)
-        if len(recent_messages) < 10: 
+        logger.info(f"[Reflection] Retrieved {len(recent_messages)} recent messages for analysis")
+
+        if len(recent_messages) < 10:
+            logger.info(f"[Reflection] Skipping reflection - only {len(recent_messages)} messages (need at least 10)")
             return
 
         formatted_messages = []
@@ -503,6 +508,7 @@ A3: [Answer]
             logger.info(f"Generated reflection: {reflection_response[:100]}...")
 
             qa_pairs = self._parse_qa_pairs(reflection_response)
+            logger.info(f"[Reflection] Successfully parsed {len(qa_pairs)} Q&A pairs from reflection response")
 
             for i, (question, answer) in enumerate(qa_pairs, 1):
                 qa_memory = f"Q: {question}\nA: {answer}"
@@ -522,9 +528,10 @@ A3: [Answer]
                 logger.info(f"Stored reflection memory Q{i}: {question[:50]}...")
 
             self.message_counter = 0
+            logger.info(f"[Reflection] Reflection process completed successfully - stored {len(qa_pairs)} new memories")
 
         except Exception as e:
-            logger.error(f"Error during reflection: {e}")
+            logger.error(f"[Reflection] Error during reflection process: {e}")
 
     def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:
         """Parse Q&A pairs from LLM reflection response."""
@@ -604,6 +611,7 @@ A3: [Answer]
 
         self.message_counter += 1
         if self.message_counter >= self.reflection_threshold:
+            logger.info(f"[Reflection] Triggering reflection after {self.message_counter} messages (threshold: {self.reflection_threshold})")
             asyncio.create_task(self._perform_reflection())
 
     def get_recent_chat_history(self, limit: int = 20) -> List[Dict]:
@@ -673,6 +681,7 @@ A3: [Answer]
 
         self.message_counter += 1
         if self.message_counter >= self.reflection_threshold:
+            logger.info(f"[Reflection] Triggering reflection after {self.message_counter} messages (threshold: {self.reflection_threshold})")
             asyncio.create_task(self._perform_reflection())
 
     def get_memory_context(self, user_id: str = None, current_topic: str = None) -> str:
@@ -805,10 +814,5 @@ A3: [Answer]
         self.decay_old_memories()
         self.decay_chat_memories()
 
-        try:
-            episodic_count = self.episodic_collection.count()
-            logger.debug(f"Episodic collection now has {episodic_count} memories")
-        except Exception as e:
-            logger.debug(f"Could not get episodic collection count: {e}")
 
         logger.info("Memory cleanup completed")

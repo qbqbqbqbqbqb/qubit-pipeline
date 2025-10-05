@@ -94,10 +94,11 @@ class QueueManager:
     and prevent monologue spam during active conversations.
     """
 
-    def __init__(self):
+    def __init__(self, unprocessed_message_queue=None):
         self.message_queue = Queue()
         self.monologue_queue = Queue()
         self.speech_queue = Queue()
+        self.unprocessed_message_queue = unprocessed_message_queue
 
         self._consecutive_monologues = 0
 
@@ -159,15 +160,19 @@ class QueueManager:
     async def clear_queues(self, queue_placeholder: Any) -> int:
         cleared_items = 0
         while not queue_placeholder.empty():
-            queue_placeholder.get()
-            queue_placeholder.task_done()
-            cleared_items += 1
+            try:
+                queue_placeholder._queue.get_nowait()
+                queue_placeholder._queue.task_done()
+                cleared_items += 1
+            except asyncio.QueueEmpty:
+                break
         return cleared_items
     
     async def clear_all(self):
-        cleared_unprocessed_messages = self.clear_queues(self.unprocessed_message_queue)
-        logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from unprocessed message queue.")
-        cleared_messages = self.clear_queues(self.message_queue)
+        if self.unprocessed_message_queue is not None:
+            cleared_unprocessed_messages = await self.clear_queues(self.unprocessed_message_queue)
+            logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from unprocessed message queue.")
+        cleared_messages = await self.clear_queues(self.message_queue)
         logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
-        cleared_speech = self.clear_queues(self.speech_queue)
+        cleared_speech = await self.clear_queues(self.speech_queue)
         logger.info(f"[Stop] Cleared {cleared_speech} items from speech queue.")
