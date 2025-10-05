@@ -2,16 +2,16 @@ import random
 import asyncio
 from pathlib import Path
 
-from scripts.llm.response_gen import ResponseGen
+from response_gen import ResponseGen
 
-from scripts.bot.bot_utils import (
+from bot_utils import (
     is_fallback_text, contains_banned_words
 )
-from scripts.config.config_manager import ConfigManager
-from scripts.core.queue_manager import QueueManager
+from config_manager import ConfigManager
+from queue_manager import QueueManager
 
 # === Setup colorlog logger ===
-from scripts.io.log_utils import get_logger
+from log_utils import get_logger
 logger = get_logger("MonologueManager")
 
 #MAX_MONOLOGUES = 5

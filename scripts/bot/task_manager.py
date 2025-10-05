@@ -1,6 +1,6 @@
 import asyncio
 
-from scripts.io.log_utils import get_logger
+from log_utils import get_logger
 logger = get_logger("TaskManager")
 
 class TaskManager:

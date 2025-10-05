@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Optional
 
-from scripts.io.log_utils import get_logger
+from log_utils import get_logger
 logger = get_logger("QueueManager")
 
 class Queue:

@@ -5,11 +5,11 @@ import torch
 
 
 # === Setup colorlog logger ===
-from scripts.io.log_utils import get_logger
+from log_utils import get_logger
 logger = get_logger("ResponseGen")
 
-from scripts.llm.model_manager import ModelManager
-from scripts.llm.text_processor import TextProcessor
+from model_manager import ModelManager
+from text_processor import TextProcessor
 
 import os
 os.environ["VLLM_LOGGING_LEVEL"] = "DEBUG"

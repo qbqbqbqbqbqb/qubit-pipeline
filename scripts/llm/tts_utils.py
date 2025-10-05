@@ -5,7 +5,7 @@ import concurrent.futures
 import pyaudio
 import asyncio
 import numpy as np
-from scripts.io.obs_controller import update_obs_text, set_subtitle_position, update_subtitle_text_and_style
+from obs_controller import update_obs_text, set_subtitle_position, update_subtitle_text_and_style
 import wave
 from piper import PiperVoice, SynthesisConfig
 from pathlib import Path
@@ -21,14 +21,14 @@ TTS_SUBTITLE_NAME = os.getenv("TTS_SUBTITLE_NAME", "TTS_Subtitles")
 SCENE_NAME = os.getenv("SCENE_NAME")
 
 # === Setup colorlog logger ===
-from scripts.io.log_utils import get_logger
+from log_utils import get_logger
 logger = get_logger("TTS_Utils")
 
 # === Import TTS model ===
 p = inflect.engine()
 
 this_file = Path(__file__).resolve()
-project_root = this_file.parent.parent.parent
+project_root = this_file.parent.parent
 
 MODEL_PATH = project_root / "en_GB-vctk-medium.onnx"
 SPEAKER_NAME = "p236"

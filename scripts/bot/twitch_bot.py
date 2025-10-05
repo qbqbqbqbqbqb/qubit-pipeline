@@ -6,17 +6,17 @@ print(f"[DEBUG] Using base class: {commands.Bot}")
 import asyncio
 from queue import Empty
 
-from scripts.llm.tts_utils import speak_from_prompt
-from scripts.prompts.prompt_manager import PromptManager
-from scripts.bot.monologue_manager import MonologueManager
-from scripts.bot.event_manager import EventManager
-from scripts.config.config_manager import ConfigManager
-from scripts.bot.message_manager import MessageManager
-from scripts.bot.speech_manager import SpeechManager
-from scripts.bot.task_manager import TaskManager
-from scripts.llm.response_gen import ResponseGen
-from scripts.llm.model_manager import ModelManager
-from scripts.core.queue_manager import QueueManager
+from tts_utils import speak_from_prompt
+from prompt_manager import PromptManager
+from monologue_manager import MonologueManager
+from event_manager import EventManager
+from config_manager import ConfigManager
+from message_manager import MessageManager
+from speech_manager import SpeechManager
+from task_manager import TaskManager
+from response_gen import ResponseGen
+from model_manager import ModelManager
+from queue_manager import QueueManager
 
 # === Load environment variables ===
 import os
@@ -27,7 +27,7 @@ TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 
 # === Setup colorlog logger ===
-from scripts.io.log_utils import get_logger
+from log_utils import get_logger
 logger = get_logger("Bot")
 
 # Put this near the top of your file (after you create `logger`)
@@ -80,7 +80,7 @@ class Bot(commands.Bot):
 
         self.monologue_manager = MonologueManager(
             prompt_manager=self.prompt_manager,
-            queue_manager=self.queue_manager,
+            monologue_queue=self.queue_manager.monologue_queue,
             response_generator=self.response_generator,
             starters_file=self.config.starters_path
         )

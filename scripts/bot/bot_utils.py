@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 # === Setup colorlog logger ===
-from scripts.io.log_utils import get_logger
+from log_utils import get_logger
 logger = get_logger("Bot_Utils")
 
 def load_config(root: Path, cfg_name: str) -> dict:
@@ -43,7 +43,7 @@ def get_root() -> Path:
     Gets the project root
     """
     this_file = Path(__file__).resolve()
-    return this_file.parent.parent.parent
+    return this_file.parent.parent
 
 def load_banned_words(path: Path) -> list[str]:
     """
