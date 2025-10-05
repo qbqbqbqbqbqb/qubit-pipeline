@@ -6,17 +6,17 @@ print(f"[DEBUG] Using base class: {commands.Bot}")
 import asyncio
 from queue import Empty
 
-from tts_utils import speak_from_prompt
-from prompt_manager import PromptManager
-from monologue_manager import MonologueManager
-from event_manager import EventManager
-from config_manager import ConfigManager
-from message_manager import MessageManager
-from speech_manager import SpeechManager
-from task_manager import TaskManager
-from response_gen import ResponseGen
-from model_manager import ModelManager
-from queue_manager import Queue, QueueManager
+from scripts.io.tts_utils import speak_from_prompt
+from scripts.llm.prompt_manager import PromptManager
+from scripts.io.monologue_manager import MonologueManager
+from scripts.bot.event_manager import EventManager
+from scripts.config.config_manager import ConfigManager
+from scripts.bot.message_manager import MessageManager
+from scripts.io.speech_manager import SpeechManager
+from scripts.core.task_manager import TaskManager
+from scripts.llm.response_gen import ResponseGen
+from scripts.llm.model_manager import ModelManager
+from scripts.bot.queue_manager import Queue, QueueManager
 
 # === Load environment variables ===
 import os
@@ -27,7 +27,7 @@ TWITCH_OAUTH_TOKEN = os.getenv("TWITCH_OAUTH_TOKEN")
 TWITCH_CHANNEL = os.getenv("TWITCH_CHANNEL")
 
 # === Setup colorlog logger ===
-from log_utils import get_logger
+from scripts.utils.log_utils import get_logger
 logger = get_logger("Bot")
 
 # Put this near the top of your file (after you create `logger`)
@@ -161,7 +161,7 @@ class Bot(commands.Bot):
     # === Message Functionality ===
     async def process_messages(self) -> None:
         """
-        Continuously processes messages from the message queue by generating TTS responses.
+        Continuously processes messages from scriptse message queue by generating TTS responses.
         """
         try:
             while True:

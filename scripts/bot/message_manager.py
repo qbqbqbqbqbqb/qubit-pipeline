@@ -1,8 +1,8 @@
 import time
 import asyncio
-from bot_utils import contains_banned_words, is_fallback_text
+from scripts.bot.bot_utils import contains_banned_words, is_fallback_text
 
-from log_utils import get_logger
+from scripts.utils.log_utils import get_logger
 logger = get_logger("MessageManager")
 
 class MessageManager:

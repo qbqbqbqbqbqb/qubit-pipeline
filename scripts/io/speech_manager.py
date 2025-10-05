@@ -1,8 +1,8 @@
 import asyncio
-from bot_utils import contains_banned_words
-from tts_utils import speak_from_prompt
+from scripts.bot.bot_utils import contains_banned_words
+from scripts.io.tts_utils import speak_from_prompt
 
-from log_utils import get_logger
+from scripts.utils.log_utils import get_logger
 logger = get_logger("SpeechManager")
 
 class SpeechManager:

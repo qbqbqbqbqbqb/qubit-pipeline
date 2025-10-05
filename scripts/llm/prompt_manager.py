@@ -37,14 +37,14 @@ class PromptManager:
     
     def add_bot(self, content: str) -> None:
         """
-        Add a bot (Vtuber) message to the chat history.
+        Add a bot message to the chat history.
         """
-        self.chat_history.append(("vtuber", content))
+        self.chat_history.append(("assistant", content))
         self._trim_history()
     
     def build_prompt(self, base_prompt: str,
-                    mood: str = "laid-back", 
-                    interaction_level: str = "high", 
+                    mood: str = "laid-back",
+                    interaction_level: str = "high",
                     tone: str = "casual, funny, and edgy",
     ) -> List[dict]:
         """
@@ -56,12 +56,14 @@ class PromptManager:
             mood (str): Mood descriptor for the model's voice.
             interaction_level (str): Level of interaction with the audience.
             tone (str): Style or personality tone for the generation.
-            
+
         Returns:
-            str: A formatted prompt to send to the language model.
+            List[dict]: Chat messages in Llama-3-Instruct format.
         """
 
-        history_text = "".join(f"{role}: {content}\n" for role, content in self.chat_history)
+        chat_messages = []
+        for role, content in self.chat_history[-self.max_history:]:  
+                chat_messages.append({"role": role, "content": content})
 
         interaction_instruction = {
             "low": "Focus mostly on monologue style, little audience interaction.",
@@ -76,12 +78,12 @@ class PromptManager:
             interaction_instruction=interaction_instruction
         )
 
-        full_prompt = f"{system_prompt}\nChat History:\n{history_text}Now talk about: {base_prompt}"
+        chat_messages.insert(0, {"role": "system", "content": system_prompt})
 
-        return [
-            {"role": "user", "content": [{"type": "text", "text": full_prompt}]},
-            {"role": "Vtuber", "content": []}
-        ]
+        current_prompt = f"Now talk about: {base_prompt}"
+        chat_messages.append({"role": "user", "content": current_prompt})
+
+        return chat_messages
 
     def _trim_history(self) -> None:
         """
