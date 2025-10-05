@@ -1,9 +1,9 @@
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
+from scripts.llm.model_manager import ModelManager
 import asyncio
 from scripts.bot.twitch_bot import Bot as TwitchBot
+from scripts.core.controller import Controller
 
 from scripts.utils.refresh_token import refresh_twitch_token
 
@@ -24,39 +24,18 @@ async def token_refresher_loop():
 
 async def main():
     """
-    Entry point for running the bot asynchronously.
+    Entry point for running the bot.
 
-    - Logs the start of the bot.
-    - Logs and starts the token refresher loop.
-    - Initialises and starts the Bot instance.
-    - Logs a warning if the bot's start method returns unexpectedly.
-    - Catches and logs any critical exceptions that occur during execution.
+    - Preloads the LLM model
+    - Runs the bot when user presses start
     """
-    bot = TwitchBot()
 
-    try:
-        logger.info("[Main] Refreshing token before bot start...")
-        await refresh_twitch_token()
-        
-        logger.info("[Main] Starting Bot and Token Refresher...")
-        
-        bot_task = asyncio.create_task(bot.start()) 
-        refresher_task = asyncio.create_task(token_refresher_loop())
+    model_manager = ModelManager()
+    logger.info("[Main] LLM model preloaded")
 
-        await bot_task
-        
-    except KeyboardInterrupt:
-        logger.info("[Main] KeyboardInterrupt received. Shutting down...")
-        bot.shutdown_event.set()
+    controller = Controller()
+    await controller.run()
 
-        refresher_task.cancel()
-        await asyncio.gather(refresher_task, return_exceptions=True)
-
-        await bot_task
-        logger.info("[Main] Bot has exited. Token refresher cancelled.")
-    
-    except Exception as e:
-        logger.critical(f"[main] ERROR: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

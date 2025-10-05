@@ -6,7 +6,7 @@ def get_logger(name: str = "default",
                log_file: str = "app.log",
                warn_log_file: str = "app_warnings.log",
                max_bytes: int = 5 * 1024 * 1024,
-               backup_count: int = 3) -> logging.Logger:
+               backup_count: int = 0) -> logging.Logger:
     
     logger = logging.getLogger(name)
     """
