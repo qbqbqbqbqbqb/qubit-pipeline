@@ -2,16 +2,16 @@ import random
 import asyncio
 from pathlib import Path
 
-from response_gen import ResponseGen
+from scripts.llm.response_gen import ResponseGen
 
-from bot_utils import (
+from scripts.bot.bot_utils import (
     is_fallback_text, contains_banned_words
 )
-from config_manager import ConfigManager
-from queue_manager import Queue
+from scripts.config.config_manager import ConfigManager
+from scripts.bot.queue_manager import Queue
 
 # === Setup colorlog logger ===
-from log_utils import get_logger
+from scripts.utils.log_utils import get_logger
 logger = get_logger("MonologueManager")
 
 #MAX_MONOLOGUES = 5
@@ -131,7 +131,7 @@ class MonologueManager:
 
     def _choose_starter_prompt(self) -> str:
         """
-        Selects and returns a random starter prompt from the available starters.
+        Selects and returns a random starter prompt from scriptse available starters.
         """        
         choice = random.choice(self.starters)
         logger.info(f"[_choose_starter_prompt] Selected starter prompt: {choice}")

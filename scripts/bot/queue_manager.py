@@ -1,7 +1,7 @@
 import asyncio
 from typing import Any, Optional
 
-from log_utils import get_logger
+from scripts.utils.log_utils import get_logger
 logger = get_logger("QueueManager")
 
 class Queue:
@@ -138,8 +138,8 @@ class QueueManager():
     
     async def clear_all(self):
         cleared_unprocessed_messages = self.clear_queues(self.unprocessed_message_queue)
-        logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from message queue.")
+        logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from scriptsssage queue.")
         cleared_messages = self.clear_queues(self.message_queue)
-        logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
+        logger.info(f"[Stop] Cleared {cleared_messages} items from scriptsssage queue.")
         cleared_speech = self.clear_queues(self.speech_queue)
-        logger.info(f"[Stop] Cleared {cleared_speech} items from message queue.")
+        logger.info(f"[Stop] Cleared {cleared_speech} items from scriptsssage queue.")

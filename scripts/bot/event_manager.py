@@ -3,11 +3,11 @@ import time
 import random
 from twitchio.ext import commands
 
-from bot_utils import is_fallback_text
-from tts_utils import speak_from_prompt
+from scripts.bot.bot_utils import is_fallback_text
+from scripts.io.tts_utils import speak_from_prompt
 
 # === Setup colorlog logger ===
-from log_utils import get_logger
+from scripts.utils.log_utils import get_logger
 logger = get_logger("EventManager")
 
 IGNORED_USERS = ['nightbot', 'streamelements']

@@ -1,9 +1,9 @@
-from bot_utils import (
+from scripts.bot.bot_utils import (
     load_file, load_banned_words, get_file_path, get_root,
     contains_banned_words, is_fallback_text, load_config
 )
 
-from log_utils import get_logger
+from scripts.utils.log_utils import get_logger
 logger = get_logger("ConfigManager")
 
 class ConfigManager:

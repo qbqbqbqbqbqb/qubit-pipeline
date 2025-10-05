@@ -1,5 +1,6 @@
 # === Setup colorlog logger ===
-from log_utils import get_logger
+import re
+from scripts.utils.log_utils import get_logger
 logger = get_logger("TextProcessor")
 
 # === Setup sentence tokenisation ===
@@ -66,5 +67,5 @@ class TextProcessor:
             return ""
         text = text.strip().strip(":;,.!?-")
         sentences = text.split('. ')
-        sentences = [s for s in sentences if not contains_url(s)]
+        sentences = [s for s in sentences if not TextProcessor.contains_url(s)]
         return '. '.join(sentences).strip()
