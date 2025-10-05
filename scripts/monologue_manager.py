@@ -8,7 +8,7 @@ from bot_utils import (
     is_fallback_text, contains_banned_words
 )
 from config_manager import ConfigManager
-from queue_manager import QueueManager
+from queue_manager import Queue
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -19,10 +19,9 @@ logger = get_logger("MonologueManager")
 class MonologueManager:
     def __init__(self, 
                  prompt_manager, 
-                 queue_manager: QueueManager,
+                 monologue_queue: Queue, 
                  response_generator: ResponseGen,
                  starters_file: Path =None,
-                 delay: int = 5
                  ):
         """
         Handles the monologue generation loop.
@@ -34,12 +33,16 @@ class MonologueManager:
             starters: list of strings to start monologues with
         """
         self.prompt_manager = prompt_manager
+        
         self.response_generator = response_generator
         self.config = ConfigManager()
-        self.monologue_running = True
-        self.delay = delay
 
-        self.monologue_queue = queue_manager.monologue_queue
+        self.monologue_running = True
+
+        if isinstance(monologue_queue, Queue):
+                self.monologue_queue = monologue_queue
+        else:
+                self.monologue_queue = Queue(maxsize=0, cap=None)
 
         if starters_file and starters_file.exists():
             with open(starters_file, "r", encoding="utf-8") as f:
@@ -50,8 +53,7 @@ class MonologueManager:
                 ""
             ]
     
-        self.task: asyncio.Task | None = None
-
+        self.task = None
     async def start(self):
         """
         Start the monologue background task.
@@ -97,6 +99,8 @@ class MonologueManager:
 
         Handles task cancellation gracefully.
         """
+        logger.debug(f"[run] Queue size: {self.monologue_queue.qsize()}, monologue_running={self.monologue_running}")
+
         try:
             while True:
                 if not self.monologue_running:
@@ -104,6 +108,7 @@ class MonologueManager:
                     await asyncio.sleep(1)
                     continue
                 
+                logger.debug(f"[run] Queue size: {self.monologue_queue.qsize()}, monologue_running={self.monologue_running}")
                 starter_prompt = self._choose_starter_prompt()
                 prompt = self.prompt_manager.build_prompt(base_prompt=starter_prompt)
 
@@ -134,7 +139,9 @@ class MonologueManager:
 
     async def _generate_response_with_retries(self, prompt):
         try:
-            return await self.response_generator.generate_response_safely(prompt)
+            # Use await when calling an async method
+            response = await self.response_generator.generate_response_safely(prompt)
+            return response
         except Exception as e:
             logger.exception(f"Error in generate response with retries: {e}")
             return "Something went wrong!"
@@ -159,15 +166,45 @@ class MonologueManager:
             return False
         return True
 
-    async def _queue_response(self, response: str) -> None:
-        monologue_item = {"type": "monologue", "text": response}
-        await self.monologue_queue.put(monologue_item)
-        logger.debug(f"[_queue_response] Queued monologue: {response}")
-        logger.debug(f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
+    async def _queue_response(self, response: str):
+        """
+        Adds the given response to the queue.
+        """
+        temp_items = []
+        monologue_count = 0
 
-    async def _wait_between_monologues(self):
+        MAX_MONOLOGUES = 5
+
+        while monologue_count >= MAX_MONOLOGUES:
+            logger.info(f"[_queue_response] Monologue limit hit ({monologue_count}), removing oldest monologue(s)")
+            new_temp = []
+            removed = 0
+
+            for item in temp_items:
+                if removed < (monologue_count - MAX_MONOLOGUES + 1):
+                    removed +=1
+                    continue
+                new_temp.append(item)
+            temp_items = new_temp
+
+        final_queue = []
+        for i, item in enumerate(temp_items):
+            final_queue.append(item)
+
+        for item in final_queue:
+            await self.monologue_queue.put(item) 
+
+        logger.debug(f"[_queue_response] Queueing monologue: {response}")
+        logger.debug(f"[_queue_response] Queue size before put: {self.monologue_queue.qsize()}")
+
+        await self.monologue_queue.put({"type": "monologue", "text": response})
+        logger.debug(
+            f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
+        logger.info("[run] Response queued to speech queue")
+
+    async def _wait_between_monologues(self, delay: int = 5):
         """
         Wait for a specified delay before generating the next monologue.
         """
-        logger.debug(f"[run] Waiting {self.delay} seconds before next monologue")
-        await asyncio.sleep(self.delay)
+        logger.debug(f"[run] Waiting {delay} seconds before next monologue")
+        await asyncio.sleep(delay)

@@ -5,8 +5,6 @@ from twitchio.ext import commands
 
 from bot_utils import is_fallback_text
 from tts_utils import speak_from_prompt
-from queue_manager import QueueManager
-from response_gen import ResponseGen
 
 # === Setup colorlog logger ===
 from log_utils import get_logger
@@ -22,27 +20,25 @@ load_dotenv()
 TWITCH_STREAMER_NAME = os.getenv("TWITCH_STREAMER_NAME")
 TWITCH_BOT_NAME = os.getenv("TWITCH_BOT_NAME")
 
-class EventManager():
+class EventManager(commands.Bot):
     """
     Manages Twitch chat events and bot lifecycle events such as ready, message handling, and command processing.
     Handles filtering of messages, queuing chat messages for TTS response, and managing bot control commands.
+    
+    Attributes:
+        bot (commands.Bot): Reference to the main Twitch bot instance.
     """
     def __init__(self, 
                  bot,
-                 queue_manager: QueueManager,
-                 response_generator: ResponseGen):
+                 response_generator):
         self.bot = bot
-        self.queue_manager = queue_manager
         self.response_generator = response_generator
-        self.unprocessed_message_queue = queue_manager.unprocessed_message_queue
-
-        self._startup_done = True
 
     async def on_ready(self):
         """
         Called when the bot is ready. Speaks an intro message once.
         """
-        if self._startup_done:
+        if self.bot.startup_done:
             return
 
         logger.info(f"[event_ready] Logged in as {self.bot.nick}")
@@ -76,18 +72,6 @@ class EventManager():
         await speak_from_prompt(response)
         self.bot.prompt_manager.add_bot(response)
 
-        self._startup_done = True
-
-
-    def is_streamer_or_bot(self, author: str) -> bool:
-        """
-        Checks if a given username corresponds to the streamer or the bot itself.
-        """
-        return (
-            author.lower() == TWITCH_STREAMER_NAME.lower()
-            or author.lower() == TWITCH_BOT_NAME.lower()
-        )
-    
     def should_ignore_message(self, message) -> bool:
         """
         Determines if an incoming Twitch chat message should be ignored based on
@@ -108,9 +92,6 @@ class EventManager():
 
         if content.startswith("@"):
             return True
-        
-        if content.startswith("!") and not self.is_streamer_or_bot():
-            return True
 
         min_length = 2
         word_count = len(content.strip().split())
@@ -119,6 +100,15 @@ class EventManager():
             return True
 
         return False
+
+    def is_streamer_or_bot(self, author: str) -> bool:
+        """
+        Checks if a given username corresponds to the streamer or the bot itself.
+        """
+        return (
+            author.lower() == TWITCH_STREAMER_NAME.lower()
+            or author.lower() == TWITCH_BOT_NAME.lower()
+        )
 
     async def handle_command(self, cmd: str, message) -> bool:
         """
@@ -164,7 +154,7 @@ class EventManager():
                     "message": message,
                     "timestamp": time.time()
                 }
-                await self.unprocessed_message_queue.put(message_data)
+                await self.bot.unprocessed_message_queue.put(message_data)
             except asyncio.QueueFull:
                 logger.warning("[event_message] Queue full. Dropping message.")
         else:

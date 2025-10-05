@@ -16,7 +16,7 @@ from speech_manager import SpeechManager
 from task_manager import TaskManager
 from response_gen import ResponseGen
 from model_manager import ModelManager
-from queue_manager import QueueManager
+from queue_manager import Queue, QueueManager
 
 # === Load environment variables ===
 import os
@@ -57,6 +57,7 @@ class Bot(commands.Bot):
         self.startup_done = False
         self.monologue_running = True
 
+        self.unprocessed_message_queue = Queue(maxsize=50)
         self.queue_manager = QueueManager()
 
         self.config = ConfigManager()
@@ -87,7 +88,6 @@ class Bot(commands.Bot):
 
         self.event_manager = EventManager(
             bot=self,
-            queue_manager=self.queue_manager,
             response_generator=self.response_generator
             )
         
@@ -165,9 +165,9 @@ class Bot(commands.Bot):
         """
         try:
             while True:
-                message_data = await self.queue_manager.unprocessed_message_queue.get()
+                message_data = await self.unprocessed_message_queue.get()
                 await self.message_manager.process_message(message_data)
-                self.queue_manager.unprocessed_message_queue.task_done()
+                self.unprocessed_message_queue.task_done()
         except asyncio.CancelledError:
             logger.info("process_messages task cancelled")
             raise
