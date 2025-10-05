@@ -4,6 +4,7 @@ import hashlib
 import asyncio
 import re
 import uuid
+import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
@@ -119,6 +120,12 @@ class MemoryManager:
             metadata={"hnsw:space": "cosine"}
         )
 
+        self.conversation_collection = self.chroma_client.get_or_create_collection(
+            name="conversation_collection",
+            metadata={"hnsw:space": "l2"}
+        )
+
+
 
         logger.info(f"ChromaDB initialized with {self.collection.count()} reflection memories")
 
@@ -126,10 +133,6 @@ class MemoryManager:
         self.memories: Dict[str, Memory] = {}
         self.user_profiles: Dict[str, Dict] = {}
         self.semantic_index: Dict[str, List[str]] = {}
-
-        self.chat_history: List[Dict] = []
-        self.chat_history_file = self.base_path / "chat_history.json"
-        self.max_chat_history = 100
 
         self.max_memories = 5000
         self.consolidation_threshold = 10
@@ -156,7 +159,6 @@ A3: [Answer]
 
         self._load_memories()
         self._load_user_profiles()
-        self._load_chat_history()
 
         logger.info(f"MemoryManager initialized with {len(self.memories)} memories")
 
@@ -183,16 +185,6 @@ A3: [Answer]
         except Exception as e:
             logger.error(f"Error loading user profiles: {e}")
             self.user_profiles = {}
-
-    def _load_chat_history(self):
-        """Load chat history."""
-        try:
-            if self.chat_history_file.exists():
-                with open(self.chat_history_file, 'r', encoding='utf-8') as f:
-                    self.chat_history = json.load(f)
-        except Exception as e:
-            logger.error(f"Error loading chat history: {e}")
-            self.chat_history = []
 
     def _save_memory(self, memory: Memory):
         """Save a single memory to file."""
@@ -232,12 +224,13 @@ A3: [Answer]
             logger.error(f"Error saving {file_path}: {e}")
 
     # === CORE MEMORY OPERATIONS ===
-    def store_memory(self, content: str, memory_type: str = "episodic",
+    def store_memory(self, content: str, memory_type: str = "semantic",
                     user_id: str = None, importance: float = 1.0,
                     tags: List[str] = None, metadata: Dict = None) -> str:
-        """Store a new memory in the system."""
+        """Store a semantic memory in the system (episodic memories now use conversation_collection)."""
         memory = Memory(content, memory_type, user_id, importance, tags, metadata)
         self.memories[memory.id] = memory
+
         self._update_semantic_index(memory)
         self._save_memory(memory)
 
@@ -253,7 +246,7 @@ A3: [Answer]
     def retrieve_memories(self, query: str = None, user_id: str = None,
                          memory_type: str = None, limit: int = 10,
                          min_relevance: float = 0.0) -> List[Memory]:
-        """Retrieve memories based on various criteria."""
+        """Retrieve semantic/procedural memories from JSON storage (conversations use conversation_collection)."""
         candidates = list(self.memories.values())
 
         if user_id:
@@ -265,7 +258,8 @@ A3: [Answer]
         if query:
             candidates = self._rank_memories_by_relevance(candidates, query)
 
-        candidates = [m for m in candidates if m.relevance_score >= min_relevance]
+        if query:
+            candidates = [m for m in candidates if m.relevance_score >= min_relevance]
 
         candidates.sort(key=lambda m: (
             m.relevance_score,
@@ -401,30 +395,45 @@ A3: [Answer]
             logger.info(f"Decayed {len(memories_to_decay)} old memories")
 
     def decay_chat_memories(self):
-        """Apply rapid decay to chat memories (1 minute lifetime)."""
-        memories_to_decay = []
+        """Apply rapid decay to chat memories and ChromaDB collections (1 minute lifetime)."""
         current_time = datetime.now()
         one_minute_ago = current_time - timedelta(minutes=1)
+        one_minute_ago_timestamp = time.time() - 60
 
-        for memory in self.memories.values():
-            if memory.memory_type == "episodic" and memory.created_at < one_minute_ago:
-                if memory.access_count == 0 and memory.importance <= 1.0:
-                    memories_to_decay.append(memory.id)
+        try:
+            conversation_results = self.conversation_collection.get()
+            conversation_ids_to_delete = []
 
-        for memory_id in memories_to_decay:
-            if memory_id in self.memories:
-                memory = self.memories[memory_id]
-                logger.debug(f"Decaying chat memory (1min): {memory.content[:50]}...")
-                del self.memories[memory_id]
+            for i, metadata in enumerate(conversation_results["metadatas"]):
+                if metadata and "timestamp" in metadata:
+                    entry_timestamp = metadata["timestamp"]
+                    try:
+                        if isinstance(entry_timestamp, str):
+                            entry_time = datetime.fromisoformat(entry_timestamp.replace('Z', '+00:00'))
+                        else:
+                            entry_time = datetime.fromtimestamp(entry_timestamp)
 
-                self._remove_from_semantic_index(memory)
+                        if entry_time < one_minute_ago:
+                            conversation_ids_to_delete.append(conversation_results["ids"][i])
+                    except:
+                        if isinstance(entry_timestamp, (int, float)) and entry_timestamp < one_minute_ago_timestamp:
+                            conversation_ids_to_delete.append(conversation_results["ids"][i])
 
-                file_path = self.memories_dir / f"{memory_id}.json"
-                if file_path.exists():
-                    file_path.unlink()
+            if conversation_ids_to_delete:
+                for i, conv_id in enumerate(conversation_ids_to_delete):
+                    try:
+                        conv_results = self.conversation_collection.get(ids=[conv_id])
+                        if conv_results["documents"]:
+                            content = conv_results["documents"][0]
+                            logger.info(f"[Conversation Decay] Removed old conversation: '{content[:100]}{'...' if len(content) > 100 else ''}' (ID: {conv_id})")
+                    except Exception as e:
+                        logger.debug(f"Could not log decayed conversation {conv_id}: {e}")
 
-        if memories_to_decay:
-            logger.debug(f"Decayed {len(memories_to_decay)} chat memories (1 minute lifetime)")
+                self.conversation_collection.delete(conversation_ids_to_delete)
+                logger.info(f"[Conversation Decay] Successfully decayed {len(conversation_ids_to_delete)} conversation entries (1 minute lifetime)")
+
+        except Exception as e:
+            logger.debug(f"Error cleaning conversation collection: {e}")
 
     # === REFLECTION SYSTEM (Generative Agents Technique) ===
     async def _perform_reflection(self) -> None:
@@ -538,64 +547,94 @@ A3: [Answer]
             "metadata": metadata or {}
         }
 
-        self.chat_history.append(message)
+        message_id = str(uuid.uuid4())
 
-        if len(self.chat_history) > self.max_chat_history:
-            self.chat_history = self.chat_history[-self.max_chat_history:]
+        chromadb_metadata = {
+            "role": role,
+            "content": content,
+            "user_id": user_id or "unknown",
+            "timestamp": message["timestamp"],
+            "type": "chat"
+        }
 
-        self._save_chat_history()
+        if metadata:
+            for key, value in metadata.items():
+                chromadb_metadata[f"meta_{key}"] = value
+
+        self.conversation_collection.upsert(
+            ids=[message_id],
+            documents=[f"{role}: {content}"],
+            metadatas=[chromadb_metadata]
+        )
 
         self.message_counter += 1
         if self.message_counter >= self.reflection_threshold:
             asyncio.create_task(self._perform_reflection())
 
     def get_recent_chat_history(self, limit: int = 20) -> List[Dict]:
-        """Get recent chat history."""
-        return self.chat_history[-limit:]
+        """Get recent chat history from ChromaDB conversation collection."""
+        try:
+            results = self.conversation_collection.get(limit=limit)
+            chat_history = []
+
+            for i, item_id in enumerate(results['ids']):
+                metadata = results['metadatas'][i] if results['metadatas'] and i < len(results['metadatas']) else {}
+
+                chat_entry = {
+                    "timestamp": metadata.get("timestamp", ""),
+                    "role": metadata.get("role", "unknown"),
+                    "content": results['documents'][i],
+                    "user_id": metadata.get("user_id", "unknown"),
+                    "metadata": {}
+                }
+
+                for key, value in metadata.items():
+                    if key.startswith("meta_"):
+                        chat_entry["metadata"][key[5:]] = value
+
+                chat_history.append(chat_entry)
+
+            return chat_history
+        except Exception as e:
+            logger.debug(f"Error retrieving chat history from ChromaDB: {e}")
+            return []
 
     def get_user_chat_history(self, user_id: str, limit: int = 10) -> List[Dict]:
-        """Get chat history for a specific user."""
-        user_messages = [msg for msg in self.chat_history if msg.get("user_id") == user_id]
-        return user_messages[-limit:]
+        """Get chat history for a specific user from ChromaDB."""
+        try:
+            results = self.conversation_collection.get(
+                where={"user_id": user_id},
+                limit=limit
+            )
 
-    def _save_chat_history(self) -> None:
-        """Save chat history."""
-        self._save_json(self.chat_history_file, self.chat_history)
+            user_chat_history = []
+            for i, item_id in enumerate(results['ids']):
+                metadata = results['metadatas'][i] if results['metadatas'] and i < len(results['metadatas']) else {}
+
+                chat_entry = {
+                    "timestamp": metadata.get("timestamp", ""),
+                    "role": metadata.get("role", "unknown"),
+                    "content": results['documents'][i],
+                    "user_id": metadata.get("user_id", "unknown"),
+                    "metadata": {}
+                }
+
+                for key, value in metadata.items():
+                    if key.startswith("meta_"):
+                        chat_entry["metadata"][key[5:]] = value
+
+                user_chat_history.append(chat_entry)
+
+            return user_chat_history
+        except Exception as e:
+            logger.debug(f"Error retrieving user chat history from ChromaDB: {e}")
+            return []
 
     # === COMPATIBILITY INTERFACE ===
     def add_chat_message(self, role: str, content: str, user_id: str = None,
                         metadata: Dict = None) -> None:
-        """Add a chat message (main synchronous method with async reflection)."""
-        message = {
-            "timestamp": datetime.now().isoformat(),
-            "role": role,
-            "content": content,
-            "user_id": user_id,
-            "metadata": metadata or {}
-        }
-
-        self.chat_history.append(message)
-
-        if len(self.chat_history) > self.max_chat_history:
-            self.chat_history = self.chat_history[-self.max_chat_history:]
-
-        self._save_chat_history()
-
-        memory_type = "episodic"
-        if role == "assistant":
-            memory_type = "episodic"
-
-        importance = 1.0
-        if metadata and metadata.get("type") == "monologue":
-            importance = 0.8 
-
-        tags = []
-        if metadata:
-            if metadata.get("type") == "monologue":
-                tags.append("monologue")
-            tags.extend(metadata.get("tags", []))
-
-        self.store_memory(content, memory_type, user_id, importance, tags, metadata)
+        """Add a chat message to conversation collection with 1-minute decay."""
+        self.add_chat_message_sync(role, content, user_id, metadata)
 
         self.message_counter += 1
         if self.message_counter >= self.reflection_threshold:
@@ -620,7 +659,7 @@ A3: [Answer]
         if user_id:
             user_memories = self.retrieve_memories(
                 user_id=user_id,
-                memory_type="episodic",
+                memory_type="semantic",
                 limit=2
             )
             if user_memories:
@@ -638,7 +677,7 @@ A3: [Answer]
                 context_parts.append(f"Related memories: {'; '.join(memory_texts)}")
 
         recent_memories = self.retrieve_memories(
-            memory_type="episodic",
+            memory_type="semantic",
             limit=1
         )
         if recent_memories:
@@ -703,8 +742,21 @@ A3: [Answer]
         for memory in self.memories.values():
             memory_types[memory.memory_type] = memory_types.get(memory.memory_type, 0) + 1
 
+        conversation_count = 0
+        reflection_count = 0
+
+        try:
+            conversation_count = self.conversation_collection.count()
+            reflection_count = self.collection.count()
+        except Exception as e:
+            logger.debug(f"Error getting ChromaDB counts: {e}")
+
         return {
             "total_memories": len(self.memories),
+            "chromadb_memories": {
+                "conversations": conversation_count,
+                "reflections": reflection_count
+            },
             "memory_types": memory_types,
             "users": len(self.user_profiles),
             "semantic_index_size": len(self.semantic_index),
@@ -717,4 +769,11 @@ A3: [Answer]
         """Clean up old and decayed memories."""
         self.decay_old_memories()
         self.decay_chat_memories()
+
+        try:
+            episodic_count = self.episodic_collection.count()
+            logger.debug(f"Episodic collection now has {episodic_count} memories")
+        except Exception as e:
+            logger.debug(f"Could not get episodic collection count: {e}")
+
         logger.info("Memory cleanup completed")

@@ -86,7 +86,6 @@ class MessageManager:
             self.prompt_manager.add_user(user_record)
             self.prompt_manager.add_bot(response)
 
-            # Add to persistent memory
             if self.memory_manager:
                 self.memory_manager.add_chat_message("user", content, author)
                 self.memory_manager.add_chat_message("assistant", response, self.bot.nick if self.bot else None)

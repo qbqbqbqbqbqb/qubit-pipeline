@@ -128,13 +128,43 @@ class Bot(commands.Bot):
         self.task_manager.add_task(self.memory_cleanup_task())
         await self.shutdown_event.wait()
 
-        logger.info("[Start] Shutdown signal received. Cancelling tasks...")
-        for task in self.tasks:
-            task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
-        await self.monologue_manager.stop()
-        logger.info("[Start] All tasks cancelled. Exiting.")
+        await self._perform_graceful_shutdown()
 
+    async def _perform_graceful_shutdown(self) -> None:
+        """
+        Performs a graceful shutdown sequence with proper error handling and cleanup.
+
+        This method ensures all background tasks are cancelled, resources are released,
+        and the bot shuts down cleanly even if individual components fail.
+        """
+        logger.info("[Shutdown] Initiating graceful shutdown sequence...")
+
+        shutdown_errors = []
+
+        try:
+            logger.info("[Shutdown] Cancelling background tasks...")
+            await self.task_manager.cancel_all()
+            logger.info("[Shutdown] All background tasks cancelled successfully")
+
+        except Exception as e:
+            error_msg = f"[Shutdown] Error cancelling tasks: {e}"
+            logger.error(error_msg)
+            shutdown_errors.append(error_msg)
+
+        try:
+            logger.info("[Shutdown] Stopping monologue manager...")
+            await self.monologue_manager.stop()
+            logger.info("[Shutdown] Monologue manager stopped successfully")
+
+        except Exception as e:
+            error_msg = f"[Shutdown] Error stopping monologue manager: {e}"
+            logger.error(error_msg)
+            shutdown_errors.append(error_msg)
+
+        if shutdown_errors:
+            logger.warning(f"[Shutdown] Completed with {len(shutdown_errors)} errors: {shutdown_errors}")
+        else:
+            logger.info("[Shutdown] All shutdown operations completed successfully")
 
     async def stop(self):
         """

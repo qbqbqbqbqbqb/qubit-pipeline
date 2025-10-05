@@ -1,5 +1,6 @@
 import random
 import asyncio
+import time
 from pathlib import Path
 
 from scripts.llm.response_gen import ResponseGen
@@ -211,6 +212,16 @@ class MonologueManager:
             f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
 
         if self.memory_manager:
+            monologue_id = f"mono_{int(time.time())}_{hash(response) % 10000}"
+            self.memory_manager.conversation_collection.upsert(
+                ids=[monologue_id],
+                documents=[response],
+                metadatas=[{
+                    "content": response,
+                    "timestamp": time.time(),
+                    "type": "monologue"
+                }]
+            )
             self.memory_manager.add_chat_message("assistant", response, user_id=None, metadata={"type": "monologue"})
 
         logger.info("[run] Response queued to speech queue")
