@@ -6,7 +6,7 @@ from pathlib import Path
 from scripts.llm.response_gen import ResponseGen
 
 from scripts.bot.bot_utils import (
-    is_fallback_text, contains_banned_words
+    is_fallback_text, contains_banned_words, filter_banned_words
 )
 from scripts.config.config_manager import ConfigManager
 from scripts.bot.queue_manager import Queue
@@ -141,12 +141,13 @@ class MonologueManager:
 
                 response = await self._generate_response_with_retries(prompt)
 
-                if not self._is_valid_response(response):
-                    logger.warning("[run] Invalid or banned response, skipping.")
+                is_valid, filtered_response = self._is_valid_response(response)
+                if not is_valid:
+                    logger.warning("[run] Invalid response, skipping.")
                     await asyncio.sleep(5)
                     continue
 
-                await self._queue_response(response)
+                await self._queue_response(filtered_response)
 
                 await self._wait_between_monologues()
         except asyncio.CancelledError:
@@ -187,25 +188,22 @@ class MonologueManager:
             logger.exception(f"Error in generate response with retries: {e}")
             return "Something went wrong!"
 
-    def _is_valid_response(self, response: str) -> bool:
+    def _is_valid_response(self, response: str) -> tuple[bool, str]:
         """
-        Check whether the generated response is valid.
+        Check whether the generated response is valid and filter banned words.
 
-        Validity checks include:
-        - Response is not empty or whitespace only.
-        - Response is not fallback text.
-        - Response does not contain banned words.
+        Returns (is_valid, filtered_response)
         """
         if not response.strip():
             logger.warning("[_is_valid_response] Empty response")
-            return False
+            return False, response
         if is_fallback_text(response):
             logger.warning("[_is_valid_response] Fallback text detected")
-            return False
-        if contains_banned_words(response, banned_words=self.config.banned_words):
-            logger.warning(f"[_is_valid_response] Banned words found in response: {response}")
-            return False
-        return True
+            return False, response
+        filtered = filter_banned_words(response, banned_words=self.config.banned_words)
+        if filtered != response:
+            logger.warning(f"[_is_valid_response] Filtered banned words: {response} -> {filtered}")
+        return True, filtered
 
     async def _queue_response(self, response: str):
         """

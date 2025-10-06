@@ -1,6 +1,6 @@
 import time
 import asyncio
-from scripts.bot.bot_utils import contains_banned_words, is_fallback_text
+from scripts.bot.bot_utils import contains_banned_words, is_fallback_text, filter_banned_words
 
 from scripts.utils.log_utils import get_logger
 logger = get_logger("MessageManager")
@@ -68,14 +68,15 @@ class MessageManager:
 
             author = message.author.name
             content = message.content
-
+    
             if age > 300:
                 logger.info(f"Dropped stale message from {author} ({int(age)}s old)")
                 return
-
-            if contains_banned_words(content.lower(), banned_words=self.banned_words):
-                logger.warning(f"[Filter] Blocked user message with banned words: {content}")
-                return
+    
+            filtered_content = filter_banned_words(content, banned_words=self.banned_words)
+            if filtered_content != content:
+                logger.warning(f"[Filter] Filtered banned words in user message: {content} -> {filtered_content}")
+                content = filtered_content
 
             if self.memory_manager:
                 self.memory_manager.update_user_profile(author, username=author)
@@ -106,9 +107,9 @@ class MessageManager:
                 logger.warning(f"[process_message] Skipping fallback response: {response}")
                 return
 
-            if contains_banned_words(response, banned_words=self.banned_words):
-                logger.warning(f"[process_message] Response contains banned words, skipping speech.")
-                return
+            filtered_response = filter_banned_words(response, banned_words=self.banned_words)
+            if filtered_response != response:
+                logger.warning(f"[process_message] Filtered banned words in response: {response} -> {filtered_response}")
 
             await self.queue_manager.enqueue_chat({
                 "type": "chat_message",
@@ -116,7 +117,7 @@ class MessageManager:
             })
             await self.queue_manager.enqueue_chat({
                 "type": "chat_response",
-                "text": response
+                "text": filtered_response
             })
 
             self.prompt_manager.add_user(user_record)

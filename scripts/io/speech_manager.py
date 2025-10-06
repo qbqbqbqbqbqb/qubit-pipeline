@@ -1,5 +1,5 @@
 import asyncio
-from scripts.bot.bot_utils import contains_banned_words
+from scripts.bot.bot_utils import contains_banned_words, filter_banned_words
 from scripts.io.tts_utils import speak_from_prompt
 
 from scripts.utils.log_utils import get_logger
@@ -39,9 +39,8 @@ class SpeechManager:
                     continue
                
                 if contains_banned_words(text, banned_words=self.banned_words):
-                    logger.warning(f"[SpeechManager] Blocked TTS due to banned content: {text}")
-                    self.speech_queue.task_done()
-                    continue
+                    text = filter_banned_words(text, banned_words=self.banned_words)
+                    logger.warning(f"[SpeechManager] Filtered banned words in text: {text}")
                 
                 if item["type"] == "monologue":
                     if not self.monologue_running:

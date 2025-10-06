@@ -6,6 +6,7 @@ import pyaudio
 import asyncio
 import numpy as np
 from scripts.io.obs_controller import update_obs_text, set_subtitle_position, update_subtitle_text_and_style
+from scripts.bot.bot_utils import filter_banned_words
 import wave
 from piper import PiperVoice, SynthesisConfig
 from pathlib import Path
