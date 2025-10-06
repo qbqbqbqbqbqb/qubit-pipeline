@@ -117,30 +117,34 @@ class EventManager:
         Handles bot control commands (!pause, !resume, !stop) if they exist.
         Returns True if a command was handled.
         """
-        handled = False
+        try:
+            handled = False
 
-        if cmd == "!pause":
-            if callable(self.bot.pause_monologue):
-                await self.bot.pause_monologue(message)
-            else:
-                logger.error(f"[event_message] pause_monologue is not callable: {self.bot.pause_monologue}")
-            handled = True
+            if cmd == "!pause":
+                if callable(self.bot.pause_monologue):
+                    await self.bot.pause_monologue()
+                else:
+                    logger.error(f"[event_message] pause_monologue is not callable: {self.bot.pause_monologue}")
+                handled = True
 
-        elif cmd == "!resume":
-            if callable(self.bot.resume_monologue):
-                await self.bot.resume_monologue(message)
-            else:
-                logger.error(f"[event_message] resume_monologue is not callable: {self.bot.resume_monologue}")
-            handled = True
+            elif cmd == "!resume":
+                if callable(self.bot.resume_monologue):
+                    await self.bot.resume_monologue()
+                else:
+                    logger.error(f"[event_message] resume_monologue is not callable: {self.bot.resume_monologue}")
+                handled = True
 
-        elif cmd == "!stop":
-            if callable(self.bot.stop):
-                await self.bot.stop()
-            else:
-                logger.error(f"[event_message] stop is not callable: {self.bot.stop}")
-            handled = True
+            elif cmd == "!stop":
+                if callable(self.bot.stop):
+                    await self.bot.stop()
+                else:
+                    logger.error(f"[event_message] stop is not callable: {self.bot.stop}")
+                handled = True
 
-        return handled
+            return handled
+        except Exception as e:
+            logger.error(f"Error handling command {cmd}: {e}")
+            return False
 
 
     async def handle_subscription(self, user: str, plan: str):

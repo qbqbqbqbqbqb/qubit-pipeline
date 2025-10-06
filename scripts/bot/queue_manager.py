@@ -106,12 +106,16 @@ class QueueManager:
         self._chat_arrived.clear()
     
     async def enqueue_chat(self, item: dict) -> None:
-        await self.message_queue.put(item)
-        self._chat_arrived.set()
-        logger.debug("chat queued")
+        try:
+            await self.message_queue.put(item)
+            self._chat_arrived.set()
+            logger.debug("chat queued")
+        except Exception as e:
+            logger.error(f"Error enqueueing chat: {e}")
 
     async def merge_queues(self) -> None:
-            while True:
+        while True:
+            try:
                 if not self.message_queue.empty():
                     item = await self.message_queue.get()
                     self.message_queue.task_done()
@@ -151,6 +155,9 @@ class QueueManager:
                     continue
 
                 await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.error(f"Error in merge_queues: {e}")
+                await asyncio.sleep(1)
 
     async def reset_consecutive_counter(self) -> None:
         self._consecutive_monologues = 0
@@ -169,10 +176,13 @@ class QueueManager:
         return cleared_items
     
     async def clear_all(self):
-        if self.unprocessed_message_queue is not None:
-            cleared_unprocessed_messages = await self.clear_queues(self.unprocessed_message_queue)
-            logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from unprocessed message queue.")
-        cleared_messages = await self.clear_queues(self.message_queue)
-        logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
-        cleared_speech = await self.clear_queues(self.speech_queue)
-        logger.info(f"[Stop] Cleared {cleared_speech} items from speech queue.")
+        try:
+            if self.unprocessed_message_queue is not None:
+                cleared_unprocessed_messages = await self.clear_queues(self.unprocessed_message_queue)
+                logger.info(f"[Stop] Cleared {cleared_unprocessed_messages} items from unprocessed message queue.")
+            cleared_messages = await self.clear_queues(self.message_queue)
+            logger.info(f"[Stop] Cleared {cleared_messages} items from message queue.")
+            cleared_speech = await self.clear_queues(self.speech_queue)
+            logger.info(f"[Stop] Cleared {cleared_speech} items from speech queue.")
+        except Exception as e:
+            logger.error(f"Error clearing all queues: {e}")

@@ -16,13 +16,17 @@ class ConfigManager:
     """
 
     def __init__(self):
-        root = get_root()
-        cfg = load_config(root, "config.json")
+        try:
+            root = get_root()
+            cfg = load_config(root, "config.json")
 
-        self.instructions_path = get_file_path(cfg, root, "instructions_file", "instructions.txt")
-        self.banned_words_path = get_file_path(cfg, root, "banned_words_file", "banned_words.txt")
-        self.starters_path = get_file_path(cfg, root, "starters_file", "starters.txt")
-        self.max_chat_history = cfg.get("max_chat_history", 8)
+            self.instructions_path = get_file_path(cfg, root, "instructions_file", "instructions.txt")
+            self.banned_words_path = get_file_path(cfg, root, "banned_words_file", "banned_words.txt")
+            self.starters_path = get_file_path(cfg, root, "starters_file", "starters.txt")
+            self.max_chat_history = cfg.get("max_chat_history", 8)
 
-        self.banned_words = load_banned_words(self.banned_words_path)
-        self.instructions = load_file(self.instructions_path)
+            self.banned_words = load_banned_words(self.banned_words_path)
+            self.instructions = load_file(self.instructions_path)
+        except Exception as e:
+            logger.error(f"Error initializing ConfigManager: {e}")
+            raise

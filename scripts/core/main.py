@@ -18,12 +18,15 @@ async def main():
     - Preloads the LLM model
     - Runs the bot when user presses start
     """
+    try:
+        model_manager = ModelManager()
+        logger.info("[Main] LLM model preloaded")
 
-    model_manager = ModelManager()
-    logger.info("[Main] LLM model preloaded")
-
-    controller = Controller()
-    await controller.run()
+        controller = Controller()
+        await controller.run()
+    except Exception as e:
+        logger.error(f"Error in main: {e}")
+        raise
 
 
 if __name__ == "__main__":

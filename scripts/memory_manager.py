@@ -581,38 +581,41 @@ A3: [Answer]
     def add_chat_message_sync(self, role: str, content: str, user_id: str = None,
                              metadata: Dict = None) -> None:
         """Add a chat message to persistent history (synchronous version)."""
-        message = {
-            "timestamp": datetime.now().isoformat(),
-            "role": role,
-            "content": content,
-            "user_id": user_id,
-            "metadata": metadata or {}
-        }
+        try:
+            message = {
+                "timestamp": datetime.now().isoformat(),
+                "role": role,
+                "content": content,
+                "user_id": user_id,
+                "metadata": metadata or {}
+            }
 
-        message_id = str(uuid.uuid4())
+            message_id = str(uuid.uuid4())
 
-        chromadb_metadata = {
-            "role": role,
-            "content": content,
-            "user_id": user_id or "unknown",
-            "timestamp": message["timestamp"],
-            "type": "chat"
-        }
+            chromadb_metadata = {
+                "role": role,
+                "content": content,
+                "user_id": user_id or "unknown",
+                "timestamp": message["timestamp"],
+                "type": "chat"
+            }
 
-        if metadata:
-            for key, value in metadata.items():
-                chromadb_metadata[f"meta_{key}"] = value
+            if metadata:
+                for key, value in metadata.items():
+                    chromadb_metadata[f"meta_{key}"] = value
 
-        self.conversation_collection.upsert(
-            ids=[message_id],
-            documents=[f"{role}: {content}"],
-            metadatas=[chromadb_metadata]
-        )
+            self.conversation_collection.upsert(
+                ids=[message_id],
+                documents=[f"{role}: {content}"],
+                metadatas=[chromadb_metadata]
+            )
 
-        self.message_counter += 1
-        if self.message_counter >= self.reflection_threshold:
-            logger.info(f"[Reflection] Triggering reflection after {self.message_counter} messages (threshold: {self.reflection_threshold})")
-            asyncio.create_task(self._perform_reflection())
+            self.message_counter += 1
+            if self.message_counter >= self.reflection_threshold:
+                logger.info(f"[Reflection] Triggering reflection after {self.message_counter} messages (threshold: {self.reflection_threshold})")
+                asyncio.create_task(self._perform_reflection())
+        except Exception as e:
+            logger.error(f"Error adding chat message: {e}")
 
     def get_recent_chat_history(self, limit: int = 20) -> List[Dict]:
         """Get recent chat history from ChromaDB conversation collection."""

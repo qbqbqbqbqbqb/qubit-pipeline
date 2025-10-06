@@ -27,13 +27,17 @@ def _build_auth_string(salt, challenge):
     Returns:
         str: The computed authentication string.
     """
-    secret = base64.b64encode(
-        hashlib.sha256((OBS_PASSWORD + salt).encode('utf-8')).digest()
-    )
-    auth = base64.b64encode(
-        hashlib.sha256(secret + challenge.encode('utf-8')).digest()
-    ).decode('utf-8')
-    return auth
+    try:
+        secret = base64.b64encode(
+            hashlib.sha256((OBS_PASSWORD + salt).encode('utf-8')).digest()
+        )
+        auth = base64.b64encode(
+            hashlib.sha256(secret + challenge.encode('utf-8')).digest()
+        ).decode('utf-8')
+        return auth
+    except Exception as e:
+        logger.error(f"Error building auth string: {e}")
+        raise
 
 def connect_to_obs():
     """
@@ -41,28 +45,32 @@ def connect_to_obs():
     Returns:
         websocket.WebSocket: The authenticated WebSocket connection.
     """
-    ws = websocket.WebSocket()
-    ws.connect(url)
-    message = ws.recv()
-    result = json.loads(message)
+    try:
+        ws = websocket.WebSocket()
+        ws.connect(url)
+        message = ws.recv()
+        result = json.loads(message)
 
-    if 'authentication' in result['d']:
-        auth_payload = {
-            "op": 1,
-            "d": {
-                "rpcVersion": 1,
-                "authentication": _build_auth_string(
-                    result['d']['authentication']['salt'],
-                    result['d']['authentication']['challenge']
-                ),
-                "eventSubscriptions": 1000
+        if 'authentication' in result['d']:
+            auth_payload = {
+                "op": 1,
+                "d": {
+                    "rpcVersion": 1,
+                    "authentication": _build_auth_string(
+                        result['d']['authentication']['salt'],
+                        result['d']['authentication']['challenge']
+                    ),
+                    "eventSubscriptions": 1000
+                }
             }
-        }
-        ws.send(json.dumps(auth_payload))
-        auth_response = ws.recv()
-        if not auth_response:
-            raise Exception("Empty response after auth payload")
-    return ws
+            ws.send(json.dumps(auth_payload))
+            auth_response = ws.recv()
+            if not auth_response:
+                raise Exception("Empty response after auth payload")
+        return ws
+    except Exception as e:
+        logger.error(f"Error connecting to OBS: {e}")
+        raise
 
 def update_obs_text(source_name, new_text):
     """

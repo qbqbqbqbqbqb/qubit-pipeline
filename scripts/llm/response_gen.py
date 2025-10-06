@@ -103,11 +103,15 @@ class ResponseGen:
         """
         Applies the Gemma 3 chat template to the provided chat messages.
         """
-        return self.model_manager.tokenizer.apply_chat_template(
-            chat,
-            tokenize=False,
-            add_generation_prompt=True
-        )
+        try:
+            return self.model_manager.tokenizer.apply_chat_template(
+                chat,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+        except Exception as e:
+            logger.error(f"Error applying chat template: {e}")
+            raise
         
     async def generate_response(self,
                                 prompt,

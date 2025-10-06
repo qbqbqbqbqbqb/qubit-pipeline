@@ -21,18 +21,18 @@ class Controller:
         pass
 
     async def run(self):
-        print("Controller: Press Enter to start the bot...")
-        input()
-        logger.info("Start button pressed.")
-
-        bot = TwitchBot()
-
-        logger.info("[run] Refreshing tokens for both accounts...")
-        await refresh_twitch_token()
-
-        logger.info("[run] Starting Bot with dual-account token refresh...")
-
         try:
+            print("Controller: Press Enter to start the bot...")
+            input()
+            logger.info("Start button pressed.")
+
+            bot = TwitchBot()
+
+            logger.info("[run] Refreshing tokens for both accounts...")
+            await refresh_twitch_token()
+
+            logger.info("[run] Starting Bot with dual-account token refresh...")
+
             await asyncio.gather(
                 bot.start(),
                 token_refresher_loop(),
@@ -42,3 +42,6 @@ class Controller:
             logger.info("[run] KeyboardInterrupt received. Shutting down...")
             bot.shutdown_event.set()
             logger.info("[run] Shutdown initiated.")
+        except Exception as e:
+            logger.error(f"Error in controller run: {e}")
+            raise

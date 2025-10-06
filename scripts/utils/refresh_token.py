@@ -16,26 +16,29 @@ def update_env_var(key, value, env_path=".env"):
         value (str): Value to set.
         env_path (str, optional): Path to the .env file. Defaults to ".env".
     """
-    lines = []
+    try:
+        lines = []
 
-    if os.path.exists(env_path):
-        with open(env_path, "r") as file:
-            lines = file.readlines()
+        if os.path.exists(env_path):
+            with open(env_path, "r") as file:
+                lines = file.readlines()
 
-    found = False
-    for i, line in enumerate(lines):
-        if line.startswith(f"{key}="):
-            lines[i] = f"{key}={value}\n"
-            found = True
-            break
+        found = False
+        for i, line in enumerate(lines):
+            if line.startswith(f"{key}="):
+                lines[i] = f"{key}={value}\n"
+                found = True
+                break
 
-    if not found:
-        lines.append(f"{key}={value}\n")
+        if not found:
+            lines.append(f"{key}={value}\n")
 
-    with open(env_path, "w") as file:
-        file.writelines(lines)
+        with open(env_path, "w") as file:
+            file.writelines(lines)
 
-    logger.debug(f"[.env] Updated {key}")
+        logger.debug(f"[.env] Updated {key}")
+    except Exception as e:
+        logger.error(f"Error updating env var {key}: {e}")
 
 async def refresh_twitch_token():
     """

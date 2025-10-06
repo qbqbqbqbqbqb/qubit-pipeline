@@ -249,29 +249,32 @@ async def speak_from_prompt(text):
     Args:
         text (str): Text to be spoken.
     """
-    normalised_text = normalise_text(text, p.number_to_words)
+    try:
+        normalised_text = normalise_text(text, p.number_to_words)
 
-    if not normalised_text or re.fullmatch(r'[.!?]+', normalised_text.strip()):
-        logger.warning("[TTS] No valid text to speak after normalisation.")
-        return
+        if not normalised_text or re.fullmatch(r'[.!?]+', normalised_text.strip()):
+            logger.warning("[TTS] No valid text to speak after normalisation.")
+            return
 
-    logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
+        logger.info(f"\n[Normalised Text for TTS]\n{normalised_text}")
 
-    update_subtitle_text_and_style(
-    source_name=TTS_SUBTITLE_NAME,
-    new_text=normalised_text,
-    font_face="Arial",
-    font_size=50,
-    width=1920,
-    height=400,
-    valign="center",
-    word_wrap=True
-    )
+        update_subtitle_text_and_style(
+        source_name=TTS_SUBTITLE_NAME,
+        new_text=normalised_text,
+        font_face="Arial",
+        font_size=50,
+        width=1920,
+        height=400,
+        valign="center",
+        word_wrap=True
+        )
 
-    speaker_id = get_speaker_id(MODEL_PATH, SPEAKER_NAME)
-    syn_config = build_synthesis_config(speaker_id)
-    wav_bytes = generate_wav_bytes(normalised_text, syn_config)
-    sample_rate, audio_np = decode_wav_bytes(wav_bytes)
+        speaker_id = get_speaker_id(MODEL_PATH, SPEAKER_NAME)
+        syn_config = build_synthesis_config(speaker_id)
+        wav_bytes = generate_wav_bytes(normalised_text, syn_config)
+        sample_rate, audio_np = decode_wav_bytes(wav_bytes)
 
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, play_audio, sample_rate, audio_np)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, play_audio, sample_rate, audio_np)
+    except Exception as e:
+        logger.error(f"Error in speak_from_prompt: {e}")

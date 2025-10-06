@@ -218,51 +218,54 @@ class MonologueManager:
         Args:
             response: The generated monologue text to queue
         """
-        temp_items = []
-        monologue_count = 0
+        try:
+            temp_items = []
+            monologue_count = 0
 
-        MAX_MONOLOGUES = 5
+            MAX_MONOLOGUES = 5
 
-        while monologue_count >= MAX_MONOLOGUES:
-            logger.info(f"[_queue_response] Monologue limit hit ({monologue_count}), removing oldest monologue(s)")
-            new_temp = []
-            removed = 0
+            while monologue_count >= MAX_MONOLOGUES:
+                logger.info(f"[_queue_response] Monologue limit hit ({monologue_count}), removing oldest monologue(s)")
+                new_temp = []
+                removed = 0
 
-            for item in temp_items:
-                if removed < (monologue_count - MAX_MONOLOGUES + 1):
-                    removed +=1
-                    continue
-                new_temp.append(item)
-            temp_items = new_temp
+                for item in temp_items:
+                    if removed < (monologue_count - MAX_MONOLOGUES + 1):
+                        removed +=1
+                        continue
+                    new_temp.append(item)
+                temp_items = new_temp
 
-        final_queue = []
-        for i, item in enumerate(temp_items):
-            final_queue.append(item)
+            final_queue = []
+            for i, item in enumerate(temp_items):
+                final_queue.append(item)
 
-        for item in final_queue:
-            await self.monologue_queue.put(item) 
+            for item in final_queue:
+                await self.monologue_queue.put(item)
 
-        logger.debug(f"[_queue_response] Queueing monologue: {response}")
-        logger.debug(f"[_queue_response] Queue size before put: {self.monologue_queue.qsize()}")
+            logger.debug(f"[_queue_response] Queueing monologue: {response}")
+            logger.debug(f"[_queue_response] Queue size before put: {self.monologue_queue.qsize()}")
 
-        await self.monologue_queue.put({"type": "monologue", "text": response})
-        logger.debug(
-            f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
+            await self.monologue_queue.put({"type": "monologue", "text": response})
+            logger.debug(
+                f"[_queue_response] Queue size after put: {self.monologue_queue.qsize()}")
 
-        if self.memory_manager:
-            monologue_id = f"mono_{int(time.time())}_{hash(response) % 10000}"
-            self.memory_manager.conversation_collection.upsert(
-                ids=[monologue_id],
-                documents=[response],
-                metadatas=[{
-                    "content": response,
-                    "timestamp": time.time(),
-                    "type": "monologue"
-                }]
-            )
-            self.memory_manager.add_chat_message("assistant", response, user_id=None, metadata={"type": "monologue"})
+            if self.memory_manager:
+                monologue_id = f"mono_{int(time.time())}_{hash(response) % 10000}"
+                self.memory_manager.conversation_collection.upsert(
+                    ids=[monologue_id],
+                    documents=[response],
+                    metadatas=[{
+                        "content": response,
+                        "timestamp": time.time(),
+                        "type": "monologue"
+                    }]
+                )
+                self.memory_manager.add_chat_message("assistant", response, user_id=None, metadata={"type": "monologue"})
 
-        logger.info("[run] Response queued to speech queue")
+            logger.info("[run] Response queued to speech queue")
+        except Exception as e:
+            logger.error(f"Error queueing response: {e}")
 
     async def _wait_between_monologues(self, delay: int = 5):
         """

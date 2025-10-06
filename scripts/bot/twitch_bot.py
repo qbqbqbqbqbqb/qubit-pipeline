@@ -121,31 +121,37 @@ class Bot:
         """
         Start the bot by connecting to Twitch and launching background tasks.
         """
-        logger.info("[Bot] Starting VTuber AI Twitch bot...")
+        try:
+            logger.info("[Bot] Starting VTuber AI Twitch bot...")
 
-        if not await self.twitch_client.connect():
-            logger.error("[Bot] Failed to connect to Twitch. Exiting.")
-            return
+            if not await self.twitch_client.connect():
+                logger.error("[Bot] Failed to connect to Twitch. Exiting.")
+                return
 
-        await self.event_manager.on_ready()
-        self.startup_done = True
-        await self.background_tasks()
+            await self.event_manager.on_ready()
+            self.startup_done = True
+            await self.background_tasks()
+        except Exception as e:
+            logger.error(f"Error starting bot: {e}")
 
     async def background_tasks(self):
         """
         Launches background tasks, and waits for shutdown signal.
         """
-        logger.info("[Start] Launching background tasks...")
-        await self.monologue_manager.start()
+        try:
+            logger.info("[Start] Launching background tasks...")
+            await self.monologue_manager.start()
 
-        self.task_manager.add_task(self.process_messages())
-        self.task_manager.add_task(self.speech_manager.consume())
-        self.task_manager.add_task(self.queue_manager.merge_queues())
-        self.task_manager.add_task(dump_queue_sizes(self))
-        self.task_manager.add_task(self.memory_cleanup_task())
-        await self.shutdown_event.wait()
+            self.task_manager.add_task(self.process_messages())
+            self.task_manager.add_task(self.speech_manager.consume())
+            self.task_manager.add_task(self.queue_manager.merge_queues())
+            self.task_manager.add_task(dump_queue_sizes(self))
+            self.task_manager.add_task(self.memory_cleanup_task())
+            await self.shutdown_event.wait()
 
-        await self._perform_graceful_shutdown()
+            await self._perform_graceful_shutdown()
+        except Exception as e:
+            logger.error(f"Error in background tasks: {e}")
 
     # === Message and Event Handlers ===
     async def _handle_chat_message(self, author: str, content: str, timestamp: datetime):
@@ -245,30 +251,35 @@ class Bot:
         """
         Signals the bot to shutdown by speaking a sign-off message and setting the shutdown event.
         """
-        logger.warning("[Stop] Stop signal issued.")
-
-        self.shutting_down = True
-        self.monologue_running = False
-        self.monologue_manager.monologue_running = False
-
-        if self.monologue_manager.task:
-            self.monologue_manager.task.cancel()
-
-        cleared = await self.queue_manager.clear_all()
-
-        logger.info("[Stop] About to speak sign-off message")
-
-        end_txt = "Goodbye everyone! Thanks for watching. This is Qubit signing off!"
-        logger.info(f"[Stop] Sign-off message: {end_txt}")
         try:
-            asyncio.create_task(speak_from_prompt(end_txt))
-            import time
-            time.sleep(0.1)
-        except Exception as e:
-            logger.error(f"[Stop] Error during shutdown message: {e}")
+            logger.warning("[Stop] Stop signal issued.")
 
-        import os
-        os._exit(0)
+            self.shutting_down = True
+            self.monologue_running = False
+            self.monologue_manager.monologue_running = False
+
+            if self.monologue_manager.task:
+                self.monologue_manager.task.cancel()
+
+            cleared = await self.queue_manager.clear_all()
+
+            logger.info("[Stop] About to speak sign-off message")
+
+            end_txt = "Goodbye everyone! Thanks for watching. This is Qubit signing off!"
+            logger.info(f"[Stop] Sign-off message: {end_txt}")
+            try:
+                asyncio.create_task(speak_from_prompt(end_txt))
+                import time
+                time.sleep(0.1)
+            except Exception as e:
+                logger.error(f"[Stop] Error during shutdown message: {e}")
+
+            import os
+            os._exit(0)
+        except Exception as e:
+            logger.error(f"Error during stop: {e}")
+            import os
+            os._exit(1)
 
     # === Message Functionality ===
     async def process_messages(self) -> None:
@@ -297,10 +308,13 @@ class Bot:
         """
         Pauses the monologue loop and clears pending speech items to stop ongoing speech.
         """
-        await self.monologue_manager.pause()
-        await self.speech_manager.pause()
-        await self.send_message("Monologue paused.")
-        logger.info("[Monologue] Paused.")
+        try:
+            await self.monologue_manager.pause()
+            await self.speech_manager.pause()
+            await self.send_message("Monologue paused.")
+            logger.info("[Monologue] Paused.")
+        except Exception as e:
+            logger.error(f"Error pausing monologue: {e}")
 
     async def memory_cleanup_task(self):
         """
@@ -323,7 +337,10 @@ class Bot:
         """
         Resumes the monologue loop.
         """
-        await self.monologue_manager.resume()
-        await self.speech_manager.resume()
-        await self.send_message("Monologue resumed.")
-        logger.info("[Monologue] Resumed.")
+        try:
+            await self.monologue_manager.resume()
+            await self.speech_manager.resume()
+            await self.send_message("Monologue resumed.")
+            logger.info("[Monologue] Resumed.")
+        except Exception as e:
+            logger.error(f"Error resuming monologue: {e}")

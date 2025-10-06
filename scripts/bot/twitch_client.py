@@ -278,20 +278,27 @@ class TwitchClient:
     async def run_forever(self):
         """Run the client indefinitely until stopped."""
         while True:
-            if not self.connected:
-                logger.warning("[TwitchClient] Connection lost, attempting to reconnect...")
+            try:
+                if not self.connected:
+                    logger.warning("[TwitchClient] Connection lost, attempting to reconnect...")
+                    await asyncio.sleep(5)
+                    await self.connect()
+                await asyncio.sleep(1)
+            except Exception as e:
+                logger.error(f"[TwitchClient] Error in run_forever: {e}")
                 await asyncio.sleep(5)
-                await self.connect()
-            await asyncio.sleep(1)
 
     # === Command Registration ===
     def register_command(self, command_name: str, handler):
         """Register a chat command handler."""
-        if self.chat:
-            self.chat.register_command(command_name, handler)
-            logger.info(f"[TwitchClient] Registered command: {command_name}")
-        else:
-            logger.warning("[TwitchClient] Cannot register command - chat not initialized")
+        try:
+            if self.chat:
+                self.chat.register_command(command_name, handler)
+                logger.info(f"[TwitchClient] Registered command: {command_name}")
+            else:
+                logger.warning("[TwitchClient] Cannot register command - chat not initialized")
+        except Exception as e:
+            logger.error(f"[TwitchClient] Error registering command {command_name}: {e}")
 
     # === EventSub Integration (Future Enhancement) ===
     async def setup_eventsub(self):
@@ -299,5 +306,8 @@ class TwitchClient:
         Set up EventSub for follow, subscription, and raid events.
         This would use webhook or websocket transport.
         """
-        logger.info("[TwitchClient] EventSub setup not yet implemented")
-        pass
+        try:
+            logger.info("[TwitchClient] EventSub setup not yet implemented")
+            pass
+        except Exception as e:
+            logger.error(f"[TwitchClient] Error in setup_eventsub: {e}")

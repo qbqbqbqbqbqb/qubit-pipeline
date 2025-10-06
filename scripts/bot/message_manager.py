@@ -61,22 +61,22 @@ class MessageManager:
         Args:
             message_data: Dictionary containing 'message' object and optional 'timestamp'
         """
-        message = message_data["message"]
-        timestamp = message_data.get("timestamp", time.time())
-        age = time.time() - timestamp
-
-        author = message.author.name
-        content = message.content
-
-        if age > 300:
-            logger.info(f"Dropped stale message from {author} ({int(age)}s old)")
-            return
-
-        if contains_banned_words(content.lower(), banned_words=self.banned_words):
-            logger.warning(f"[Filter] Blocked user message with banned words: {content}")
-            return
-
         try:
+            message = message_data["message"]
+            timestamp = message_data.get("timestamp", time.time())
+            age = time.time() - timestamp
+
+            author = message.author.name
+            content = message.content
+
+            if age > 300:
+                logger.info(f"Dropped stale message from {author} ({int(age)}s old)")
+                return
+
+            if contains_banned_words(content.lower(), banned_words=self.banned_words):
+                logger.warning(f"[Filter] Blocked user message with banned words: {content}")
+                return
+
             if self.memory_manager:
                 self.memory_manager.update_user_profile(author, username=author)
 
@@ -125,6 +125,5 @@ class MessageManager:
             if self.memory_manager:
                 self.memory_manager.add_chat_message("user", content, author)
                 self.memory_manager.add_chat_message("assistant", response, self.bot.nick if self.bot else None)
-            
         except Exception as e:
             logger.error(f"Error processing message: {e}")
