@@ -1,7 +1,8 @@
 # === Setup sentence tokenisation ===
+import time
 import nltk
 from nltk.tokenize import sent_tokenize
-
+from transformers import logging as hf_logging
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
 
@@ -14,19 +15,19 @@ def download_nltk_data():
 
 # === Setup colorlog logger ===
 from scripts.utils.log_utils import get_logger
-logger = get_logger("ModelManager")
+
 
 MODEL_NAME = "Sao10K/L3-8B-Stheno-v3.2"
 
 class ModelManager:
     """
-    Singleton manager for the AI language model and tokenizer.
+    Singleton manager for the AI language model and tokeniser.
 
     Handles loading and caching of the Sao10K/L3-8B-Stheno-v3.2 model
-    with 4-bit quantization for memory efficiency. Uses singleton pattern
+    with 4-bit quantisation for memory efficiency. Uses singleton pattern
     to ensure only one instance exists across the application.
 
-    Provides access to both the model and tokenizer for text generation tasks.
+    Provides access to both the model and tokeniser for text generation tasks.
     """
     __instance = None
     def __new__(cls):
@@ -41,33 +42,45 @@ class ModelManager:
     
     def _init(self):
         download_nltk_data()
-        # === Load model with transformers ===
+
+        hf_logging.set_verbosity_info()
+        self.logger = get_logger("ModelManager")
+
         try:
-            quantization_config = BitsAndBytesConfig(
+            self.logger.info("[ModelManager] Initializing model...")
+            t0 = time.time()
+
+            # === Load tokenizer first ===
+            self.logger.info("[ModelManager] Loading tokeniser...")
+            self.tokeniser = AutoTokenizer.from_pretrained(
+                MODEL_NAME,
+                trust_remote_code=False
+            )
+            self.tokeniser.pad_token = self.tokeniser.eos_token
+            self.logger.info("[ModelManager] Tokeniser loaded.")
+
+            # === Prepare quantisation config ===
+            self.logger.info("[ModelManager] Preparing quantisation config...")
+            quantisation_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.bfloat16
             )
 
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                MODEL_NAME,
-                trust_remote_code=False
-            )
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-
+            # === Load model ===
+            self.logger.info("[ModelManager] Loading model weights (this can take a few minutes)...")
             self.model = AutoModelForCausalLM.from_pretrained(
                 MODEL_NAME,
-                quantization_config=quantization_config,
+                quantization_config=quantisation_config,
                 device_map="auto",
                 trust_remote_code=False,
-                dtype=torch.bfloat16
+                dtype=torch.bfloat16,
             )
-
-            logger.info(f"[ModelManager] Loaded model: {MODEL_NAME} with 4-bit quantization")
+            self.logger.info(f"[ModelManager] Model loaded successfully in {time.time() - t0:.2f}s")
 
         except Exception as e:
-            logger.error(f"[init] Model initialisation failed: {e}")
+            self.logger.error(f"[ModelManager] Model initialization failed: {e}", exc_info=True)
             raise
 
     @classmethod

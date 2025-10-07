@@ -1,8 +1,10 @@
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch, Mock
-from scripts.twitch_client import TwitchClient
+from scripts.modules.twitch_client import TwitchClient
 from twitchAPI.type import AuthScope, ChatEvent
 from unittest.mock import AsyncMock, patch
+from twitchAPI.chat import ChatMessage
 
 @pytest.fixture
 def fake_settings():
@@ -21,10 +23,10 @@ def fake_logger():
     return Mock()
 
 @pytest.mark.asyncio
-@patch("scripts.twitch_client.Twitch", autospec=True)
-@patch("scripts.twitch_client.Chat", autospec=True)
+@patch("scripts.modules.twitch_client.Twitch", autospec=True)
+@patch("scripts.modules.twitch_client.Chat", autospec=True)
 async def test_start_success(mock_chat_class, mock_twitch_class, fake_settings, fake_logger):
-    client = TwitchClient(fake_settings, fake_logger)
+    client = TwitchClient(fake_settings)
 
     mock_twitch_instance = AsyncMock()
     mock_twitch_class.return_value = mock_twitch_instance
@@ -46,9 +48,9 @@ async def test_start_success(mock_chat_class, mock_twitch_class, fake_settings, 
     fake_logger.info.assert_any_call(f"[start] Connected to Twitch channel: {fake_settings.twitch_channel}")
 
 @pytest.mark.asyncio
-@patch("scripts.twitch_client.Twitch", autospec=True)
+@patch("scripts.modules.twitch_client.Twitch", autospec=True)
 async def test_authenticate_bot_account(mock_twitch_class, fake_settings, fake_logger):
-    client = TwitchClient(fake_settings, fake_logger)
+    client = TwitchClient(fake_settings)
 
     mock_twitch_instance = AsyncMock()
     mock_twitch_class.return_value = mock_twitch_instance
@@ -64,9 +66,9 @@ async def test_authenticate_bot_account(mock_twitch_class, fake_settings, fake_l
     fake_logger.info.assert_any_call("[_authenticate_bot_account] Authenticating bot account...")
 
 @pytest.mark.asyncio
-@patch("scripts.twitch_client.Twitch", autospec=True)
+@patch("scripts.modules.twitch_client.Twitch", autospec=True)
 async def test_authenticate_streamer_account_with_tokens(mock_twitch_class, fake_settings, fake_logger):
-    client = TwitchClient(fake_settings, fake_logger)
+    client = TwitchClient(fake_settings)
 
     mock_twitch_instance = AsyncMock()
     mock_twitch_class.return_value = mock_twitch_instance
@@ -82,7 +84,7 @@ async def test_authenticate_streamer_account_with_tokens(mock_twitch_class, fake
     fake_logger.info.assert_any_call("[_authenticate_streamer_account] Authenticating streamer account...")
 
 @pytest.mark.asyncio
-@patch("scripts.twitch_client.Chat", new_callable=AsyncMock)
+@patch("scripts.modules.twitch_client.Chat", new_callable=AsyncMock)
 async def test_setup_chat(mock_chat_class, fake_settings, fake_logger):
     mock_chat_instance = Mock()
     mock_chat_instance.register_event = Mock()
@@ -90,7 +92,7 @@ async def test_setup_chat(mock_chat_class, fake_settings, fake_logger):
 
     mock_chat_class.return_value = mock_chat_instance
 
-    client = TwitchClient(fake_settings, fake_logger)
+    client = TwitchClient(fake_settings)
     client.twitch_bot = Mock()
 
     client._on_ready = Mock()
@@ -105,7 +107,7 @@ async def test_setup_chat(mock_chat_class, fake_settings, fake_logger):
 
 @pytest.mark.asyncio
 async def test_on_ready_success(fake_settings, fake_logger):
-    client = TwitchClient(fake_settings, fake_logger)
+    client = TwitchClient(fake_settings)
 
     event = Mock()
     event.chat.join_room = AsyncMock()
@@ -179,17 +181,11 @@ async def test_disconnect_stops_and_closes(fake_logger):
     client.twitch_streamer.close.assert_awaited_once()
     assert client.accounts_connected is False
 
-import pytest
-from unittest.mock import AsyncMock, Mock
-from scripts.twitch_client import TwitchClient
-from twitchAPI.chat import ChatMessage
-
 @pytest.mark.asyncio
 async def test_on_message_responds_to_bits():
-    # Arrange
     fake_settings = Mock()
     fake_logger = Mock()
-    client = TwitchClient(fake_settings, fake_logger)
+    client = TwitchClient(fake_settings)
 
     client.chat = Mock()
     client.chat.send_message = AsyncMock()
@@ -206,3 +202,19 @@ async def test_on_message_responds_to_bits():
         "Thanks testuser for cheering 250 bits! 🎉"
     )
 
+@pytest.mark.asyncio
+@patch.object(TwitchClient, "start", new_callable=AsyncMock)
+@patch.object(TwitchClient, "disconnect", new_callable=AsyncMock)
+async def test_run_lifecycle(mock_disconnect, mock_start, fake_settings):
+    client = TwitchClient(fake_settings)
+
+    async def run_side_effect():
+        await asyncio.sleep(0.1)
+        client._running = False
+
+    client._running = True
+    with patch("asyncio.sleep", new_callable=AsyncMock):
+        await client.run()
+
+    mock_start.assert_not_called()
+    mock_disconnect.assert_not_called()

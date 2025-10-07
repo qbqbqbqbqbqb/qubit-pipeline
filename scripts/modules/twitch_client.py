@@ -1,19 +1,26 @@
 import asyncio
 from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope, ChatEvent
-from twitchAPI.chat import Chat, ChatEvent, EventData, ChatMessage, ChatSub
+from twitchAPI.chat import Chat, EventData, ChatMessage, ChatSub
 from twitchAPI.oauth import UserAuthenticator
 from scripts.utils.log_utils import get_logger
+from scripts.core.base_module import BaseModule
 
-class TwitchClient:
-    def __init__(self, settings):
+
+class TwitchClient(BaseModule):
+    def __init__(self, settings, signals, monologue_module, queue_manager):
+        super().__init__("TwitchModule", logger=get_logger("TwitchModule"))
         self.settings = settings
-        self.logger = get_logger("TwitchClient")
 
         self.twitch_bot = None
         self.twitch_streamer = None
         self.chat = None
         self.accounts_connected = False
+        self._running = False
+
+        self.signals = signals
+        self.monologue_module = monologue_module
+        self.queue_manager = queue_manager 
 
         self.bot_scopes = [
             AuthScope.CHAT_READ,
@@ -25,7 +32,23 @@ class TwitchClient:
             AuthScope.CHANNEL_MANAGE_RAIDS
         ]
 
-    async def start(self) -> bool:
+    async def run(self):
+        self.logger.info("[run] Starting TwitchClient module...")
+        connected = await self._start_client()
+        
+        if not connected:
+            self.logger.error("Failed to connect Twitch client. Exiting TwitchModule.")
+            return
+
+        try:
+            while self._running:
+                await asyncio.sleep(1)  
+        except asyncio.CancelledError:
+            self.logger.info("[run] TwitchClient run cancelled.")
+        finally:
+            await self.disconnect()
+
+    async def _start_client(self) -> bool:
         self.logger.info("[start] Starting TwitchClient...")
         try:
             await self._authenticate_bot_account()
@@ -54,12 +77,11 @@ class TwitchClient:
             self.settings.bot_refresh_token
         )
 
-
     async def _authenticate_streamer_account(self):
         if self.settings.streamer_oauth_token and self.settings.streamer_refresh_token:
             self.logger.info("[_authenticate_streamer_account] Authenticating streamer account...")
             self.twitch_streamer = Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
-            if not self.settings.bot_oauth_token:
+            if not self.settings.streamer_oauth_token:
                 self.logger.info("[_authenticate_streamer_account] No streamer OAuth token found, authenticating interactively...")
                 auth = UserAuthenticator(self.twitch_bot, self.streamer_scopes)
                 token, refresh_token = await auth.authenticate()
@@ -89,36 +111,46 @@ class TwitchClient:
             self.logger.error(f"[_on_ready] Failed to join channel: {e}")
 
     async def _on_message(self, msg: ChatMessage):
-        """Handle incoming chat messages."""
         try:
             author = msg.user.name
             content = msg.text.strip()
-
             if not content:
                 return
 
             self.logger.debug(f"[_on_message] Message from {author}: {content}")
 
-            bits = msg.tags.get('bits') 
-            if bits:
-                await self.chat.send_message(f"Thanks {author} for cheering {bits} bits! 🎉")
+            content_lower = content.lower()
+            if content_lower == "!qubit start":
+                self.signals.monologue_enabled = True
+                self.monologue_module.resume()
+                self.logger.info("[_on_message] Monologue started via chat command !qubit start")
+                return
+
+            if content_lower == "!qubit stop":
+                self.signals.monologue_enabled = False
+                self.monologue_module.pause()
+                self.logger.info("[_on_message] Monologue stopped via chat command !qubit stop")
+                return
+
+            await self.queue_manager.process_new_chat_message({
+                "user": author,
+                "prompt": content,
+            })
+
         except Exception as e:
             self.logger.error(f"[_on_message] Error handling message: {e}")
 
     async def _on_subscription(self, sub: ChatSub):
-        """Handle subscription events."""
         try:
             self.logger.info(f"[_on_subscription] New subscription in {sub.room.name}: {sub.sub_plan}")
         except Exception as e:
             self.logger.error(f"[_on_subscription] Error handling subscription: {e}")
 
     async def _on_raid(self, raid_event: EventData):
-        """Handle raid events."""
         try:
             raider_name = getattr(raid_event, 'from_broadcaster_user_name', 'unknown')
             viewer_count = getattr(raid_event, 'viewers', 0)
             self.logger.info(f"[_on_raid] Raid from {raider_name} with {viewer_count} viewers")
-
         except Exception as e:
             self.logger.error(f"[_on_raid] Error handling raid: {e}")
 
@@ -132,3 +164,9 @@ class TwitchClient:
             await self.twitch_streamer.close()
         self.accounts_connected = False
         self.logger.info("[disconnect] Disconnected successfully.")
+
+    async def stop(self):
+        self.logger.info("[stop] Stopping TwitchClient module...")
+        self._running = False
+        await self.disconnect()
+        await super().stop()

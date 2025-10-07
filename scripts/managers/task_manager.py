@@ -6,7 +6,7 @@ class TaskManager:
     """
     Manages async task lifecycle for the VTuber bot.
 
-    Provides centralized task creation, tracking, and cancellation
+    Provides centralised task creation, tracking, and cancellation
     to ensure clean shutdown of all background operations.
     """
 
