@@ -6,6 +6,7 @@ class QueueManager:
         self.logger = get_logger("QueueManager")
         self.monologue_queue = asyncio.Queue()
         self.chat_queue = asyncio.Queue()
+        self.speech_queue = asyncio.Queue() 
         self.consecutive_monologues = 0
         self.chat_arrived = asyncio.Event()
 
@@ -14,3 +15,9 @@ class QueueManager:
         self.consecutive_monologues = 0
         self.chat_arrived.set()
         await self.chat_queue.put(msg)
+
+    async def enqueue_speech(self, text: str, item_type: str = "ai_response"):
+        """
+        Helper method to add text to speech queue.
+        """
+        await self.speech_queue.put({"text": text, "type": item_type})

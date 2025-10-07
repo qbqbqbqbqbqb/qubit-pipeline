@@ -14,6 +14,7 @@ from scripts.managers.model_manager import ModelManager
 from scripts.managers.module_manager import ModuleManager
 from scripts.modules.response_module import ResponseModule
 from scripts.modules.monologue_module import MonologueModule
+from scripts.modules.speech_module import SpeechModule
 
 from scripts.core.signals import Signals
 
@@ -62,6 +63,12 @@ async def initialise_managers_and_modules(signals):
     model_manager = ModelManager.get_instance()
     queue_manager = QueueManager()
 
+    speech_manager = SpeechModule(
+        signals=signals,
+        speech_queue=queue_manager.speech_queue
+    )
+    module_manager.register(speech_manager)
+
     twitch_module = TwitchClient(
         settings,
         signals,
@@ -75,7 +82,7 @@ async def initialise_managers_and_modules(signals):
     module_manager.register(twitch_module)
     module_manager.register(response_module)
 
-    return module_manager, model_manager, queue_manager, twitch_module, model_module, response_module
+    return module_manager, model_manager, queue_manager, speech_manager, twitch_module, model_module, response_module
 
 
 async def start_core_modules(twitch_module, model_module, response_module):
@@ -112,13 +119,25 @@ async def shutdown_sequence(task_manager, module_manager):
     asyncio.get_event_loop().stop()
 
 
+
 async def main():
     loop = asyncio.get_running_loop()
     setup_signal_handlers(loop)
 
-    module_manager, model_manager, queue_manager, twitch_module, model_module, response_module = await initialise_managers_and_modules(signals)
+    (
+        module_manager,
+        model_manager,
+        queue_manager,
+        speech_manager,
+        twitch_module,
+        model_module,
+        response_module,
+
+    ) = await initialise_managers_and_modules(signals)
 
     await start_core_modules(twitch_module, model_module, response_module)
+
+    await speech_manager.start()
 
     monologue_module = MonologueModule(
         signals=signals,
@@ -134,6 +153,8 @@ async def main():
     await start_background_tasks(task_manager, monologue_module)
 
     await stop_event.wait()
+
+    await speech_manager.stop()
 
     await shutdown_sequence(task_manager, module_manager)
 

@@ -147,7 +147,6 @@ class ResponseModule(BaseModule):
         Orchestrates the generation of a cleaned and constrained model response.
         """
         try:
-            #logger.info(f"[generate_response] Prompt received: {str(prompt)[:60]}...")
             self.signals.ai_thinking = True
 
             if isinstance(prompt, str):
@@ -156,20 +155,25 @@ class ResponseModule(BaseModule):
                 chat_messages = prompt
 
             full_prompt = await self.apply_chat_template(chat=chat_messages)
-
             raw_output = await self.generate_text(full_prompt, max_new_tokens)
-            #final_response = await self.clean_response(raw_output)
 
             self.logger.info(f"[generate_response] Final response: {raw_output}")
+
+            if self.queue_manager and hasattr(self.queue_manager, "speech_queue"):
+                try:
+                    await self.queue_manager.enqueue_speech(raw_output, item_type="ai_response")
+                except Exception as e:
+                    self.logger.error(f"[generate_response] Failed to enqueue speech: {e}")
+
             return raw_output
 
         except Exception:
             self.logger.exception("[generate_response] Exception during generation")
             return "Something went wrong!"
-        
+
         finally:
             self.signals.ai_thinking = False
-        
+
     async def generate_response_safely(
         self,
         prompt: dict,
