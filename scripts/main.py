@@ -5,10 +5,11 @@ import sys
 from scripts.config import settings
 from scripts.utils.log_utils import get_logger
 from scripts.twitch_client import TwitchClient
+from scripts.task_manager import TaskManager
 from scripts.utils.refresh_token import refresh_twitch_token
 
 logger = get_logger("Main")
-
+task_manager = TaskManager()
 stop_event = asyncio.Event()
 twitch_client = None
 tasks = []
@@ -39,7 +40,7 @@ async def main():
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    twitch_client = TwitchClient(settings, logger)
+    twitch_client = TwitchClient(settings)
     success = await twitch_client.start()
     if not success:
         logger.error("Failed to start TwitchClient; exiting.")
@@ -47,19 +48,12 @@ async def main():
 
     await refresh_twitch_token()
 
-    tasks = [
-        asyncio.create_task(token_refresher_loop()),
-        asyncio.create_task(keep_alive_loop()),
-    ]
+    task_manager.add_task(token_refresher_loop())
+    task_manager.add_task(keep_alive_loop())
 
     await stop_event.wait()
 
-    logger.info("Canceling background tasks...")
-    for task in tasks:
-        task.cancel()
-
-    await asyncio.gather(*tasks, return_exceptions=True)
-
+    await task_manager.cancel_all()
     await twitch_client.disconnect()
     logger.info("Shutdown complete.")
 

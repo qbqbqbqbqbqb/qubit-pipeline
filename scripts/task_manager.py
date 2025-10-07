@@ -1,7 +1,6 @@
 import asyncio
-
 from scripts.utils.log_utils import get_logger
-logger = get_logger("TaskManager")
+
 
 class TaskManager:
     """
@@ -11,23 +10,20 @@ class TaskManager:
     to ensure clean shutdown of all background operations.
     """
 
-    def __init__(self, settings, logger):
-        self.settings = settings
-        self.logger = logger
+    def __init__(self):
+        self.logger = get_logger("TaskManager")
         self.tasks = []
-
+        
     def add_task(self, coro):
         task = asyncio.create_task(coro)
         self.tasks.append(task)
-        logger.debug(f"Task added: {
-            task.get_name() if hasattr(task, 'get_name') 
-            else task}")
+        self.logger.debug(f"[add_task] Task added: {task.get_name() if hasattr(task, 'get_name') else task}")
         return task
 
     async def cancel_all(self):
-        logger.info("Cancelling all tasks...")
+        self.logger.info("[cancel_all] Cancelling all tasks...")
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
         self.tasks.clear()
-        logger.info("All tasks cancelled.")
+        self.logger.info("[cancel_all] All tasks cancelled.")

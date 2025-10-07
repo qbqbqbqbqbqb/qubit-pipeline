@@ -3,11 +3,12 @@ from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, ChatEvent, EventData, ChatMessage, ChatSub
 from twitchAPI.oauth import UserAuthenticator
+from scripts.utils.log_utils import get_logger
 
 class TwitchClient:
-    def __init__(self, settings, logger):
+    def __init__(self, settings):
         self.settings = settings
-        self.logger = logger
+        self.logger = get_logger("TwitchClient")
 
         self.twitch_bot = None
         self.twitch_streamer = None
