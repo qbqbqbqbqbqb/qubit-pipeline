@@ -187,3 +187,4 @@ cython_debug/
 /vllm
 en_GB-vctk-medium.onnx
 /memories
+/.venv2
