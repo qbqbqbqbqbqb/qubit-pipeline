@@ -8,5 +8,4 @@ class Signals:
         self.is_human_speaking = False
         self.ai_thinking = False
         self.chat_arrived = asyncio.Event()
-        self.tts_finished = asyncio.Event()
-
+        self.ai_speaking = asyncio.Event()

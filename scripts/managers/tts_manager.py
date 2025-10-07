@@ -22,9 +22,7 @@ class TTSManager:
 
     def __init__(self, signals):
         self.logger = get_logger("TTSModule")
-
-        self.TTS_SUBTITLE_NAME = os.getenv("TTS_SUBTITLE_NAME", "TTS_Subtitles")
-        self.SPEAKER_NAME = os.getenv("TTS_SPEAKER_NAME", "p236")
+        self.signals = signals
 
         this_file = Path(__file__).resolve()
         self.project_root = this_file.parent.parent.parent
@@ -99,7 +97,8 @@ class TTSManager:
                 return
 
             self.logger.info(f"[TTSModule] Speaking text: {text}")
-
+            if self.signals:
+                self.signals.ai_speaking.emit(True)
 
             speaker_id = self._get_speaker_id()
             syn_config = self._build_synthesis_config(speaker_id)
@@ -109,5 +108,10 @@ class TTSManager:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._play_audio, sample_rate, audio_np)
 
+            if self.signals:
+                self.signals.ai_speaking.emit(False)
+
         except Exception as e:
             self.logger.error(f"Error in TTS speak: {e}")
+            if self.signals:
+                self.signals.ai_speaking.emit(False)
