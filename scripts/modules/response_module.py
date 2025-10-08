@@ -4,6 +4,10 @@ from scripts.utils.log_utils import get_logger
 from scripts.managers.model_manager import ModelManager
 from scripts.managers.queue_manager import QueueManager
 
+from datetime import datetime, timezone
+
+MAX_MESSAGE_AGE_SECONDS = 30 
+
 class ResponseModule(BaseModule):
     def __init__(self, queue_manager: QueueManager, chat_sender, signals):
         super().__init__("ResponseModule", logger=get_logger("ResponseModule"))
@@ -24,35 +28,68 @@ class ResponseModule(BaseModule):
 
     async def run(self):
         self.logger.info("[run] ResponseModule running.")
+        self._running = True
+        
         try:
             while self._running:
-                try:
-                    msg = await self.queue_manager.chat_queue.get()
+                self.logger.debug("[run] Waiting for next message from processing_queue...")
+                msg = await self.queue_manager.processing_queue.get()
+                self.logger.debug(f"[run] Retrieved message: {msg}")
+                self.logger.debug(f"[run] Got message from processing_queue: {msg}")
+
+                msg_type = msg.get("type")
+                timestamp = msg.get("timestamp")
+
+                if timestamp:
+                    now = datetime.now()
+                    age = (now - timestamp).total_seconds()
+                    self.logger.debug(f"[run] Message age: {age:.1f}s")
+                    if age > MAX_MESSAGE_AGE_SECONDS:
+                        self.logger.info(f"[run] Dropping old message ({age:.1f}s): {msg}")
+                        self.queue_manager.processing_queue.task_done()
+                        continue
+
+                if msg_type == "chat_message":
                     user = msg.get("user")
                     prompt = msg.get("prompt")
+                    self.logger.info(f"[run] Processing chat message from {user}: {prompt}")
 
-                    self.logger.info(f"[run] Received message from {user}: {prompt}")
-
+                    self.logger.debug("[run] Calling generate_response...")
                     response = await self.generate_response(prompt)
+                    self.logger.info(f"[run] Generated response for {user}: {response}")
+
                     reply = f"@{user} {response}"
-
                     if self.chat_sender:
-                        await self.chat_sender(reply)
-                    else:
-                        self.logger.warning("Chat sender not set. Skipping sending message.")
+                        self.logger.debug("[run] Sending chat response...")
+                        try:
+                            await self.chat_sender(reply)
+                        except Exception:
+                            self.logger.exception("Failed to send chat reply")
+                        else:
+                            self.logger.info(f"[run] Sent chat response to {user}")
 
-                    self.queue_manager.chat_queue.task_done()
-                except Exception as e:
-                    self.logger.warning(f"[run] Failed to handle message: {e}")
+                elif msg_type == "monologue":
+                    text = msg.get("text")
+                    self.logger.info(f"[run] Processing monologue prompt: {text}")
+                    self.logger.debug("[run] Calling generate_response for monologue...")
+                    await self.generate_response(text)
+                    self.logger.info("[run] Monologue response generated.")
+
+                else:
+                    self.logger.warning(f"[run] Unknown message type: {msg_type}")
+
+                self.queue_manager.processing_queue.task_done()
+                self.logger.debug("[run] Marked message done on processing_queue.")
+
+        except asyncio.TimeoutError:
+            self.logger.debug("[run] No message received in last 5 seconds, still waiting...")
         except asyncio.CancelledError:
             self.logger.info("[run] ResponseModule run cancelled.")
+        except Exception as e:
+            self.logger.exception(f"[run] Exception in run loop: {e}")
         finally:
             self.logger.info("[run] ResponseModule stopped.")
 
-    async def stop(self):
-        self.logger.info("[stop] Stopping ResponseModule...")
-        self._running = False
-        await super().stop()
 
 
     def get_generation_config(self, max_tokens: int):

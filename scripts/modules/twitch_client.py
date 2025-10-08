@@ -1,4 +1,5 @@
 import asyncio
+import datetime as dt
 from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, EventData, ChatMessage, ChatSub
@@ -40,6 +41,8 @@ class TwitchClient(BaseModule):
             self.logger.error("Failed to connect Twitch client. Exiting TwitchModule.")
             return
 
+        self._running = True
+
         try:
             while self._running:
                 await asyncio.sleep(1)  
@@ -78,16 +81,15 @@ class TwitchClient(BaseModule):
         )
 
     async def _authenticate_streamer_account(self):
-        if self.settings.streamer_oauth_token and self.settings.streamer_refresh_token:
+        if not self.settings.streamer_oauth_token or not self.settings.streamer_refresh_token:
+            self.logger.info("[_authenticate_streamer_account] No streamer OAuth token found, authenticating interactively...")
+            auth = UserAuthenticator(self.twitch_bot, self.streamer_scopes)
+            token, refresh_token = await auth.authenticate()
+            self.settings.streamer_oauth_token = token
+            self.settings.streamer_refresh_token = refresh_token
+        else:
             self.logger.info("[_authenticate_streamer_account] Authenticating streamer account...")
             self.twitch_streamer = Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
-            if not self.settings.streamer_oauth_token:
-                self.logger.info("[_authenticate_streamer_account] No streamer OAuth token found, authenticating interactively...")
-                auth = UserAuthenticator(self.twitch_bot, self.streamer_scopes)
-                token, refresh_token = await auth.authenticate()
-                self.settings.streamer_oauth_token = token
-                self.settings.streamer_refresh_token = refresh_token
-
             await self.twitch_streamer.set_user_authentication(
                 self.settings.streamer_oauth_token,
                 self.streamer_scopes,
@@ -114,8 +116,11 @@ class TwitchClient(BaseModule):
         try:
             author = msg.user.name
             content = msg.text.strip()
-            if not content:
-                return
+            timestamp_ms = msg.sent_timestamp
+
+            timestamp = None
+            if timestamp_ms:
+                timestamp = dt.datetime.fromtimestamp(timestamp_ms / 1000)
 
             self.logger.debug(f"[_on_message] Message from {author}: {content}")
 
@@ -131,11 +136,15 @@ class TwitchClient(BaseModule):
                 self.monologue_module.pause()
                 self.logger.info("[_on_message] Monologue stopped via chat command !qubit stop")
                 return
-
-            await self.queue_manager.process_new_chat_message({
+            
+            await self.queue_manager.chat_queue.put({
                 "user": author,
                 "prompt": content,
+                "timestamp": timestamp or dt.datetime.now(),
+                "type": "chat_message"
             })
+
+            self.logger.info("[_on_message] Chat message enqueued in chat_queue")
 
         except Exception as e:
             self.logger.error(f"[_on_message] Error handling message: {e}")

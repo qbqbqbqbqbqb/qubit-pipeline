@@ -15,6 +15,7 @@ from scripts.managers.module_manager import ModuleManager
 from scripts.modules.response_module import ResponseModule
 from scripts.modules.monologue_module import MonologueModule
 from scripts.modules.speech_module import SpeechModule
+from scripts.modules.queue_processor import QueueProcessor
 
 from scripts.core.signals import Signals
 
@@ -23,7 +24,7 @@ task_manager = TaskManager()
 stop_event = asyncio.Event()
 
 signals = Signals()
-signals.monologue_enabled = True
+signals.monologue_enabled = False
 
 
 async def handle_signal(sig, frame):
@@ -61,7 +62,10 @@ async def keep_alive_loop():
 async def initialise_managers_and_modules(signals):
     module_manager = ModuleManager()
     model_manager = ModelManager.get_instance()
-    queue_manager = QueueManager()
+    queue_manager = QueueManager(signals)
+    
+    queue_processor = QueueProcessor(queue_manager)
+    module_manager.register(queue_processor)
 
     speech_manager = SpeechModule(
         signals=signals,
@@ -82,7 +86,7 @@ async def initialise_managers_and_modules(signals):
     module_manager.register(twitch_module)
     module_manager.register(response_module)
 
-    return module_manager, model_manager, queue_manager, speech_manager, twitch_module, model_module, response_module
+    return module_manager, model_manager, queue_manager, speech_manager, twitch_module, model_module, response_module, queue_processor
 
 
 async def start_core_modules(twitch_module, model_module, response_module):
@@ -132,7 +136,7 @@ async def main():
         twitch_module,
         model_module,
         response_module,
-
+        queue_processor,
     ) = await initialise_managers_and_modules(signals)
 
     await start_core_modules(twitch_module, model_module, response_module)
@@ -143,8 +147,6 @@ async def main():
         signals=signals,
         queue_manager=queue_manager,
         response_generator=response_module,
-        memory_manager=getattr(model_manager, "memory_manager", None),
-        max_monologues_between_chats=3,
         starters=None,
     )
     module_manager.register(monologue_module)
@@ -152,11 +154,17 @@ async def main():
 
     await start_background_tasks(task_manager, monologue_module)
 
+    task_manager.add_task(queue_processor.run())
+    task_manager.add_task(response_module.run())
+
     await stop_event.wait()
 
     await speech_manager.stop()
 
+    await queue_processor.stop()
+
     await shutdown_sequence(task_manager, module_manager)
+
 
 
 if __name__ == "__main__":
