@@ -66,6 +66,10 @@ async def main():
 
     model_manager = ModelManager()
 
+    event_broker.publish_event({
+        "type": "startup",
+        "text": "Say hello"
+    })
 
     modules = {
         'twitch': TwitchModule(

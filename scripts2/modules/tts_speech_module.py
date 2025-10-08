@@ -8,7 +8,7 @@ import pyaudio
 from scripts2.modules.base_module import BaseModule
 from scripts2.managers.tts_manager import TTSManager
 from piper import PiperVoice, SynthesisConfig
-from scripts2.config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME
+from scripts2.config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME, TTS_DELAY
 
 class TtsSpeechModule(BaseModule):
     def __init__(self, signals,  tts_manager, tts_enabled = True):
@@ -16,7 +16,7 @@ class TtsSpeechModule(BaseModule):
         self.signals = signals
         self.tts_enabled = tts_enabled
         self.tts_manager = tts_manager
-        self.queue = asyncio.Queue()
+        self.queue = asyncio.PriorityQueue()
         self.loop = None
 
     async def start(self):
@@ -31,16 +31,18 @@ class TtsSpeechModule(BaseModule):
 
         while self._running:
             try:
-                event = await self.queue.get()
+                priority, event = await self.queue.get()
                 await self.consume_response(event)
                 self.queue.task_done()
+
+                await asyncio.sleep(TTS_DELAY)
             except Exception as e:
                 self.logger.error(f"[run] Error while handling TTS queue item: {e}")
 
-    def submit_response(self, event_data):
-        asyncio.run_coroutine_threadsafe(
-            self.queue.put(event_data), self._task.get_loop()
-        )
+    def submit_response(self, event_data, priority=10):
+            asyncio.run_coroutine_threadsafe(
+                self.queue.put((priority, event_data)), self._task.get_loop()
+            )
 
     async def consume_response(self, event_data):
         try:

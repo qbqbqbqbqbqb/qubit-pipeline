@@ -17,12 +17,14 @@ class BrokerEventHandler:
         async for event in self.broker.subscribe():
             event_type = event.get("type")
             try:
-                if event_type == "monologue":
+                if event_type in ("monologue", "startup"):
+                    text = event.get("text", "")
                     await self.queue_manager.process_new_prompt_from_monologue_generation(event["text"])
                 elif event_type == "twitch_chat":
                     await self.queue_manager.process_new_prompt_from_twitch_chat(event["user"], event["message"])
-                elif event_type == "response_generated":
-                    self.tts_speech_module.submit_response(event)
+                elif event["type"] == "response_generated":
+                    response = event.get("response", "")
+                    await self.tts_speech_module.consume_response(event)
                 else:
                     pass
             except Exception as e:

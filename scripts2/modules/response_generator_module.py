@@ -23,14 +23,14 @@ class ResponseGeneratorModule(BaseModule):
         await super().start()
 
     async def run(self):
-        self.logger.debug(f"model: {self.model}, tokeniser: {self.tokeniser}, mmanager:{self.model_manager}")
+        #self.logger.debug(f"model: {self.model}, tokeniser: {self.tokeniser}, mmanager:{self.model_manager}")
         await super().run()
         while self._running:
             self.logger.info("[run] Response Gen is running...")
             #self.logger.debug(f"Queue size before get: {self.queue_manager.response_processing_queue.qsize()}")
             
             try:
-                item = await asyncio.wait_for(
+                priority, item = await asyncio.wait_for(
                     self.queue_manager.response_processing_queue.get(),
                     timeout=1.0 
                 )

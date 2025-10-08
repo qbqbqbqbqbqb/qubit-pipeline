@@ -6,7 +6,7 @@ class QueueManager:
         self.twitch_chat_prompt_queue = asyncio.Queue()
         self.twitch_event_prompt_queue = asyncio.Queue() # implement later do not forget
         self.monologue_prompt_queue = asyncio.Queue()
-        self.response_processing_queue = asyncio.Queue()
+        self.response_processing_queue = asyncio.PriorityQueue()
         self.logger = get_logger("QueueManager")
 
         self._merge_task = None
@@ -40,8 +40,28 @@ class QueueManager:
         while True:
             item = await source_queue.get()
             self.logger.debug(f"[QueueManager] Forwarding item to response_processing_queue: {item}")
-            await self.response_processing_queue.put(item)
+
+            priority = self._get_priority(item)
+            await self.response_processing_queue.put((priority, item))
+
             source_queue.task_done()
+
+    def _get_priority(self, item: dict) -> int:
+        """
+        Determine the priority for response processing.
+        Lower number = higher priority.
+        """
+        item_type = item.get("type", "")
+        text = item.get("text", "").lower()
+
+        if item_type == "startup":
+            return 1
+        elif item_type == "chat_message":
+            return 5
+        elif item_type == "monologue":
+            return 5
+        else:
+            return 10
 
     async def stop_merging_queues(self):
         if self._merge_task:
