@@ -27,7 +27,7 @@ class ResponseGeneratorModule(BaseModule):
         await super().run()
         while self._running:
             self.logger.info("[run] Response Gen is running...")
-            self.logger.debug(f"Queue size before get: {self.queue_manager.response_processing_queue.qsize()}")
+            #self.logger.debug(f"Queue size before get: {self.queue_manager.response_processing_queue.qsize()}")
             
             try:
                 item = await asyncio.wait_for(
@@ -45,6 +45,7 @@ class ResponseGeneratorModule(BaseModule):
                 "type": "response_generated",
                 "response": response,
                 "original_prompt": item.get("text") or item.get("message") or item,
+                "original_type": item.get("type", "unknown"),
                 "original_full": item,
             })
             self.logger.debug(f"Published response event: {response}")
