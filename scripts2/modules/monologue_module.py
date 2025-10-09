@@ -1,6 +1,7 @@
 import asyncio
 import random
 from scripts2.modules.base_module import BaseModule
+from scripts2.config.config import MONOLOGUE_PROMPTS_FILE
 
 class MonologueModule(BaseModule):
     def __init__(self, signals, event_broker, monologue_enabled=True):
@@ -8,14 +9,7 @@ class MonologueModule(BaseModule):
         self.signals = signals
         self.monologue_enabled = monologue_enabled
         self.event_broker = event_broker
-        self.monologue_texts = [
-            "Hmm, let me think about this...",
-            "You know, I've been pondering the mysteries of the universe lately.",
-            "Sometimes I wonder what it would be like to have a conversation with myself.",
-            "Did you ever notice how time flies when you're not paying attention?",
-            "I should probably clean up my digital thoughts one day.",
-            "Autonomous musings are quite the experience."
-        ]
+        self.monologue_texts = MONOLOGUE_PROMPTS_FILE
 
     async def start(self):
         if not self.monologue_enabled:

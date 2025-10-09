@@ -3,7 +3,7 @@ import asyncio
 from scripts2.core.central_event_broker import CentralEventBroker
 from scripts2.utils.log_utils import get_logger
 from scripts2.utils.filter_utils import contains_banned_words
-from scripts2.config.config import BANNED_WORDS_LIST
+from scripts2.config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 
 class BrokerEventHandler:
     def __init__(self, broker: CentralEventBroker, tts_speech_module, response_generator_module):
@@ -22,7 +22,7 @@ class BrokerEventHandler:
             try:
                 if event_type in ("twitch_chat"):
                     user = event.get("user", "someone")
-                    if contains_banned_words(user, BANNED_WORDS_LIST):
+                    if contains_banned_words(text=user, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST):
                         user = "Someone"
                     
                 if event_type in ("monologue", "startup"):
@@ -72,7 +72,7 @@ class BrokerEventHandler:
 
                 elif event["type"] == "response_prompt":
                     text = event.get("text", "")
-                    if contains_banned_words(text, BANNED_WORDS_LIST):
+                    if contains_banned_words(text=text, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST):
                         self.logger.info(f"Dropping prompt due to banned words in text: '{text}'")
                         continue
                     

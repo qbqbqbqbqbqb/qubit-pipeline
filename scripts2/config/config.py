@@ -1,5 +1,5 @@
 from twitchAPI.type import AuthScope
-from scripts2.utils.file_utils import load_file, get_root, get_file_path, load_word_list
+from scripts2.utils.file_utils import load_file, get_root, get_file_path, load_word_list, load_phrases
 
 BOT_SCOPES = [
     AuthScope.CHAT_READ,
@@ -23,10 +23,18 @@ INSTRUCTIONS_FILENAME = "instructions.txt"
 INSTRUCTIONS_PATH = get_file_path(ROOT, INSTRUCTIONS_FILENAME)
 INSTRUCTIONS_FILE = load_file(INSTRUCTIONS_PATH)
 
-BANNED_WORDS_FILENAME = "banned_words.txt"
-BANNED_WORDS_PATH = get_file_path(ROOT, BANNED_WORDS_FILENAME)
-BANNED_WORDS_LIST = load_word_list(BANNED_WORDS_PATH)
+BLACKLISTED_WORDS_FILENAME = "blacklisted_words.txt"
+BLACKLISTED_WORDS_PATH = get_file_path(ROOT, BLACKLISTED_WORDS_FILENAME)
+BLACKLISTED_WORDS_LIST = load_word_list(BLACKLISTED_WORDS_PATH)
+
+WHITELISTED_WORDS_FILENAME = "whitelisted_words.txt"
+WHITELISTED_WORDS_PATH = get_file_path(ROOT, WHITELISTED_WORDS_FILENAME)
+WHITELISTED_WORDS_LIST = load_word_list(WHITELISTED_WORDS_PATH)
 
 ACRONYMS_LIST_FILENAME = "acronyms.txt"
 ACRONYMS_LIST_PATH = get_file_path(ROOT, ACRONYMS_LIST_FILENAME)
 ACRONYMS_LIST = load_word_list(ACRONYMS_LIST_PATH)
+
+MONOLOGUE_PROMPTS_FILENAME = "monologue_prompts.txt"
+MONOLOGUE_PROMPTS_PATH = get_file_path(ROOT, MONOLOGUE_PROMPTS_FILENAME)
+MONOLOGUE_PROMPTS_FILE = load_phrases(MONOLOGUE_PROMPTS_PATH)

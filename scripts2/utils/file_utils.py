@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 
 from scripts2.utils.log_utils import get_logger
-logger = get_logger("File Utils")
+logger = get_logger("File_Utils")
 
 # Is this the best way of doing this? I don't know. 
 # It's python so I also don't really care. 
@@ -17,6 +17,12 @@ def load_file(path: Path) -> str:
     except Exception as e:
         logger.error(f"Could not load file {path}: {e}")
         raise
+
+def check_file_exists(path: Path) -> bool:
+    if not path or not path.exists():
+        logger.warning(f"File {path} does not exist or is None")
+        return False
+    return True
 
 def get_file_path(root: Path, filename: str) -> Path:
     """
@@ -36,8 +42,12 @@ def load_word_list(path: Path) -> list[str]:
     Loads a list of words from a text file, one word per line.
     Cleans words by keeping only alphabetic characters.
     """
+    if not check_file_exists(path):
+        return []
+
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        content = load_file(path)
+        lines = content.splitlines()
         cleaned_words = []
         for w in lines:
             stripped = w.strip()
@@ -48,4 +58,22 @@ def load_word_list(path: Path) -> list[str]:
         return cleaned_words
     except Exception as e:
         logger.error(f"Error loading word list from {path}: {e}")
+        return []
+    
+def load_phrases(path: Path) -> list[str]:
+    """
+    Loads lines from a file as phrases, preserving spacing and punctuation,
+    but strips leading/trailing whitespace and skips empty lines.
+    """
+    if not check_file_exists(path):
+        return []
+
+    try:
+        content = load_file(path)
+        lines = content.splitlines()
+        phrases = [line.strip() for line in lines if line.strip()]
+        logger.info(f"Loaded {len(phrases)} phrases from {path}")
+        return phrases
+    except Exception as e:
+        logger.error(f"Error loading phrases from {path}: {e}")
         return []

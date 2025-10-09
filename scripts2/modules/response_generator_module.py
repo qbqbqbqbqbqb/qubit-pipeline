@@ -4,7 +4,7 @@ from scripts2.modules.base_module import BaseModule
 from scripts2.managers.model_manager import ModelManager
 from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
                                     MAX_GENERATION_ATTEMPTS,
-                                    INSTRUCTIONS_FILE, BANNED_WORDS_LIST)
+                                    INSTRUCTIONS_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
 from scripts2.managers.prompt_manager import PromptManager
 from scripts2.utils.filter_utils import is_valid_response
 
@@ -51,7 +51,7 @@ class ResponseGeneratorModule(BaseModule):
         text = event_data["text"]
         response = await self._generate_response_with_retries(text)
 
-        is_valid, filtered_response = is_valid_response(response=response, banned_words_list=BANNED_WORDS_LIST)
+        is_valid, filtered_response = is_valid_response(response=response, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
         if not is_valid:
             self.logger.warning("[run] Invalid response, skipping.")
             await asyncio.sleep(1)
