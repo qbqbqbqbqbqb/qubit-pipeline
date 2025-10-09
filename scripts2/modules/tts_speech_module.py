@@ -9,7 +9,8 @@ import pyaudio
 from scripts2.modules.base_module import BaseModule
 from scripts2.managers.tts_manager import TTSManager
 from piper import PiperVoice, SynthesisConfig
-from scripts2.config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME, TTS_DELAY
+from scripts2.config.config import TTS_SPEAKER_NAME, TTS_DELAY
+from scripts2.utils.tts_utils import normalise_text_for_tts
 
 class TtsSpeechModule(BaseModule):
     def __init__(self, signals,  tts_manager, tts_enabled = True):
@@ -83,13 +84,15 @@ class TtsSpeechModule(BaseModule):
             if not text.strip():
                 self.logger.warning("Empty text received for TTS, skipping.")
                 return
+            
+            normalised_text = normalise_text_for_tts(text)
 
-            self.logger.info(f"[TTSModule] Speaking text: {text}")
+            self.logger.info(f"[TTSModule] Speaking text: {normalised_text}")
             self.signals.ai_speaking.set()
 
             speaker_id = self._get_speaker_id()
             syn_config = self._build_synthesis_config(speaker_id)
-            wav_bytes = self._generate_wav_bytes(text, syn_config)
+            wav_bytes = self._generate_wav_bytes(normalised_text, syn_config)
             sample_rate, audio_np = self._decode_wav_bytes(wav_bytes)
 
             loop = asyncio.get_running_loop()
