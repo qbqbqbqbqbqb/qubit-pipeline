@@ -66,7 +66,7 @@ def get_logger(name: str = "default",
             logger.setLevel(logging.DEBUG)
         except Exception as e:
             print(f"Error setting up logger {name}: {e}")
-
+            # Fallback to basic logging
             logging.basicConfig(level=logging.DEBUG)
 
     return logger

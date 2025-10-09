@@ -1,0 +1,127 @@
+import base64
+import hashlib
+import json
+import websocket
+
+from scripts2.config.config import TTS_SUBTITLE_NAME
+
+# === Setup colorlog logger ===
+from scripts.utils.log_utils import get_logger
+logger = get_logger("OBS_Websocket_Controller")
+
+class OBSManager:
+    def __init__(self, settings):
+        self.settings = settings
+        self.obs_password = self.settings.obs_password
+        self.obs_host = self.settings.obs_host
+        self.obs_port = self.settings.obs_port
+        self.url = f"ws://{self.obs_host}:{self.obs_port}"
+
+    def _build_auth_string(self, salt, challenge):
+        """
+        Build the authentication string for OBS WebSocket.
+        Args:
+            salt (str): The salt provided by OBS.
+            challenge (str): The challenge provided by OBS.
+        Returns:
+            str: The computed authentication string.
+        """
+        try:
+            secret = base64.b64encode(
+                hashlib.sha256((self.obs_password + salt).encode('utf-8')).digest()
+            )
+            auth = base64.b64encode(
+                hashlib.sha256(secret + challenge.encode('utf-8')).digest()
+            ).decode('utf-8')
+            return auth
+        except Exception as e:
+            logger.error(f"Error building auth string: {e}")
+            raise
+
+    def connect_to_obs(self):
+        """
+        Establish a WebSocket connection to OBS and authenticate.
+        Returns:
+            websocket.WebSocket: The authenticated WebSocket connection.
+        """
+        try:
+            ws = websocket.WebSocket()
+            ws.connect(self.url)
+            message = ws.recv()
+            result = json.loads(message)
+
+            if 'authentication' in result['d']:
+                auth_payload = {
+                    "op": 1,
+                    "d": {
+                        "rpcVersion": 1,
+                        "authentication": self._build_auth_string(
+                            result['d']['authentication']['salt'],
+                            result['d']['authentication']['challenge']
+                        ),
+                        "eventSubscriptions": 1000
+                    }
+                }
+                ws.send(json.dumps(auth_payload))
+                auth_response = ws.recv()
+                if not auth_response:
+                    raise Exception("Empty response after auth payload")
+            return ws
+        except Exception as e:
+            logger.error(f"Error connecting to OBS: {e}")
+            raise
+
+    def update_subtitle_text_and_style(
+        self,
+        source_name=TTS_SUBTITLE_NAME, new_text: str = "Default", font_face="Arial", font_size=50,
+        width=1920, height=400, valign="center", word_wrap=True
+    ):
+        """
+        Update subtitle text source in OBS with wrapping, font size, vertical alignment, and custom extents.
+        
+        Args:
+            source_name (str): Name of the text source in OBS.
+            new_text (str): Text content to display.
+            font_face (str): Font face name.
+            font_size (int): Font size.
+            width (int): Width of bounding box in pixels.
+            height (int): Height of bounding box in pixels.
+            valign (str): Vertical alignment, "top", "center", or "bottom".
+            word_wrap (bool): Enable or disable word wrapping.
+        """
+        try:
+            ws = self.connect_to_obs()
+            # OBS font flags: 1 = word_wrap enabled
+            font_flags = 1 if word_wrap else 0
+            payload = {
+                "op": 6,
+                "d": {
+                    "requestId": "update_subtitle_text_and_style",
+                    "requestType": "SetInputSettings",
+                    "requestData": {
+                        "inputName": source_name,
+                        "inputSettings": {
+                            "text": new_text,
+                            "font": {
+                                "face": font_face,
+                                "size": font_size,
+                                "flags": font_flags
+                            },
+                            "valign": valign,
+                            "use_custom_extents": True,
+                            "custom_width": width,
+                            "custom_height": height
+                        }
+                    }
+                }
+            }
+            ws.send(json.dumps(payload))
+            response = ws.recv()
+            logger.info(f"Subtitle text and style updated: {response}")
+        except Exception as e:
+            logger.error(f"Failed to update subtitle text and style: {e}")
+        finally:
+            try:
+                ws.close()
+            except:
+                pass
