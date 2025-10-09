@@ -3,6 +3,7 @@ import signal
 import threading
 
 from scripts2.core.signals import Signals
+from scripts2.modules.memory_module import MemoryModule
 from scripts2.modules.monologue_module import MonologueModule
 from scripts2.modules.twitch_module import TwitchModule
 from scripts2.utils.log_utils import get_logger
@@ -59,9 +60,7 @@ async def main():
         response_generation_enabled=True,
     )
 
-    # need to start these before startup message
     response_thread = start_module_in_thread(response_generator_module)
-    tts_thread = start_module_in_thread(tts_speech_module)
 
     try:
         await asyncio.wait_for(signals.response_generator_ready.wait(), timeout=10)
@@ -69,10 +68,23 @@ async def main():
     except asyncio.TimeoutError:
         logger.warning("ResponseGeneratorModule did not start in time")
 
+    memory_module = MemoryModule(
+        memory_enabled=True,
+        response_generator=response_generator_module)
+
+    tts_thread = start_module_in_thread(tts_speech_module)
+
+    try:
+        await asyncio.wait_for(signals.tts_module_ready.wait(), timeout=10)
+        logger.info("tts_speech_module is ready")
+    except asyncio.TimeoutError:
+        logger.warning("tts_speech_module did not start in time")
+
     broker_handler = BrokerEventHandler(
         event_broker,
         tts_speech_module=tts_speech_module,
-        response_generator_module=response_generator_module
+        response_generator_module=response_generator_module,
+        memory_manager=memory_module
     )
     broker_handler.start()
 
@@ -86,6 +98,7 @@ async def main():
             signals=signals,
             settings=settings,
             event_broker=event_broker,
+            memory_manager=memory_module,
             twitch_enabled=True,
             chat_enabled=True,
         ),
@@ -93,7 +106,8 @@ async def main():
             signals=signals,
             event_broker=event_broker,
             monologue_enabled=True,
-        )
+        ),
+        'memory_manager': memory_module
     }
 
     module_threads = {

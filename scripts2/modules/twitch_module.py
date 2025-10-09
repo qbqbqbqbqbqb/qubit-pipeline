@@ -5,11 +5,12 @@ from twitchAPI.chat import Chat, ChatMessage, EventData
 from twitchAPI.oauth import UserAuthenticator
 
 from scripts2.modules.base_module import BaseModule
+from scripts2.utils.filter_utils import contains_banned_words
 from scripts2.utils.log_utils import get_logger
 from scripts2.config.config import STREAMER_SCOPES, BOT_SCOPES
 
 class TwitchModule(BaseModule):
-    def __init__(self, settings, signals, event_broker, twitch_enabled=True, chat_enabled=True):
+    def __init__(self, settings, signals, event_broker, memory_manager, twitch_enabled=True, chat_enabled=True):
         super().__init__(name="TwitchModule")
         self.settings = settings
         self.signals = signals
@@ -19,6 +20,7 @@ class TwitchModule(BaseModule):
         self.twitch_bot = None
         self.twitch_streamer = None
         self.chat = None
+        self.memory_manager = memory_manager
 
     async def start(self):
         if not self.twitch_enabled:
@@ -128,6 +130,16 @@ class TwitchModule(BaseModule):
                 "user": author,
                 "text": message
             })
+
+            if not contains_banned_words(message):
+                if contains_banned_words(author):
+                    author = "Someone"
+
+                self.memory_manager.queue_user_message(
+                    content=message,
+                    user_id=author,
+                    metadata={"type": "twitch_chat"}
+                )
 
             self.logger.info("[_on_message] Chat message published to broker")
 

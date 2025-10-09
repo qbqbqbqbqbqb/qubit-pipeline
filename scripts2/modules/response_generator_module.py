@@ -79,20 +79,23 @@ class ResponseGeneratorModule(BaseModule):
             self.queue.put((priority, count, event_data)), 
             self.loop)
 
-    async def _generate_response(self, raw_prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION):
+    async def _generate_response(self, raw_prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, use_system_prompt=True):
         try:
             self.signals.ai_thinking.set()
+
             if isinstance(raw_prompt, str):
                 prompt = [{"role": "user", "content": raw_prompt}]
             else:
                 prompt = raw_prompt
 
-            prompt_with_system_prompt = self.prompt_manager.build_prompt(prompt)
-            #self.logger.info(f"prompt before template {prompt_with_system_prompt}")
+            if use_system_prompt:
+                prompt_with_system_prompt = self.prompt_manager.build_prompt(prompt)
+            else:
+                prompt_with_system_prompt = prompt
+
             full_prompt = await self._apply_chat_template(chat=prompt_with_system_prompt)
-            #self.logger.info(f"prompt after template {full_prompt}")
-            output = await self._generate_text(full_prompt, max_new_tokens)  
-            
+            output = await self._generate_text(full_prompt, max_new_tokens)
+
             return output
         except Exception:
             self.logger.exception("[generate_response] Exception during generation")
@@ -168,7 +171,7 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.warning(f"Failed generating text. {e}")
             return "Something went wrong!"
         
-    async def _generate_response_with_retries(self, prompt, max_generation_attempts: int = MAX_GENERATION_ATTEMPTS) -> str:
+    async def _generate_response_with_retries(self, prompt, max_generation_attempts: int = MAX_GENERATION_ATTEMPTS, use_system_prompt=True) -> str:
         """
         Generate AI response with error handling and retries.
 
@@ -180,8 +183,8 @@ class ResponseGeneratorModule(BaseModule):
         """
         for attempt in range(1, max_generation_attempts + 1):
             try:
-                response = await self._generate_response(prompt)
-                return response 
+                response = await self._generate_response(prompt, use_system_prompt=use_system_prompt)
+                return response
             except Exception as e:
                 self.logger.exception(f"[Attempt {attempt}/{max_generation_attempts}] Error generating response: {e}")
                 if attempt == max_generation_attempts:

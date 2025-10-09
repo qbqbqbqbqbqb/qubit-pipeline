@@ -6,11 +6,12 @@ from scripts2.utils.filter_utils import contains_banned_words
 from scripts2.config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 
 class BrokerEventHandler:
-    def __init__(self, broker: CentralEventBroker, tts_speech_module, response_generator_module):
+    def __init__(self, broker: CentralEventBroker, tts_speech_module, response_generator_module, memory_manager):
         self.broker = broker
         self.tts_speech_module = tts_speech_module
         self.response_generator_module=response_generator_module
         self._task = None
+        self.memory_manager = memory_manager
         self.logger = get_logger("BrokerEventHandler")
 
     def start(self):
@@ -41,12 +42,18 @@ class BrokerEventHandler:
                     original_full = event.get("original_full", {})
                     user = original_full.get("user", "Someone")
                     original_prompt = event.get("original_prompt", "")
+                    response_text = event.get("response", "")
+                    
+                                
+                    if self.memory_manager:
+                        self.memory_manager.save_conversation_turn(
+                            assistant_content=response_text,
+                            assistant_metadata={"type": event["type"],
+                                                "original_type": original_type}
+                        )
 
                     #self.logger.debug(event)
                     #self.logger.info(f"Original type in response_generated event: '{original_type}'")
-
-                    original_type = event.get("original_type", "")
-                    original_full = event.get("original_full", {})
 
                     source_type = original_full.get("original_type") or original_full.get("source") or ""
 

@@ -2,6 +2,7 @@ import asyncio
 import io
 import itertools
 import json
+import time
 import wave
 
 import numpy as np
@@ -71,8 +72,9 @@ class TtsSpeechModule(BaseModule):
             if not response_text:
                 self.logger.warning(f"[consume_response] No text to speak for event type '{event_type}' in event_data: {event_data}")
                 return
-
+            
             self.logger.info(f"[TTS] Response: {response_text} (from: {event_type})")
+
             await self.speak(response_text)
         except Exception as e:
             self.logger.error(f"[consume_response] TTS error {e}")
