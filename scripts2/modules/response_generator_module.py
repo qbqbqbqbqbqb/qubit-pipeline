@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 import itertools
 from scripts2.modules.base_module import BaseModule
 from scripts2.managers.model_manager import ModelManager
@@ -70,7 +71,7 @@ class ResponseGeneratorModule(BaseModule):
 
             self.logger.info(f"Generated response: {normalised_response}")
     
-    def submit_prompt(self, event_data, priority=10):
+    def submit_prompt(self, event_data, priority=5):
         if self.loop is None:
             self.logger.warning(f"submit_prompt called but loop is None. Ignoring prompt: {event_data}")
             return
@@ -203,3 +204,32 @@ class ResponseGeneratorModule(BaseModule):
 
     async def stop(self):
         await super().stop()
+
+def select_best_prompt(self):
+    now = datetime.utcnow()
+    best = None
+    best_score = -1
+
+    for prompt in self.pending_prompts:
+        ts = datetime.fromisoformat(prompt["timestamp"])
+        age = (now - ts).total_seconds()
+
+        decay_factor = max(0.1, 1 - (age / 60))
+        quality = self.estimate_quality(prompt["text"])
+        score = quality * decay_factor
+
+        if score > best_score:
+            best = prompt
+            best_score = score
+
+    self.pending_prompts.clear()
+    return best
+
+def estimate_quality(self, text: str) -> float:
+    if len(text) > 100:
+        return 1.0
+    if len(text) > 50:
+        return 0.8
+    if "?" in text:
+        return 0.7
+    return 0.4

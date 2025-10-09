@@ -1,8 +1,7 @@
+from collections import deque
 import asyncio
 import io
-import itertools
 import json
-import time
 import wave
 
 import numpy as np
@@ -22,9 +21,9 @@ class TtsSpeechModule(BaseModule):
         self.settings = settings
         self.tts_enabled = tts_enabled
         self.tts_manager = tts_manager
-        self.queue = asyncio.PriorityQueue()
+        self.pairs_queue = deque()
+        self.monologues_queue = deque()
         self.loop = None
-        self.counter = itertools.count()
         self.obs_manager = OBSManager(self.settings)
 
     async def start(self):
@@ -41,43 +40,35 @@ class TtsSpeechModule(BaseModule):
 
         while self._running:
             try:
-                priority, count, event = await self.queue.get()
-                self.logger.debug(f"[TTS] Dequeued item with priority {priority}: {event}")
-                await self.consume_response(event)
-                self.queue.task_done()
+                if self.pairs_queue:
+                    pair = self.pairs_queue.popleft()
+                    self.logger.debug(f"[TTS] Processing pair: {pair}")
+                    await self.speak(pair['user_text'])
+                    await self.speak(pair['response_text'])
+                    for _ in range(3):
+                        if self.monologues_queue:
+                            monologue = self.monologues_queue.popleft()
+                            self.logger.debug(f"[TTS] Processing monologue after pair: {monologue}")
+                            await self.speak(monologue['text'])
+                        else:
+                            break
+                else:
+                    if self.monologues_queue:
+                        monologue = self.monologues_queue.popleft()
+                        self.logger.debug(f"[TTS] Processing monologue: {monologue}")
+                        await self.speak(monologue['text'])
 
                 await asyncio.sleep(TTS_DELAY)
             except Exception as e:
                 self.logger.error(f"[run] Error while handling TTS queue item: {e}")
 
-    def submit_response(self, event_data, priority=10):
-            self.logger.debug(f"[TTS] submit_response called with priority {priority}: {event_data}")
-            count = next(self.counter)
-            asyncio.run_coroutine_threadsafe(
-                self.queue.put((priority, count, event_data)), self._task.get_loop()
-            )
+    def submit_pair(self, pair):
+        self.logger.debug(f"[TTS] submit_pair called: {pair}")
+        self.pairs_queue.append(pair)
 
-    async def consume_response(self, event_data):
-        try:
-            event_type = event_data.get("type", "unknown")
-            response_text = None
-
-            if event_type == "response_generated":
-                response_text = event_data.get("response")
-            elif event_type == "chat_response_input":
-                response_text = event_data.get("response")
-            else:
-                response_text = event_data.get("response")
-
-            if not response_text:
-                self.logger.warning(f"[consume_response] No text to speak for event type '{event_type}' in event_data: {event_data}")
-                return
-            
-            self.logger.info(f"[TTS] Response: {response_text} (from: {event_type})")
-
-            await self.speak(response_text)
-        except Exception as e:
-            self.logger.error(f"[consume_response] TTS error {e}")
+    def submit_monologue(self, monologue):
+        self.logger.debug(f"[TTS] submit_monologue called: {monologue}")
+        self.monologues_queue.append(monologue)
 
     async def speak(self, text: str):
         """

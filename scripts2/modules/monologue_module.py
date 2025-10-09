@@ -1,4 +1,6 @@
 import asyncio
+import datetime
+
 import random
 from scripts2.modules.base_module import BaseModule
 from scripts2.config.config import MONOLOGUE_PROMPTS_FILE
@@ -26,7 +28,8 @@ class MonologueModule(BaseModule):
                 monologue_text = random.choice(self.monologue_texts) 
                 self.event_broker.publish_event({
                     "type": "monologue",
-                    "text": monologue_text
+                    "text": monologue_text,
+                    "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
                 })
                 self.logger.debug(f"Published monologue prompt: {monologue_text}")
                 await asyncio.sleep(5)

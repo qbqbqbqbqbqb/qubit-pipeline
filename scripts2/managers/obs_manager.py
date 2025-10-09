@@ -6,7 +6,7 @@ import websocket
 from scripts2.config.config import TTS_SUBTITLE_NAME
 
 # === Setup colorlog logger ===
-from scripts.utils.log_utils import get_logger
+from scripts2.utils.log_utils import get_logger
 logger = get_logger("OBS_Websocket_Controller")
 
 class OBSManager:

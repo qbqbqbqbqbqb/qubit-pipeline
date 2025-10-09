@@ -1,4 +1,5 @@
 import asyncio
+import datetime
 from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, ChatMessage, EventData
@@ -7,7 +8,7 @@ from twitchAPI.oauth import UserAuthenticator, refresh_access_token
 from scripts2.modules.base_module import BaseModule
 from scripts2.utils.filter_utils import contains_banned_words
 from scripts2.utils.log_utils import get_logger
-from scripts2.config.config import STREAMER_SCOPES, BOT_SCOPES
+from scripts2.config.config import STREAMER_SCOPES, BOT_SCOPES, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 
 class TwitchModule(BaseModule):
     def __init__(self, settings, signals, event_broker, memory_manager, twitch_enabled=True, chat_enabled=True):
@@ -129,11 +130,12 @@ class TwitchModule(BaseModule):
             self.event_broker.publish_event({
                 "type": "twitch_chat",
                 "user": author,
-                "text": message
+                "text": message,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
             })
 
-            if not contains_banned_words(message):
-                if contains_banned_words(author):
+            if not contains_banned_words(message, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST):
+                if contains_banned_words(author, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST):
                     author = "Someone"
 
                 self.memory_manager.queue_user_message(

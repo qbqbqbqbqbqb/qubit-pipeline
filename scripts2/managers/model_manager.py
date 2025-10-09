@@ -13,7 +13,7 @@ def download_nltk_data():
         nltk.download('punkt_tab')
 
 # === Setup colorlog logger ===
-from scripts.utils.log_utils import get_logger
+from scripts2.utils.log_utils import get_logger
 
 
 MODEL_NAME = "Sao10K/L3-8B-Stheno-v3.2"
