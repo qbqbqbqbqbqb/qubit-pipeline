@@ -6,7 +6,7 @@ from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION,
                                     MAX_GENERATION_ATTEMPTS,
                                     INSTRUCTIONS_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
 from scripts2.managers.prompt_manager import PromptManager
-from scripts2.utils.filter_utils import is_valid_response, normalise_response, remove_bot_name, remove_bot_names
+from scripts2.utils.filter_utils import is_valid_response, normalise_response, remove_bot_name
 
 class ResponseGeneratorModule(BaseModule):
     def __init__(self, signals, event_broker, model_manager=ModelManager, response_generation_enabled = True):

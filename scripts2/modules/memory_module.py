@@ -790,3 +790,42 @@ A3: [Answer]
             user_id="ai",
             metadata=assistant_metadata or {}
         )
+
+    def get_recent_reflections(self, limit: int = 20) -> List[Dict]:
+        """Get recent reflections from ChromaDB collection."""
+        try:
+            results = self.collection.get(limit=1000) 
+            reflections = []
+            for i, doc in enumerate(results['documents']):
+                metadata = results['metadatas'][i]
+                reflections.append({
+                    "document": doc,
+                    "metadata": metadata,
+                    "created_at": metadata.get("created_at", "")
+                })
+            reflections.sort(key=lambda x: x['created_at'], reverse=True)
+            return reflections[:limit]
+        except Exception as e:
+            self.logger.error(f"Error retrieving recent reflections: {e}")
+            return []
+
+    def get_recent_memories(self, limit_chat: int = 20, limit_reflections: int = 20) -> Dict[str, List[Dict]]:
+        """Get recent chat history and reflections combined."""
+        chat_history = self.get_recent_chat_history(limit=limit_chat)
+        
+        recent_reflections = self.get_recent_reflections(limit=limit_reflections)
+        
+        formatted_reflections = []
+        for ref in recent_reflections:
+            formatted_reflections.append({
+                "timestamp": ref["metadata"].get("created_at", ""),
+                "role": "reflection",
+                "content": ref["document"],
+                "user_id": "system", 
+                "metadata": ref["metadata"]
+            })
+        
+        return {
+            "chat_history": chat_history,
+            "reflections": formatted_reflections
+        }

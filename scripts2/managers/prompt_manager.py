@@ -1,4 +1,5 @@
 from typing import Optional, List, Dict
+from scripts2.modules.memory_module import MemoryModule
 
 class PromptManager:
     def __init__(self, 
@@ -6,6 +7,7 @@ class PromptManager:
                  mood: str = "energetic",
                  tone: str = "casual and humorous",
                  interaction_level: str = "high",
+                 memory_module: MemoryModule = None
                  ):
 
         self.mood = mood
@@ -34,12 +36,22 @@ class PromptManager:
         return system_prompt
 
     def build_prompt(self, 
-                     base_prompt: str, 
-                     chat_history: Optional[list] = None):
+                     base_prompt: str):
 
         prompt = []        
         system_prompt = self.create_system_prompt()
         prompt.insert(0, {"role": "system", "content": system_prompt})
+
+        if self.memory_module:
+            recent_memories = self.memory_module.get_recent_memories()
+            chat_history = recent_memories.get("chat_history", [])
+            reflections = recent_memories.get("reflections", [])
+
+            prompt.append({"role": "system", "content": "Chat history:"})
+            prompt.extend(chat_history)
+            prompt.append({"role": "system", "content": "Reflections:"})
+            prompt.extend(reflections)
+
         prompt.append({"role": "user", "content": base_prompt})
 
         return prompt

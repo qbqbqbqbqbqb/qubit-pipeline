@@ -2,7 +2,9 @@ import asyncio
 import signal
 import threading
 
+from scripts2.config.config import INSTRUCTIONS_FILE
 from scripts2.core.signals import Signals
+from scripts2.managers.prompt_manager import PromptManager
 from scripts2.modules.memory_module import MemoryModule
 from scripts2.modules.monologue_module import MonologueModule
 from scripts2.modules.twitch_module import TwitchModule
@@ -53,10 +55,12 @@ async def main():
         tts_manager=tts_manager,
         tts_enabled=True
     )
+    prompt_manager = PromptManager(system_instructions=INSTRUCTIONS_FILE)
     response_generator_module = ResponseGeneratorModule(
         signals=signals,
         event_broker=event_broker,
         model_manager=model_manager,
+        prompt_manager=prompt_manager,
         response_generation_enabled=True,
     )
 
@@ -71,7 +75,9 @@ async def main():
     memory_module = MemoryModule(
         memory_enabled=True,
         response_generator=response_generator_module)
-
+    
+            
+    prompt_manager.memory_module = memory_module
     tts_thread = start_module_in_thread(tts_speech_module)
 
     try:
