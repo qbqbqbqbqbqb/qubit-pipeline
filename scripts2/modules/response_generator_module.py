@@ -6,7 +6,7 @@ from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION,
                                     MAX_GENERATION_ATTEMPTS,
                                     INSTRUCTIONS_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
 from scripts2.managers.prompt_manager import PromptManager
-from scripts2.utils.filter_utils import is_valid_response
+from scripts2.utils.filter_utils import is_valid_response, normalise_response
 
 class ResponseGeneratorModule(BaseModule):
     def __init__(self, signals, event_broker, model_manager=ModelManager, response_generation_enabled = True):
@@ -56,15 +56,18 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.warning("[run] Invalid response, skipping.")
             await asyncio.sleep(1)
         else:
+            #not sure whether its best to implement this or not? it can cut off some sentences that would make sense without it
+            # normalised_response = normalise_response(filtered_response)
+            normalised_response = filtered_response
             self.event_broker.publish_event({
                 "type": "response_generated",
-                "response": filtered_response,
+                "response": normalised_response,
                 "original_prompt": event_data.get("text") or event_data.get("message") or event_data,
                 "original_type": event_data.get("type", "unknown"),
                 "original_full": event_data,
             })
 
-            self.logger.info(f"Generated response: {filtered_response}")
+            self.logger.info(f"Generated response: {normalised_response}")
     
     def submit_prompt(self, event_data, priority=10):
         if self.loop is None:

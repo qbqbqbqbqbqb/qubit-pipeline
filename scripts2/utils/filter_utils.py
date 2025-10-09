@@ -19,6 +19,14 @@ def is_valid_response(response: str, blacklist, whitelist: list[str] = None) -> 
         logger.warning(f"[_is_valid_response] Filtered banned words: {response} -> {filtered}")
     return True, filtered
 
+def normalise_response(response: str):
+    """Remove trailing text after the last piece of punctuation"""
+    match = re.search(r'[.!?](?!.*[.!?])', response)
+    if match:
+        return response[:match.end()].strip()
+    else:
+        return response.strip()
+
 def contains_banned_words(text: str, blacklist: list[str], whitelist: list[str] = None) -> bool:
     banned_set = set(word.lower() for word in blacklist)
     whitelist_set = set(word.lower() for word in whitelist or [])
