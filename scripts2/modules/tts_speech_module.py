@@ -1,5 +1,6 @@
 import asyncio
 import io
+import itertools
 import json
 import wave
 
@@ -18,6 +19,7 @@ class TtsSpeechModule(BaseModule):
         self.tts_manager = tts_manager
         self.queue = asyncio.PriorityQueue()
         self.loop = None
+        self.counter = itertools.count()
 
     async def start(self):
         if not self.tts_enabled:
@@ -26,12 +28,14 @@ class TtsSpeechModule(BaseModule):
         self.loop = asyncio.get_running_loop()
         await super().start()
 
+        self.signals.tts_module_ready.set()
+
     async def run(self):
         self.logger.info("[run] TTS module running...")
 
         while self._running:
             try:
-                priority, event = await self.queue.get()
+                priority, count, event = await self.queue.get()
                 self.logger.debug(f"[TTS] Dequeued item with priority {priority}: {event}")
                 await self.consume_response(event)
                 self.queue.task_done()
@@ -42,8 +46,9 @@ class TtsSpeechModule(BaseModule):
 
     def submit_response(self, event_data, priority=10):
             self.logger.debug(f"[TTS] submit_response called with priority {priority}: {event_data}")
+            count = next(self.counter)
             asyncio.run_coroutine_threadsafe(
-                self.queue.put((priority, event_data)), self._task.get_loop()
+                self.queue.put((priority, count, event_data)), self._task.get_loop()
             )
 
     async def consume_response(self, event_data):
@@ -80,8 +85,7 @@ class TtsSpeechModule(BaseModule):
                 return
 
             self.logger.info(f"[TTSModule] Speaking text: {text}")
-            if self.signals:
-                self.signals.ai_speaking = True
+            self.signals.ai_speaking.set()
 
             speaker_id = self._get_speaker_id()
             syn_config = self._build_synthesis_config(speaker_id)
@@ -94,7 +98,7 @@ class TtsSpeechModule(BaseModule):
         except Exception as e:
             self.logger.error(f"Error in TTS speak: {e}")
         finally:
-            self.signals.ai_speaking = False
+            self.signals.ai_speaking.clear()
 
     def _get_speaker_id(self) -> int:
         json_path = self.tts_manager.model_path.with_suffix(".onnx.json")

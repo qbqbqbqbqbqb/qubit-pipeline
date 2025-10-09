@@ -32,8 +32,10 @@ class ResponseGeneratorModule(BaseModule):
         self.tokeniser = self.model_manager.tokeniser
 
         self.loop = asyncio.get_running_loop()
+        self.logger.info(f"Assigned event loop: {self.loop}")
 
         await super().start()
+        self.signals.response_generator_ready.set()
 
     async def run(self):
         while self._running:
@@ -59,6 +61,10 @@ class ResponseGeneratorModule(BaseModule):
         self.logger.info(f"Generated response: {response}")
     
     def submit_prompt(self, event_data, priority=10):
+        if self.loop is None:
+            self.logger.warning(f"submit_prompt called but loop is None. Ignoring prompt: {event_data}")
+            return
+        self.logger.info(f"ResponseGenerator received prompt: {event_data} with priority {priority}")
         count = next(self.counter)
         asyncio.run_coroutine_threadsafe(
             self.queue.put((priority, count, event_data)), 
@@ -66,6 +72,7 @@ class ResponseGeneratorModule(BaseModule):
 
     async def _generate_response(self, raw_prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION):
         try:
+            self.signals.ai_thinking.set()
             if isinstance(raw_prompt, str):
                 prompt = [{"role": "user", "content": raw_prompt}]
             else:
@@ -82,7 +89,7 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.exception("[generate_response] Exception during generation")
             return "Something went wrong!"
         finally:
-            self.signals.ai_thinking = False
+            self.signals.ai_thinking.clear()
 
     def _get_generation_config(self, max_tokens: int):
         """
