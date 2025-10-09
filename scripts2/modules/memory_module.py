@@ -20,7 +20,7 @@ class MemoryModule(BaseModule):
         super().__init__("MemoryModule")
         self.memory_enabled = memory_enabled
         self.response_generator = response_generator
-
+        self._last_memory_snapshot = None
 
         self.queue = asyncio.Queue()
         self.loop = None
@@ -752,7 +752,9 @@ A3: [Answer]
     async def _handle_memory_event(self, data: Dict):
         self.add_conversation_item_sync(**data)  # or call your async version if needed
         self.message_counter += 1
-
+        
+        self.update_memories_if_changed()
+        
         if self.message_counter >= self.reflection_threshold:
             self.logger.info(f"[Reflection] Triggering after {self.message_counter} messages")
             asyncio.create_task(self._perform_reflection())
@@ -829,3 +831,16 @@ A3: [Answer]
             "chat_history": chat_history,
             "reflections": formatted_reflections
         }
+    
+    def update_memories_if_changed(self):
+        current_snapshot = self.get_recent_memories()
+
+        snapshot_id = str(current_snapshot)
+
+        if snapshot_id != self._last_memory_snapshot:
+            self._last_memory_snapshot = snapshot_id
+            self.event_broker.publish_event({
+                "type": "memories_updated",
+                "data": current_snapshot
+            })
+

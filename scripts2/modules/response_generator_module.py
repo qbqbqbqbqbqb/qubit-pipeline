@@ -9,13 +9,13 @@ from scripts2.managers.prompt_manager import PromptManager
 from scripts2.utils.filter_utils import is_valid_response, normalise_response, remove_bot_name
 
 class ResponseGeneratorModule(BaseModule):
-    def __init__(self, signals, event_broker, model_manager=ModelManager, response_generation_enabled = True):
+    def __init__(self, signals, event_broker, model_manager=ModelManager, prompt_manager:PromptManager = None, response_generation_enabled = True):
         super().__init__(name="ResponseGeneratorModule")
         self.signals = signals
         self.event_broker = event_broker
         self.model_manager = model_manager
         self.response_generation_enabled = response_generation_enabled
-        self.prompt_manager = PromptManager(system_instructions=INSTRUCTIONS_FILE)
+        self.prompt_manager = prompt_manager
         
         self.counter = itertools.count()
         self.queue = asyncio.PriorityQueue()
@@ -85,16 +85,16 @@ class ResponseGeneratorModule(BaseModule):
             self.signals.ai_thinking.set()
 
             if isinstance(raw_prompt, str):
-                prompt = [{"role": "user", "content": raw_prompt}]
+                base_prompt = raw_prompt
             else:
-                prompt = raw_prompt
+                base_prompt = raw_prompt[-1]["content"] 
 
             if use_system_prompt:
-                prompt_with_system_prompt = self.prompt_manager.build_prompt(prompt)
+                prompt = self.prompt_manager.build_prompt(base_prompt)
             else:
-                prompt_with_system_prompt = prompt
+                prompt = base_prompt
 
-            full_prompt = await self._apply_chat_template(chat=prompt_with_system_prompt)
+            full_prompt = await self._apply_chat_template(chat=prompt)
             output = await self._generate_text(full_prompt, max_new_tokens)
 
             return output

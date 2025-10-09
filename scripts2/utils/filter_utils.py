@@ -34,6 +34,7 @@ def remove_bot_name(response: str):
     bot_name_lower = BOT_NAME.lower()
     if response.lower().startswith(f"{bot_name_lower}:"):
         response = response[len(f"{bot_name_lower}:"):].lstrip()
+    return response
 
 def contains_banned_words(text: str, blacklist: list[str], whitelist: list[str] = None) -> bool:
     banned_set = set(word.lower() for word in blacklist)

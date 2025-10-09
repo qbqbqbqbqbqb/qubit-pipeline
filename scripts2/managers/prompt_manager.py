@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict
-from scripts2.modules.memory_module import MemoryModule
+from scripts2.core.broker_event_handler import BrokerEventHandler
 
 class PromptManager:
     def __init__(self, 
@@ -7,9 +7,9 @@ class PromptManager:
                  mood: str = "energetic",
                  tone: str = "casual and humorous",
                  interaction_level: str = "high",
-                 memory_module: MemoryModule = None
                  ):
 
+        self.cached_memories = {"chat_history": [], "reflections": []}
         self.mood = mood
         self.tone = tone
         self.interaction_level = interaction_level
@@ -35,23 +35,22 @@ class PromptManager:
 
         return system_prompt
 
-    def build_prompt(self, 
-                     base_prompt: str):
-
-        prompt = []        
+    def build_prompt(self, base_prompt: str):
+        prompt = []
         system_prompt = self.create_system_prompt()
-        prompt.insert(0, {"role": "system", "content": system_prompt})
+        prompt.append({"role": "system", "content": system_prompt})
 
-        if self.memory_module:
-            recent_memories = self.memory_module.get_recent_memories()
-            chat_history = recent_memories.get("chat_history", [])
-            reflections = recent_memories.get("reflections", [])
+        chat_history = self.cached_memories.get("chat_history", [])
+        reflections = self.cached_memories.get("reflections", [])
 
-            prompt.append({"role": "system", "content": "Chat history:"})
-            prompt.extend(chat_history)
-            prompt.append({"role": "system", "content": "Reflections:"})
-            prompt.extend(reflections)
+        prompt.append({"role": "system", "content": "Chat history:"})
+        prompt.extend(chat_history)
+        prompt.append({"role": "system", "content": "Reflections:"})
+        prompt.extend(reflections)
 
         prompt.append({"role": "user", "content": base_prompt})
-
         return prompt
+    
+    def handle_memory_update(self, memory_data: Dict):
+        """Update internal memory cache when new memory data arrives."""
+        self.cached_memories = memory_data

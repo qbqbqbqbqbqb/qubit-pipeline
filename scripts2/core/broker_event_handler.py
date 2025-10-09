@@ -88,6 +88,10 @@ class BrokerEventHandler:
                     else:
                         priority = 10
                     self.response_generator_module.submit_prompt(event, priority)
+                elif event["type"] == "memories_updated":
+                    if self.response_generator_module and hasattr(self.response_generator_module.prompt_manager, "handle_memory_update"):
+                        self.response_generator_module.prompt_manager.handle_memory_update(event["data"])
+
                 else:
                     pass
             except Exception as e:
