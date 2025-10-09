@@ -56,7 +56,7 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.warning("[run] Invalid response, skipping.")
             await asyncio.sleep(1)
         else:
-            #not sure whether its best to implement this or not? it can cut off some sentences that would make sense without it
+            # not sure whether its best to implement this or not? it can cut off some sentences that would make sense without it
             # normalised_response = normalise_response(filtered_response)
             normalised_response = filtered_response
             self.event_broker.publish_event({

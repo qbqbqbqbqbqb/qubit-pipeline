@@ -48,6 +48,7 @@ async def main():
 
     tts_speech_module = TtsSpeechModule(
         signals=signals,
+        settings = settings,
         tts_manager=tts_manager,
         tts_enabled=True
     )

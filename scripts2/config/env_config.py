@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     obs_host: str
     obs_port: str
     obs_password: str
-    tts_subtitle_name: str
-    model_name: str
-    scene_name: str
 
     model_config = ConfigDict(env_file=".env")
 

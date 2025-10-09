@@ -11,16 +11,20 @@ from scripts2.managers.tts_manager import TTSManager
 from piper import PiperVoice, SynthesisConfig
 from scripts2.config.config import TTS_SPEAKER_NAME, TTS_DELAY
 from scripts2.utils.tts_utils import normalise_text_for_tts
+from scripts2.managers.obs_manager import OBSManager
+
 
 class TtsSpeechModule(BaseModule):
-    def __init__(self, signals,  tts_manager, tts_enabled = True):
+    def __init__(self, signals, settings, tts_manager, tts_enabled = True):
         super().__init__("TTSSpeechModule")
         self.signals = signals
+        self.settings = settings
         self.tts_enabled = tts_enabled
         self.tts_manager = tts_manager
         self.queue = asyncio.PriorityQueue()
         self.loop = None
         self.counter = itertools.count()
+        self.obs_manager = OBSManager(self.settings)
 
     async def start(self):
         if not self.tts_enabled:
@@ -85,6 +89,10 @@ class TtsSpeechModule(BaseModule):
                 self.logger.warning("Empty text received for TTS, skipping.")
                 return
             
+            self.obs_manager.update_subtitle_text_and_style(
+                new_text=text
+            )
+
             normalised_text = normalise_text_for_tts(text)
 
             self.logger.info(f"[TTSModule] Speaking text: {normalised_text}")
