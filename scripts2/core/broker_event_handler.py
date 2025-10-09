@@ -1,6 +1,7 @@
 import asyncio
 
 from scripts2.core.central_event_broker import CentralEventBroker
+from scripts2.utils.log_utils import get_logger
 
 class BrokerEventHandler:
     def __init__(self, broker: CentralEventBroker, tts_speech_module, response_generator_module):
@@ -8,6 +9,7 @@ class BrokerEventHandler:
         self.tts_speech_module = tts_speech_module
         self.response_generator_module=response_generator_module
         self._task = None
+        self.logger = get_logger("BrokerEventHandler")
 
     def start(self):
         self._task = asyncio.run_coroutine_threadsafe(self._event_handler(), self.broker.loop)
@@ -30,11 +32,39 @@ class BrokerEventHandler:
                         "original_type": event_type
                     })
                 elif event["type"] == "response_generated":
-                    if event["original_type"] == "startup":
+                    original_type = event.get("original_type", "")
+                    original_full = event.get("original_full", {})
+                    user = original_full.get("user", "Someone")
+                    original_prompt = event.get("original_prompt", "")
+
+                    #self.logger.debug(event)
+                    #self.logger.info(f"Original type in response_generated event: '{original_type}'")
+
+                    original_type = event.get("original_type", "")
+                    original_full = event.get("original_full", {})
+
+                    source_type = original_full.get("original_type") or original_full.get("source") or ""
+
+                    if source_type == "startup":
                         priority = 1
                     else:
                         priority = 10
-                    await self.tts_speech_module.consume_response(event)
+                    
+                    if source_type == "twitch_chat":
+                        chat_msg = f"{user} said: {original_prompt}"
+                        original_chat_event = {
+                            "type": "chat_response_input",
+                            "response": chat_msg,
+                            "original_prompt": original_prompt,
+                            "original_type": "twitch_chat",
+                            "original_full": original_full,
+                        }
+                        self.tts_speech_module.submit_response(original_chat_event, priority - 1)
+                        self.logger.debug(f"[BrokerEventHandler] Queued user message for TTS: '{chat_msg}' with priority {priority - 1}")
+
+                    self.tts_speech_module.submit_response(event, priority)
+                    self.logger.debug(f"[BrokerEventHandler] Queued bot response for TTS: '{event.get('response')}' with priority {priority}")
+
                 elif event["type"] == "response_prompt":
                     if event["original_type"] == "startup":
                         priority = 1

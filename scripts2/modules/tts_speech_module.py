@@ -32,6 +32,7 @@ class TtsSpeechModule(BaseModule):
         while self._running:
             try:
                 priority, event = await self.queue.get()
+                self.logger.debug(f"[TTS] Dequeued item with priority {priority}: {event}")
                 await self.consume_response(event)
                 self.queue.task_done()
 
@@ -40,20 +41,32 @@ class TtsSpeechModule(BaseModule):
                 self.logger.error(f"[run] Error while handling TTS queue item: {e}")
 
     def submit_response(self, event_data, priority=10):
+            self.logger.debug(f"[TTS] submit_response called with priority {priority}: {event_data}")
             asyncio.run_coroutine_threadsafe(
                 self.queue.put((priority, event_data)), self._task.get_loop()
             )
 
     async def consume_response(self, event_data):
         try:
-            response_text = event_data["response"]
-            original_type = event_data.get("original_type", "unknown")
+            event_type = event_data.get("type", "unknown")
+            response_text = None
 
-            self.logger.info(f"[TTS] Response: {response_text} (from: {original_type})")
+            if event_type == "response_generated":
+                response_text = event_data.get("response")
+            elif event_type == "chat_response_input":
+                response_text = event_data.get("response")
+            else:
+                response_text = event_data.get("response")
+
+            if not response_text:
+                self.logger.warning(f"[consume_response] No text to speak for event type '{event_type}' in event_data: {event_data}")
+                return
+
+            self.logger.info(f"[TTS] Response: {response_text} (from: {event_type})")
             await self.speak(response_text)
         except Exception as e:
             self.logger.error(f"[consume_response] TTS error {e}")
-    
+
     async def speak(self, text: str):
         """
         Speak the given text with TTS, update subtitles, and play audio asynchronously.

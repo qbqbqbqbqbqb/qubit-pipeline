@@ -72,9 +72,9 @@ class ResponseGeneratorModule(BaseModule):
                 prompt = raw_prompt
 
             prompt_with_system_prompt = self.prompt_manager.build_prompt(prompt)
-            self.logger.info(f"prompt before template {prompt_with_system_prompt}")
+            #self.logger.info(f"prompt before template {prompt_with_system_prompt}")
             full_prompt = await self._apply_chat_template(chat=prompt_with_system_prompt)
-            self.logger.info(f"prompt after template {full_prompt}")
+            #self.logger.info(f"prompt after template {full_prompt}")
             output = await self._generate_text(full_prompt, max_new_tokens)  
             
             return output

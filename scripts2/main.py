@@ -89,7 +89,7 @@ async def main():
         'monologue': MonologueModule(
             signals=signals,
             event_broker=event_broker,
-            monologue_enabled=True,
+            monologue_enabled=False,
         ),
         'response':response_generator_module,
         'tts':tts_speech_module
