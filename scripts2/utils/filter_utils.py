@@ -1,7 +1,9 @@
 import difflib
 from pathlib import Path
 import re
-from scripts.utils.log_utils import get_logger
+from scripts2.utils.log_utils import get_logger
+from scripts2.config.config import BOT_NAME
+
 logger = get_logger("Filter_Utils")
 
 def is_valid_response(response: str, blacklist, whitelist: list[str] = None) -> tuple[bool, str]:
@@ -26,6 +28,12 @@ def normalise_response(response: str):
         return response[:match.end()].strip()
     else:
         return response.strip()
+    
+def remove_bot_name(response: str):
+    """Remove 'Bot:' from speech if it adds it"""
+    bot_name_lower = BOT_NAME.lower()
+    if response.lower().startswith(f"{bot_name_lower}:"):
+        response = response[len(f"{bot_name_lower}:"):].lstrip()
 
 def contains_banned_words(text: str, blacklist: list[str], whitelist: list[str] = None) -> bool:
     banned_set = set(word.lower() for word in blacklist)
@@ -41,7 +49,6 @@ def contains_banned_words(text: str, blacklist: list[str], whitelist: list[str] 
             if banned in clean_word:
                 return True
     return False
-
 
 def filter_banned_words(text: str, blacklist: list[str], whitelist: list[str] = None) -> str:
     banned_set = set(word.lower() for word in blacklist)

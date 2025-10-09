@@ -12,9 +12,11 @@ from chromadb.config import Settings
 
 from scripts2.modules.base_module import BaseModule
 from scripts2.core.memory import Memory
+from scripts2.config.config import MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION
+from  scripts2.modules.response_generator_module import ResponseGeneratorModule
 
 class MemoryModule(BaseModule):
-    def __init__(self, base_path: str = ".", memory_enabled = True,  response_generator=None):
+    def __init__(self, base_path: str = ".", memory_enabled = True,  response_generator: ResponseGeneratorModule = None):
         super().__init__("MemoryModule")
         self.memory_enabled = memory_enabled
         self.response_generator = response_generator
@@ -425,8 +427,9 @@ A3: [Answer]
 
         try:
             reflection_response = await self.response_generator._generate_response_with_retries(
-            reflection_messages,
-            use_system_prompt=False 
+            prompt=reflection_messages,
+            use_system_prompt=False,
+            max_new_tokens= MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION,
             )
 
             self.logger.info(f"Generated reflection: {reflection_response[:100]}...")

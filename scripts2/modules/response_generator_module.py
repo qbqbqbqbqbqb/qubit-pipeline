@@ -6,7 +6,7 @@ from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION,
                                     MAX_GENERATION_ATTEMPTS,
                                     INSTRUCTIONS_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
 from scripts2.managers.prompt_manager import PromptManager
-from scripts2.utils.filter_utils import is_valid_response, normalise_response
+from scripts2.utils.filter_utils import is_valid_response, normalise_response, remove_bot_name, remove_bot_names
 
 class ResponseGeneratorModule(BaseModule):
     def __init__(self, signals, event_broker, model_manager=ModelManager, response_generation_enabled = True):
@@ -56,9 +56,10 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.warning("[run] Invalid response, skipping.")
             await asyncio.sleep(1)
         else:
+            response_without_intro = remove_bot_name(filtered_response)
             # not sure whether its best to implement this or not? it can cut off some sentences that would make sense without it
-            # normalised_response = normalise_response(filtered_response)
-            normalised_response = filtered_response
+            # normalised_response = normalise_response(response_without_intro)
+            normalised_response = response_without_intro
             self.event_broker.publish_event({
                 "type": "response_generated",
                 "response": normalised_response,
@@ -171,7 +172,7 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.warning(f"Failed generating text. {e}")
             return "Something went wrong!"
         
-    async def _generate_response_with_retries(self, prompt, max_generation_attempts: int = MAX_GENERATION_ATTEMPTS, use_system_prompt=True) -> str:
+    async def _generate_response_with_retries(self, prompt, max_generation_attempts: int = MAX_GENERATION_ATTEMPTS, use_system_prompt=True, max_new_tokens=MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION) -> str:
         """
         Generate AI response with error handling and retries.
 
