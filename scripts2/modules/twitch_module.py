@@ -6,7 +6,7 @@ from twitchAPI.oauth import UserAuthenticator
 
 from scripts2.modules.base_module import BaseModule
 from scripts2.utils.log_utils import get_logger
-from scripts2.config.config import streamer_scopes, bot_scopes
+from scripts2.config.config import STREAMER_SCOPES, BOT_SCOPES
 
 class TwitchModule(BaseModule):
     def __init__(self, settings, signals, event_broker, twitch_enabled=True, chat_enabled=True):
@@ -73,7 +73,7 @@ class TwitchModule(BaseModule):
     async def _authenticate_bot_account(self):
         if not self.settings.bot_oauth_token or not self.settings.bot_refresh_token:
             self.logger.info("[_authenticate_streamer_account] No streamer OAuth token found, authenticating interactively...")
-            auth = UserAuthenticator(self.twitch_bot, bot_scopes)
+            auth = UserAuthenticator(self.twitch_bot, BOT_SCOPES)
             token, refresh_token = await auth.authenticate()
             self.settings.bot_oauth_token = token
             self.settings.bot_refresh_token = refresh_token
@@ -82,14 +82,14 @@ class TwitchModule(BaseModule):
             self.twitch_bot = Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
             await self.twitch_bot.set_user_authentication(
                 self.settings.bot_oauth_token,
-                bot_scopes,
+                BOT_SCOPES,
                 self.settings.bot_refresh_token
             )
 
     async def _authenticate_streamer_account(self):
         if not self.settings.streamer_oauth_token or not self.settings.streamer_refresh_token:
             self.logger.info("[_authenticate_streamer_account] No streamer OAuth token found, authenticating interactively...")
-            auth = UserAuthenticator(self.twitch_bot, streamer_scopes)
+            auth = UserAuthenticator(self.twitch_bot, STREAMER_SCOPES)
             token, refresh_token = await auth.authenticate()
             self.settings.streamer_oauth_token = token
             self.settings.streamer_refresh_token = refresh_token
@@ -98,7 +98,7 @@ class TwitchModule(BaseModule):
             self.twitch_streamer = Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
             await self.twitch_streamer.set_user_authentication(
                 self.settings.streamer_oauth_token,
-                streamer_scopes,
+                STREAMER_SCOPES,
                 self.settings.streamer_refresh_token
             )
     

@@ -2,8 +2,9 @@ import asyncio
 import itertools
 from scripts2.modules.base_module import BaseModule
 from scripts2.managers.model_manager import ModelManager
-from scripts2.config.config import MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, MAX_GENERATION_ATTEMPTS
-
+from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
+                                    MAX_GENERATION_ATTEMPTS,
+                                    INSTRUCTIONS_FILE)
 from scripts2.managers.prompt_manager import PromptManager
 
 class ResponseGeneratorModule(BaseModule):
@@ -13,8 +14,7 @@ class ResponseGeneratorModule(BaseModule):
         self.event_broker = event_broker
         self.model_manager = model_manager
         self.response_generation_enabled = response_generation_enabled
-        self.system_instructions = "You are an AI Vtuber responding to a chat."
-        self.prompt_manager = PromptManager(self.system_instructions)
+        self.prompt_manager = PromptManager(system_instructions=INSTRUCTIONS_FILE)
         
         self.counter = itertools.count()
         self.queue = asyncio.PriorityQueue()
