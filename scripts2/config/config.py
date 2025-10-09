@@ -1,5 +1,5 @@
 from twitchAPI.type import AuthScope
-from scripts2.utils.file_utils import load_file, get_root, get_file_path
+from scripts2.utils.file_utils import load_file, get_root, get_file_path, load_word_list
 
 BOT_SCOPES = [
     AuthScope.CHAT_READ,
@@ -22,3 +22,7 @@ ROOT = get_root()
 INSTRUCTIONS_FILENAME = "instructions.txt"
 INSTRUCTIONS_PATH = get_file_path(ROOT, INSTRUCTIONS_FILENAME)
 INSTRUCTIONS_FILE = load_file(INSTRUCTIONS_PATH)
+
+BANNED_WORDS_FILENAME = "banned_words.txt"
+BANNED_WORDS_PATH = get_file_path(ROOT, BANNED_WORDS_FILENAME)
+BANNED_WORDS_LIST = load_word_list(BANNED_WORDS_PATH)

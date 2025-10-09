@@ -4,8 +4,9 @@ from scripts2.modules.base_module import BaseModule
 from scripts2.managers.model_manager import ModelManager
 from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
                                     MAX_GENERATION_ATTEMPTS,
-                                    INSTRUCTIONS_FILE)
+                                    INSTRUCTIONS_FILE, BANNED_WORDS_LIST)
 from scripts2.managers.prompt_manager import PromptManager
+from scripts2.utils.filter_utils import is_valid_response
 
 class ResponseGeneratorModule(BaseModule):
     def __init__(self, signals, event_broker, model_manager=ModelManager, response_generation_enabled = True):
@@ -50,15 +51,20 @@ class ResponseGeneratorModule(BaseModule):
         text = event_data["text"]
         response = await self._generate_response_with_retries(text)
 
-        self.event_broker.publish_event({
-            "type": "response_generated",
-            "response": response,
-            "original_prompt": event_data.get("text") or event_data.get("message") or event_data,
-            "original_type": event_data.get("type", "unknown"),
-            "original_full": event_data,
-        })
+        is_valid, filtered_response = is_valid_response(response=response, banned_words_list=BANNED_WORDS_LIST)
+        if not is_valid:
+            self.logger.warning("[run] Invalid response, skipping.")
+            await asyncio.sleep(1)
+        else:
+            self.event_broker.publish_event({
+                "type": "response_generated",
+                "response": filtered_response,
+                "original_prompt": event_data.get("text") or event_data.get("message") or event_data,
+                "original_type": event_data.get("type", "unknown"),
+                "original_full": event_data,
+            })
 
-        self.logger.info(f"Generated response: {response}")
+            self.logger.info(f"Generated response: {filtered_response}")
     
     def submit_prompt(self, event_data, priority=10):
         if self.loop is None:

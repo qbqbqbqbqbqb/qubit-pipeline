@@ -2,6 +2,8 @@ import asyncio
 
 from scripts2.core.central_event_broker import CentralEventBroker
 from scripts2.utils.log_utils import get_logger
+from scripts2.utils.filter_utils import contains_banned_words
+from scripts2.config.config import BANNED_WORDS_LIST
 
 class BrokerEventHandler:
     def __init__(self, broker: CentralEventBroker, tts_speech_module, response_generator_module):
@@ -18,11 +20,13 @@ class BrokerEventHandler:
         async for event in self.broker.subscribe():
             event_type = event.get("type")
             try:
-                if event_type in ("monologue", "startup", "twitch_chat"):
-                    user = event.get("user")
+                if event_type in ("twitch_chat"):
+                    user = event.get("user", "someone")
+                    if contains_banned_words(user, BANNED_WORDS_LIST):
+                        user = "Someone"
                     
-                    if event_type in ("monologue", "startup") and not user:
-                        user = "system"
+                if event_type in ("monologue", "startup"):
+                    user = "system"
 
                     self.broker.publish_event({
                         "type": "response_prompt",
@@ -31,6 +35,7 @@ class BrokerEventHandler:
                         "text": event.get("text"),
                         "original_type": event_type
                     })
+
                 elif event["type"] == "response_generated":
                     original_type = event.get("original_type", "")
                     original_full = event.get("original_full", {})
@@ -66,6 +71,11 @@ class BrokerEventHandler:
                     self.logger.debug(f"[BrokerEventHandler] Queued bot response for TTS: '{event.get('response')}' with priority {priority}")
 
                 elif event["type"] == "response_prompt":
+                    text = event.get("text", "")
+                    if contains_banned_words(text, BANNED_WORDS_LIST):
+                        self.logger.info(f"Dropping prompt due to banned words in text: '{text}'")
+                        continue
+                    
                     if event["original_type"] == "startup":
                         priority = 1
                     else:

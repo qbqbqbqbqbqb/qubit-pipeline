@@ -38,7 +38,7 @@ class TwitchModule(BaseModule):
     
         while self._running:
             self.logger.info("[run] Twitch module is running...")
-            await asyncio.sleep(2)
+            await asyncio.sleep(600)
 
     async def disconnect(self):
         self.logger.info("[disconnect] Disconnecting TwitchClient...")
