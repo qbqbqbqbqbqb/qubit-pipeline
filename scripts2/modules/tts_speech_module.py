@@ -157,3 +157,5 @@ class TtsSpeechModule(BaseModule):
         stream.close()
         pa.terminate()
 
+    async def stop(self):
+        await super().stop()

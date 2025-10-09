@@ -83,16 +83,10 @@ class ResponseGeneratorModule(BaseModule):
     async def _generate_response(self, raw_prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, use_system_prompt=True):
         try:
             self.signals.ai_thinking.set()
-
-            if isinstance(raw_prompt, str):
-                base_prompt = raw_prompt
-            else:
-                base_prompt = raw_prompt[-1]["content"] 
-
             if use_system_prompt:
-                prompt = self.prompt_manager.build_prompt(base_prompt)
+                prompt = self.prompt_manager.build_prompt(raw_prompt)
             else:
-                prompt = base_prompt
+                prompt = raw_prompt
 
             full_prompt = await self._apply_chat_template(chat=prompt)
             output = await self._generate_text(full_prompt, max_new_tokens)
@@ -206,3 +200,6 @@ class ResponseGeneratorModule(BaseModule):
         except Exception as e:
             self.logger.error(f"Error applying chat template: {e}")
             raise
+
+    async def stop(self):
+        await super().stop()

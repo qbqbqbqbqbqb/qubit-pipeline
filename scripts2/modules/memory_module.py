@@ -754,7 +754,7 @@ A3: [Answer]
         self.message_counter += 1
         
         self.update_memories_if_changed()
-        
+
         if self.message_counter >= self.reflection_threshold:
             self.logger.info(f"[Reflection] Triggering after {self.message_counter} messages")
             asyncio.create_task(self._perform_reflection())
@@ -844,3 +844,5 @@ A3: [Answer]
                 "data": current_snapshot
             })
 
+    async def stop(self):
+        await super().stop()

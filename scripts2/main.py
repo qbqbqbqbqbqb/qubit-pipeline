@@ -113,7 +113,7 @@ async def main():
             event_broker=event_broker,
             monologue_enabled=True,
         ),
-        'memory_manager': memory_module
+        'memory_manager': memory_module,
     }
 
     module_threads = {

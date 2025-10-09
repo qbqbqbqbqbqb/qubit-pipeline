@@ -175,7 +175,5 @@ class TwitchClient(BaseModule):
         self.logger.info("[disconnect] Disconnected successfully.")
 
     async def stop(self):
-        self.logger.info("[stop] Stopping TwitchClient module...")
-        self._running = False
         await self.disconnect()
         await super().stop()
