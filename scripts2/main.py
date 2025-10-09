@@ -6,7 +6,6 @@ import threading
 from scripts2.core.signals import Signals
 from scripts2.modules.monologue_module import MonologueModule
 from scripts2.modules.twitch_module import TwitchModule
-from scripts2.managers.queue_manager import QueueManager
 from scripts2.utils.log_utils import get_logger
 from scripts2.config.env_config import settings
 from scripts2.core.central_event_broker import CentralEventBroker 
@@ -49,22 +48,30 @@ async def main():
     setup_signal_handlers(signals)
 
     event_broker = CentralEventBroker()
-
-    queue_manager = QueueManager()
-    await queue_manager.start_merging_queues()
     
     tts_manager = TTSManager()
+    
+    model_manager = ModelManager()
     
     tts_speech_module = TtsSpeechModule(
     signals=signals,
     tts_manager=tts_manager,
     tts_enabled=True
     )
+    
+    response_generator_module = ResponseGeneratorModule(
+            signals=signals,
+            event_broker=event_broker,
+            model_manager=model_manager,
+            response_generation_enabled=True,
+        )
+    
 
-    broker_handler = BrokerEventHandler(event_broker, queue_manager, tts_speech_module=tts_speech_module)
+    broker_handler = BrokerEventHandler(event_broker, 
+                                        tts_speech_module=tts_speech_module,
+                                        response_generator_module=response_generator_module)
     broker_handler.start()
 
-    model_manager = ModelManager()
 
     event_broker.publish_event({
         "type": "startup",
@@ -84,13 +91,7 @@ async def main():
             event_broker=event_broker,
             monologue_enabled=True,
         ),
-        'response':ResponseGeneratorModule(
-            signals=signals,
-            event_broker=event_broker,
-            queue_manager=queue_manager,
-            model_manager=model_manager,
-            response_generation_enabled=True,
-        ),
+        'response':response_generator_module,
         'tts':tts_speech_module
     }
 

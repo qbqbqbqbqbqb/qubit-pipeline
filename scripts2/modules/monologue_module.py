@@ -1,7 +1,6 @@
 import asyncio
 import random
 from scripts2.modules.base_module import BaseModule
-from scripts2.managers.queue_manager import QueueManager
 
 class MonologueModule(BaseModule):
     def __init__(self, signals, event_broker, monologue_enabled=True):

@@ -6,7 +6,6 @@ from twitchAPI.oauth import UserAuthenticator
 
 from scripts2.modules.base_module import BaseModule
 from scripts2.utils.log_utils import get_logger
-from scripts2.managers.queue_manager import QueueManager
 from scripts2.config.config import streamer_scopes, bot_scopes
 
 class TwitchModule(BaseModule):
@@ -127,7 +126,7 @@ class TwitchModule(BaseModule):
             self.event_broker.publish_event({
                 "type": "twitch_chat",
                 "user": author,
-                "message": message
+                "text": message
             })
 
             self.logger.info("[_on_message] Chat message published to broker")

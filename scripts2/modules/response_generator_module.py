@@ -1,17 +1,27 @@
 import asyncio
+import itertools
 from scripts2.modules.base_module import BaseModule
 from scripts2.managers.model_manager import ModelManager
-from scripts.managers.queue_manager import QueueManager
 from scripts2.config.config import MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, MAX_GENERATION_ATTEMPTS
 
+from scripts2.managers.prompt_manager import PromptManager
+
 class ResponseGeneratorModule(BaseModule):
-    def __init__(self, signals, event_broker, queue_manager=QueueManager, model_manager=ModelManager, response_generation_enabled = True):
+    def __init__(self, signals, event_broker, model_manager=ModelManager, response_generation_enabled = True):
         super().__init__(name="ResponseGeneratorModule")
         self.signals = signals
         self.event_broker = event_broker
-        self.queue_manager = queue_manager
         self.model_manager = model_manager
         self.response_generation_enabled = response_generation_enabled
+        self.system_instructions = "You are an AI Vtuber responding to a chat."
+        self.prompt_manager = PromptManager(self.system_instructions)
+        
+        self.counter = itertools.count()
+        self.queue = asyncio.PriorityQueue()
+        self.loop = None
+        
+        self._get_calls = 0
+        self._task_done_calls = 0
 
     async def start(self):
         if not self.response_generation_enabled:
@@ -20,40 +30,52 @@ class ResponseGeneratorModule(BaseModule):
         self.model_manager = ModelManager.get_instance()
         self.model = self.model_manager.model
         self.tokeniser = self.model_manager.tokeniser
+
+        self.loop = asyncio.get_running_loop()
+
         await super().start()
 
     async def run(self):
-        #self.logger.debug(f"model: {self.model}, tokeniser: {self.tokeniser}, mmanager:{self.model_manager}")
-        await super().run()
         while self._running:
-            self.logger.info("[run] Response Gen is running...")
-            #self.logger.debug(f"Queue size before get: {self.queue_manager.response_processing_queue.qsize()}")
-            
             try:
-                priority, item = await asyncio.wait_for(
-                    self.queue_manager.response_processing_queue.get(),
-                    timeout=1.0 
-                )
-            except asyncio.TimeoutError:
-                self.logger.debug(f"Timed out waiting for item to process")
-                continue
+                priority, count, event = await self.queue.get()
+                await self.process_prompt(event)
+                self.queue.task_done()
+            except Exception as e:
+                self.logger.error(f"Error processing prompt: {e}")
 
-            self.logger.debug(f"Got {item} from processing queue")
-            #response = await self._generate_response_with_retries(prompt=item)
-            response = await self._generate_response_with_retries(item.get("text", "") or item.get("message", "") or str(item))
-            self.event_broker.publish_event({
-                "type": "response_generated",
-                "response": response,
-                "original_prompt": item.get("text") or item.get("message") or item,
-                "original_type": item.get("type", "unknown"),
-                "original_full": item,
-            })
-            self.logger.debug(f"Published response event: {response}")
-            self.queue_manager.response_processing_queue.task_done()
+    async def process_prompt(self, event_data):
+        text = event_data["text"]
+        response = await self._generate_response_with_retries(text)
 
-    async def _generate_response(self, prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION):
+        self.event_broker.publish_event({
+            "type": "response_generated",
+            "response": response,
+            "original_prompt": event_data.get("text") or event_data.get("message") or event_data,
+            "original_type": event_data.get("type", "unknown"),
+            "original_full": event_data,
+        })
+
+        self.logger.info(f"Generated response: {response}")
+    
+    def submit_prompt(self, event_data, priority=10):
+        count = next(self.counter)
+        asyncio.run_coroutine_threadsafe(
+            self.queue.put((priority, count, event_data)), 
+            self.loop)
+
+    async def _generate_response(self, raw_prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION):
         try:
-            output = await self._generate_text(prompt, max_new_tokens)  
+            if isinstance(raw_prompt, str):
+                prompt = [{"role": "user", "content": raw_prompt}]
+            else:
+                prompt = raw_prompt
+
+            prompt_with_system_prompt = self.prompt_manager.build_prompt(prompt)
+            self.logger.info(f"prompt before template {prompt_with_system_prompt}")
+            full_prompt = await self._apply_chat_template(chat=prompt_with_system_prompt)
+            self.logger.info(f"prompt after template {full_prompt}")
+            output = await self._generate_text(full_prompt, max_new_tokens)  
             
             return output
         except Exception:
@@ -148,3 +170,19 @@ class ResponseGeneratorModule(BaseModule):
                 self.logger.exception(f"[Attempt {attempt}/{max_generation_attempts}] Error generating response: {e}")
                 if attempt == max_generation_attempts:
                     return "Something went wrong!"
+                
+    async def _apply_chat_template(self,
+                                  chat: list,
+                                  ) -> str:
+        """
+        i dont remember why i added this initially but i cant get my advanced prompts to work without it
+        """
+        try:
+            return self.model_manager.tokeniser.apply_chat_template(
+                chat,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+        except Exception as e:
+            self.logger.error(f"Error applying chat template: {e}")
+            raise

@@ -2,12 +2,11 @@ import asyncio
 
 from scripts2.core.central_event_broker import CentralEventBroker
 
-
 class BrokerEventHandler:
-    def __init__(self, broker: CentralEventBroker, queue_manager, tts_speech_module):
+    def __init__(self, broker: CentralEventBroker, tts_speech_module, response_generator_module):
         self.broker = broker
-        self.queue_manager = queue_manager
         self.tts_speech_module = tts_speech_module
+        self.response_generator_module=response_generator_module
         self._task = None
 
     def start(self):
@@ -17,18 +16,36 @@ class BrokerEventHandler:
         async for event in self.broker.subscribe():
             event_type = event.get("type")
             try:
-                if event_type in ("monologue", "startup"):
-                    text = event.get("text", "")
-                    await self.queue_manager.process_new_prompt_from_monologue_generation(event["text"])
-                elif event_type == "twitch_chat":
-                    await self.queue_manager.process_new_prompt_from_twitch_chat(event["user"], event["message"])
+                if event_type in ("monologue", "startup", "twitch_chat"):
+                    user = event.get("user")
+                    
+                    if event_type in ("monologue", "startup") and not user:
+                        user = "system"
+
+                    self.broker.publish_event({
+                        "type": "response_prompt",
+                        "source": event_type,
+                        "user": user,
+                        "text": event.get("text"),
+                        "original_type": event_type
+                    })
                 elif event["type"] == "response_generated":
-                    response = event.get("response", "")
+                    if event["original_type"] == "startup":
+                        priority = 1
+                    else:
+                        priority = 10
                     await self.tts_speech_module.consume_response(event)
+                elif event["type"] == "response_prompt":
+                    if event["original_type"] == "startup":
+                        priority = 1
+                    else:
+                        priority = 10
+                    self.response_generator_module.submit_prompt(event, priority)
                 else:
                     pass
             except Exception as e:
                 print(f"Error processing event {event}: {e}")
+
 
     def stop(self):
         if self._task:
