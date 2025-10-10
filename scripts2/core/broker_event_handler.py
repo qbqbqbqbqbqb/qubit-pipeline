@@ -132,7 +132,7 @@ class BrokerEventHandler:
         top_message = scored[0][1] if scored else None
         return top_message != text
 
-    def _score_message(self, message_text, timestamp, half_life_seconds=60):
+    def _score_message(self, message_text, timestamp, half_life_seconds=10):
         age = (datetime.datetime.now(datetime.timezone.utc) - timestamp).total_seconds()
         decay = 0.5 ** (age / half_life_seconds)
         return len(message_text) * decay
