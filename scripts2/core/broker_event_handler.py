@@ -130,11 +130,11 @@ class BrokerEventHandler:
                     if source_type == "twitch_chat":
                         chat_msg = f"{user} said: {original_prompt}"
                         pair = {"user_text": chat_msg, "response_text": response_text}
-                        await self.tts_speech_module.submit_pair(pair)
+                        self.tts_speech_module.submit_pair(pair)
                         self.logger.debug(f"[BrokerEventHandler] Submitted pair for TTS: user '{chat_msg}', response '{response_text}'")
                     else:
                         monologue = {"text": response_text}
-                        await self.tts_speech_module.submit_monologue(monologue)
+                        self.tts_speech_module.submit_monologue(monologue)
                         self.logger.debug(f"[BrokerEventHandler] Submitted monologue for TTS: '{response_text}'")
 
                 elif event["type"] == "response_prompt":
