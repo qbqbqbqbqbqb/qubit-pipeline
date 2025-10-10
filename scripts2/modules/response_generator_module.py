@@ -59,8 +59,8 @@ class ResponseGeneratorModule(BaseModule):
         else:
             response_without_intro = remove_bot_name(filtered_response)
             # not sure whether its best to implement this or not? it can cut off some sentences that would make sense without it
-            # normalised_response = normalise_response(response_without_intro)
-            normalised_response = response_without_intro
+            normalised_response = normalise_response(response_without_intro)
+            #normalised_response = response_without_intro
             self.event_broker.publish_event({
                 "type": "response_generated",
                 "response": normalised_response,
