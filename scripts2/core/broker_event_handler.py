@@ -107,7 +107,8 @@ class BrokerEventHandler:
                         "source": event_type,
                         "user": user,
                         "text": text,
-                        "original_type": event_type
+                        "original_type": event_type,
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
                     })
 
                 elif event["type"] == "response_generated":
@@ -139,6 +140,17 @@ class BrokerEventHandler:
 
                 elif event["type"] == "response_prompt":
                     text = event.get("text", "")
+
+                    if event.get("original_type") == "monologue":
+                        timestamp_str = event.get("timestamp")
+                        if timestamp_str:
+                            event_time = datetime.datetime.fromisoformat(timestamp_str)
+                            now = datetime.datetime.now(datetime.timezone.utc)
+                            age_seconds = (now - event_time).total_seconds()
+
+                            if age_seconds > 5:
+                                self.logger.debug(f"Skipping stale monologue (age {age_seconds:.1f}s): '{text}'")
+                                continue
 
                     priority = 1 if event["original_type"] == "startup" else 5
                     self.response_generator_module.submit_prompt(event, priority)
