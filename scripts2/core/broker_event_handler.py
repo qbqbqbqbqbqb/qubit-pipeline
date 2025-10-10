@@ -59,6 +59,7 @@ class BrokerEventHandler:
                 return
 
             self._add_recent_message(text)
+            self._cleanup_old_messages()
             if self._is_message_overwhelmed(text):
                 return
 
@@ -162,3 +163,8 @@ class BrokerEventHandler:
         if event_type == "monologue":
             event["timestamp"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         self.broker.publish_event(event)
+
+    def _cleanup_old_messages(self, max_age_seconds=60):
+        now = datetime.datetime.now(datetime.timezone.utc)
+        while self.recent_messages and (now - self.recent_messages[0][1]).total_seconds() > max_age_seconds:
+            self.recent_messages.popleft()
