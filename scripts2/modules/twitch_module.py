@@ -187,7 +187,7 @@ class TwitchModule(BaseModule):
 
         if not self.settings.bot_oauth_token or not self.settings.bot_refresh_token:
             self.logger.info("[_authenticate_bot_account] No bot OAuth token found, authenticating interactively...")
-            auth = UserAuthenticator(self.twitch_bot, BOT_SCOPES)
+            auth = UserAuthenticator(self.twitch_bot, BOT_SCOPES, url=self.settings.twitch_redirect_uri)
             token, refresh_token = await auth.authenticate()
             self.settings.bot_oauth_token = token
             self.settings.bot_refresh_token = refresh_token
@@ -215,7 +215,7 @@ class TwitchModule(BaseModule):
 
         if not self.settings.streamer_oauth_token or not self.settings.streamer_refresh_token:
             self.logger.info("[_authenticate_streamer_account] No streamer OAuth token found, authenticating interactively...")
-            auth = UserAuthenticator(self.twitch_streamer, STREAMER_SCOPES)
+            auth = UserAuthenticator(self.twitch_streamer, STREAMER_SCOPES, url=self.settings.twitch_redirect_uri)
             token, refresh_token = await auth.authenticate()
             self.settings.streamer_oauth_token = token
             self.settings.streamer_refresh_token = refresh_token
@@ -239,7 +239,7 @@ class TwitchModule(BaseModule):
         self.chat = await Chat(self.twitch_bot)
         self.chat.register_event(ChatEvent.READY, self._on_ready)
         self.chat.register_event(ChatEvent.MESSAGE, self._on_message)
-        self.chat.register_event(ChatEvent.SUBSCRIPTION, self._on_subscription)
+        self.chat.register_event(ChatEvent.SUB, self._on_subscription)
         self.chat.register_event(ChatEvent.RAID, self._on_raid)
         self.chat.start()
 
