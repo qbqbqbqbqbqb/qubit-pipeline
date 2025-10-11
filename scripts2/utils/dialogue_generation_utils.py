@@ -68,7 +68,6 @@ def apply_spelling_rules(word: str) -> str:
         (r'([a-z]+)ize$', lambda base: base + 'ise'),
         (r'([a-z]+)izing$', lambda base: base + 'ising'),
         (r'([a-z]+)ized$', lambda base: base + 'ised'),
-        (r'([a-z]+)or$', lambda base: base + 'our'),
     ]
 
     for pattern, repl in rules:
