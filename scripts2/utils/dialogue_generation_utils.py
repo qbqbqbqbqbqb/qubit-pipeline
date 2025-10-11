@@ -45,12 +45,11 @@ def apply_spelling_rules(word: str) -> str:
         return word
 
     rules = [
-        (r'(.*[^aeiou])ies$', lambda base: base + 'ies'),  # plural y (already plural)
+        (r'(.*[^aeiou])ies$', lambda base: base + 'ies'), 
         (r'([a-z]+)ize$', lambda base: base + 'ise'),
         (r'([a-z]+)izing$', lambda base: base + 'ising'),
         (r'([a-z]+)ized$', lambda base: base + 'ised'),
         (r'([a-z]+)or$', lambda base: base + 'our'),
-        (r'([a-z]+)er$', lambda base: base + 're'),
     ]
 
     for pattern, repl in rules:
