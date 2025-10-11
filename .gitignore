@@ -188,3 +188,5 @@ cython_debug/
 en_GB-vctk-medium.onnx
 /memories
 /.venv2
+whitelisted_words.txt
+blacklisted_words.txt
