@@ -29,7 +29,7 @@ class UserProfileManager:
             profile_db_path (str): Path to the SQLite database file.
         """
         self.profile_db_path = Path(profile_db_path)
-        self.local = threading.local
+        self.local = threading.local()
 
 
     def _get_conn(self):
