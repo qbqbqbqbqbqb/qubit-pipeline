@@ -23,13 +23,13 @@ class MessageTracker:
         response_expiry (int): Seconds after which a responded message is forgotten.
     """
     def __init__(self, maxlen=100, recent_expiry=60, response_expiry=60):
-    """Initialize the MessageTracker.
+        """Initialize the MessageTracker.
 
-    Args:
-        maxlen (int): Maximum number of recent messages to keep in the queue. Defaults to 100.
-        recent_expiry (int): Time in seconds after which a message is no longer considered recent. Defaults to 60.
-        response_expiry (int): Time in seconds after which a responded message is forgotten. Defaults to 60.
-    """
+        Args:
+            maxlen (int): Maximum number of recent messages to keep in the queue. Defaults to 100.
+            recent_expiry (int): Time in seconds after which a message is no longer considered recent. Defaults to 60.
+            response_expiry (int): Time in seconds after which a responded message is forgotten. Defaults to 60.
+        """
         self.recent_messages = deque(maxlen=maxlen)
         self.last_seen = {}
         self.responded = {}

@@ -28,6 +28,9 @@ class EventType(Enum):
     MONOLOGUE = "monologue"
     STARTUP = "startup"
     TWITCH_CHAT = "twitch_chat"
+    TWITCH_RAID = "twitch_raid"
+    TWITCH_SUB = "twitch_subscription"
+    TWITCH_FOLLOW = "twitch_follow"
 
 class BrokerEventHandler:
     """
@@ -95,6 +98,9 @@ class BrokerEventHandler:
                     "monologue": self._handle_input_event,
                     "startup": self._handle_input_event,
                     "twitch_chat": self._handle_input_event,
+                    "twitch_subscription": self._handle_input_event,
+                    "twitch_raid": self._handle_input_event,
+                    "twitch_follow": self._handle_input_event,
                     "response_prompt": self._handle_response_prompt,
                     "response_generated": self._handle_response_generated,
                     "memories_updated": self._handle_memories_updated,
@@ -119,10 +125,13 @@ class BrokerEventHandler:
         """
         self.message_tracker.cleanup()
         event_type = event.get("type")
-        user = event.get("user", "someone")
+        user = event.get("user", "Someone")
 
         text = event.get("text", "")
         if event_type == EventType.TWITCH_CHAT.value:
+            if contains_banned_words(text, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST):
+                return
+    
             if contains_banned_words(user, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST):
                 user = "Someone"
 
@@ -139,6 +148,12 @@ class BrokerEventHandler:
             if not self.rate_limiter.allow():
                 self.logger.debug(f"Rate limited message: '{text}'")
                 return
+            
+        if (event_type == EventType.TWITCH_FOLLOW.value or 
+            event_type == EventType.TWITCH_RAID.value or 
+            event_type == EventType.TWITCH_SUB.value):
+                if contains_banned_words(user, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST):
+                    user = "Someone"
 
         self._publish_response_prompt(event_type, user, text)
 
@@ -188,7 +203,16 @@ class BrokerEventHandler:
         if self._is_stale_monologue(event):
             return
 
-        priority = 1 if event.get("original_type") == EventType.STARTUP.value else 5
+        original_type = event.get("original_type")
+        if original_type == EventType.STARTUP.value:
+            priority = 1 
+        elif (original_type == EventType.TWITCH_FOLLOW.value or 
+                original_type == EventType.TWITCH_RAID.value or 
+                original_type == EventType.TWITCH_SUB.value):
+            priority = 3
+        else:
+            priority = 5
+        
         self.response_generator_module.submit_prompt(event, priority)
 
     async def _handle_memories_updated(self, event):

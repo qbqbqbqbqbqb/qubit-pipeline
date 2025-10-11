@@ -1,11 +1,6 @@
 import asyncio
 from scripts2.utils.log_utils import get_logger
 """
-Base module for all modules in the scripts2 system.
-
-This module provides a BaseModule class that serves as the foundation for all
-specialized modules within the application. It handles common functionality such
-    """
     Base class for all modules in the scripts2 application.
 
     This class provides a template for implementing asynchronous modules that can be
@@ -19,14 +14,7 @@ specialized modules within the application. It handles common functionality such
         logger (Logger): Logger instance for this module.
         _running (bool): Flag indicating if the module is currently running.
         _task (asyncio.Task): The asynchronous task running the module's main loop.
-    """
-as initialization with logging, asynchronous task management, and graceful shutdown.
-
-Classes:
-    BaseModule: Abstract base class for implementing application modules.
 """
-
-
 
 class BaseModule:
     def __init__(self, name):

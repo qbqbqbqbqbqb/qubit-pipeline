@@ -4,6 +4,8 @@ from twitchAPI.twitch import Twitch
 from twitchAPI.type import AuthScope, ChatEvent
 from twitchAPI.chat import Chat, ChatMessage, EventData
 from twitchAPI.oauth import UserAuthenticator, refresh_access_token
+from twitchAPI.eventsub.websocket import EventSubWebsocket
+from twitchAPI.object.eventsub import ChannelFollowEvent
 
 from scripts2.modules.base_module import BaseModule
 from scripts2.utils.filter_utils import contains_banned_words
@@ -56,10 +58,12 @@ class TwitchModule(BaseModule):
         self.twitch_enabled = twitch_enabled
         self.chat_enabled = chat_enabled
         self.event_broker = event_broker 
+        self.memory_manager = memory_manager
+
         self.twitch_bot = None
         self.twitch_streamer = None
         self.chat = None
-        self.memory_manager = memory_manager
+        self.eventsub = None
 
     async def start(self):
         """
@@ -94,7 +98,12 @@ class TwitchModule(BaseModule):
             self._running = False
             await self.stop()
             return
-    
+
+        self.eventsub = EventSubWebsocket(self.twitch_streamer)
+        self.eventsub.start()
+
+        await self._subscribe_to_follow_events()
+        
         while self._running:
             self.logger.info("[run] Twitch module is running...")
             await self._refresh_tokens()
@@ -111,12 +120,14 @@ class TwitchModule(BaseModule):
             None
         """
         self.logger.info("[disconnect] Disconnecting TwitchClient...")
-        if self.chat is not None and self.chat_enabled is True:
+        if self.chat and self.chat_enabled:
             self.chat.stop()
         if self.twitch_bot:
             await self.twitch_bot.close()
         if self.twitch_streamer:
             await self.twitch_streamer.close()
+        if self.eventsub:
+            await self.eventsub.stop()
         self.connected = False
         self.logger.info("[disconnect] Disconnected successfully.")
 
@@ -228,6 +239,8 @@ class TwitchModule(BaseModule):
         self.chat = await Chat(self.twitch_bot)
         self.chat.register_event(ChatEvent.READY, self._on_ready)
         self.chat.register_event(ChatEvent.MESSAGE, self._on_message)
+        self.chat.register_event(ChatEvent.SUBSCRIPTION, self._on_subscription)
+        self.chat.register_event(ChatEvent.RAID, self._on_raid)
         self.chat.start()
 
     async def _on_ready(self, event: EventData):
@@ -269,32 +282,138 @@ class TwitchModule(BaseModule):
             Exception: If message processing fails.
         """
         try:
-            author = msg.user.name
+            user = msg.user.name
             message = msg.text.strip()
 
-            self.logger.debug(f"[_on_message] Message from {author}: {message}")
+            self.logger.debug(f"[_on_message] Message from {user}: {message}")
+
+            if contains_banned_words(message, blacklist=BLACKLISTED_WORDS_LIST, 
+                                     whitelist=WHITELISTED_WORDS_LIST):
+                return
+            
+            if contains_banned_words(user, blacklist=BLACKLISTED_WORDS_LIST, 
+                                     whitelist=WHITELISTED_WORDS_LIST):
+                user = "Someone"
 
             self.event_broker.publish_event({
                 "type": "twitch_chat",
-                "user": author,
+                "user": user,
                 "text": message,
                 "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
             })
 
-            if not contains_banned_words(message, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST):
-                if contains_banned_words(author, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST):
-                    author = "Someone"
-
-                self.memory_manager.queue_user_message(
-                    content=message,
-                    user_id=author,
-                    metadata={"type": "twitch_chat"}
-                )
+            self.memory_manager.queue_user_message(
+                content=message,
+                user_id=user,
+                metadata={"type": "twitch_chat"}
+            )
 
             self.logger.info("[_on_message] Chat message published to broker")
 
         except Exception as e:
             self.logger.error(f"[_on_message] Error handling message: {e}")
+
+    async def _on_subscription(self, event: EventData):
+        try:
+            user = event.user.name
+            tier = event.subscription_plan
+            message = f"{user} just subscribed with {tier}!"
+
+            self.logger.info(f"Subscription event: {message}")
+
+            if contains_banned_words(author, blacklist=BLACKLISTED_WORDS_LIST, 
+                                     whitelist=WHITELISTED_WORDS_LIST):
+                user = "Someone"
+
+            self.event_broker.publish_event({
+                "type": "twitch_subscription",
+                "user": user,
+                "tier": tier,
+                "text": message,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            })
+
+            self.memory_manager.queue_user_message(
+                content=message,
+                user_id=user,
+                metadata={"type": "twitch_subscription", "tier": tier}
+            )
+        except Exception as e:
+            self.logger.error(f"[_on_subscription] Error handling subscription event: {e}")
+
+    async def _on_raid(self, event: EventData):
+        try:
+            raider = event.raid_raider
+            viewers = event.raid_viewers
+            message = f"{raider} is raiding with {viewers} viewers!"
+
+            self.logger.info(f"Raid event: {message}")
+
+            if contains_banned_words(author, blacklist=BLACKLISTED_WORDS_LIST, 
+                                     whitelist=WHITELISTED_WORDS_LIST):
+                user = "Someone"
+
+            self.event_broker.publish_event({
+                "type": "twitch_raid",
+                "user": raider,
+                "viewers": viewers,
+                "text": message,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            })
+
+            self.memory_manager.queue_user_message(
+                content=message,
+                user_id=raider,
+                metadata={"type": "twitch_raid", "viewers": viewers}
+            )
+        except Exception as e:
+            self.logger.error(f"[_on_raid] Error handling raid event: {e}")
+
+    async def _on_follow(self, event: ChannelFollowEvent):
+        try:
+            user = event.event.user_name
+            broadcaster = event.event.broadcaster_user_name
+            followed_at = event.event.followed_at
+
+            message = f"{user} just followed the channel at {followed_at}!"
+
+            self.logger.info(f"Follow event: {message}")
+
+            if contains_banned_words(author, blacklist=BLACKLISTED_WORDS_LIST, 
+                                     whitelist=WHITELISTED_WORDS_LIST):
+                user = "Someone"
+
+            self.event_broker.publish_event({
+                "type": "twitch_follow",
+                "user": user,
+                "followed_at": followed_at,
+                "text": message,
+                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+            })
+
+            self.memory_manager.queue_user_message(
+                content=message,
+                user_id=user,
+                metadata={"type": "twitch_follow"}
+            )
+        except Exception as e:
+            self.logger.error(f"[_on_follow] Error handling follow event: {e}")
+
+    async def _subscribe_to_follow_events(self):
+        try:
+            self.logger.info("[_subscribe_to_follow_events] Subscribing to follow events...")
+            users = await self.twitch_streamer.get_users(logins=[self.settings.twitch_channel])
+            user = users[0]
+            broadcaster_id = user.id
+
+            await self.eventsub.listen_channel_follow_v2(
+                broadcaster_user_id=broadcaster_id,
+                moderator_user_id=broadcaster_id,
+                callback=self._on_follow
+            )
+            self.logger.info("[_subscribe_to_follow_events] Subscription succeeded")
+        except Exception as e:
+            self.logger.error(f"_subscribe_to_follow_events error: {e}")
 
     async def _refresh_tokens(self):
         """
