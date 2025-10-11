@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+import json
 
 from scripts2.utils.log_utils import get_logger
 logger = get_logger("File_Utils")
@@ -8,7 +9,7 @@ logger = get_logger("File_Utils")
 # It's python so I also don't really care. 
 # Can we move all ML-relevant libraries to a language I like more please?
 
-def load_file(path: Path) -> str:
+def load_text_file(path: Path) -> str:
     """
     Loads and returns the content of a text file.
     """
@@ -17,6 +18,10 @@ def load_file(path: Path) -> str:
     except Exception as e:
         logger.error(f"Could not load file {path}: {e}")
         raise
+
+def load_json_file(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 def check_file_exists(path: Path) -> bool:
     if not path or not path.exists():
@@ -46,7 +51,7 @@ def load_word_list(path: Path) -> list[str]:
         return []
 
     try:
-        content = load_file(path)
+        content = load_text_file(path)
         lines = content.splitlines()
         cleaned_words = []
         for w in lines:
@@ -69,7 +74,7 @@ def load_phrases(path: Path) -> list[str]:
         return []
 
     try:
-        content = load_file(path)
+        content = load_text_file(path)
         lines = content.splitlines()
         phrases = [line.strip() for line in lines if line.strip()]
         logger.info(f"Loaded {len(phrases)} phrases from {path}")

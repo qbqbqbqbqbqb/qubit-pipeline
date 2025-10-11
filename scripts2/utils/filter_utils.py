@@ -6,35 +6,6 @@ from scripts2.config.config import BOT_NAME
 
 logger = get_logger("Filter_Utils")
 
-def is_valid_response(response: str, blacklist, whitelist: list[str] = None) -> tuple[bool, str]:
-    """
-    Check whether the generated response is valid and filter banned words.
-
-    Returns (is_valid, filtered_response)
-    """
-    if not response.strip():
-        logger.warning("[_is_valid_response] Empty response")
-        return False, response
-    
-    filtered = filter_banned_words(text=response, blacklist=blacklist, whitelist=whitelist)
-    if filtered != response:
-        logger.warning(f"[_is_valid_response] Filtered banned words: {response} -> {filtered}")
-    return True, filtered
-
-def normalise_response(response: str):
-    """Remove trailing text after the last piece of punctuation"""
-    match = re.search(r'[.!?](?!.*[.!?])', response)
-    if match:
-        return response[:match.end()].strip()
-    else:
-        return response.strip()
-    
-def remove_bot_name(response: str):
-    """Remove 'Bot:' from speech if it adds it"""
-    bot_name_lower = BOT_NAME.lower()
-    if response.lower().startswith(f"{bot_name_lower}:"):
-        response = response[len(f"{bot_name_lower}:"):].lstrip()
-    return response
 
 def contains_banned_words(text: str, blacklist: list[str], whitelist: list[str] = None) -> bool:
     banned_set = set(word.lower() for word in blacklist)

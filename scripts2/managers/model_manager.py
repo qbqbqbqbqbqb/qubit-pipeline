@@ -1,16 +1,7 @@
 # === Setup sentence tokenisation ===
 import time
-import nltk
-from nltk.tokenize import sent_tokenize
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
-
-def download_nltk_data():
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt') 
-        nltk.download('punkt_tab')
 
 # === Setup colorlog logger ===
 from scripts2.utils.log_utils import get_logger
@@ -40,8 +31,6 @@ class ModelManager:
         return cls.__instance
     
     def _init(self):
-        download_nltk_data()
-
         self.logger = get_logger("ModelManager")
 
         try:

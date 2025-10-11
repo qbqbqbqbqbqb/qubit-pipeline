@@ -5,9 +5,9 @@ from scripts2.modules.base_module import BaseModule
 from scripts2.managers.model_manager import ModelManager
 from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
                                     MAX_GENERATION_ATTEMPTS,
-                                    INSTRUCTIONS_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
+                                    SPELLING_DICTIONARY_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
 from scripts2.managers.prompt_manager import PromptManager
-from scripts2.utils.filter_utils import is_valid_response, normalise_response, remove_bot_name
+from scripts2.utils.dialogue_generation_utils import is_valid_response, normalise_response, remove_bot_name, convert_to_british_english
 
 class ResponseGeneratorModule(BaseModule):
     def __init__(self, signals, event_broker, model_manager=ModelManager, prompt_manager:PromptManager = None, response_generation_enabled = True):
@@ -60,16 +60,16 @@ class ResponseGeneratorModule(BaseModule):
             response_without_intro = remove_bot_name(filtered_response)
             # not sure whether its best to implement this or not? it can cut off some sentences that would make sense without it
             normalised_response = normalise_response(response_without_intro)
-            #normalised_response = response_without_intro
+            british_response = convert_to_british_english(normalised_response, SPELLING_DICTIONARY_FILE)
             self.event_broker.publish_event({
                 "type": "response_generated",
-                "response": normalised_response,
+                "response": british_response,
                 "original_prompt": event_data.get("text") or event_data.get("message") or event_data,
                 "original_type": event_data.get("type", "unknown"),
                 "original_full": event_data,
             })
 
-            self.logger.info(f"Generated response: {normalised_response}")
+            self.logger.info(f"Generated response: {british_response}")
     
     def submit_prompt(self, event_data, priority=5):
         if self.loop is None:
@@ -104,7 +104,8 @@ class ResponseGeneratorModule(BaseModule):
         Returns generation configuration parameters.
         """
         return {
-            'temperature': 1.17,  
+            'temperature': 1.14,  
+            'min_p': 0.075,
             'top_p': 0.9, 
             'top_k': 50,
             'max_new_tokens': max_tokens,
@@ -204,32 +205,3 @@ class ResponseGeneratorModule(BaseModule):
 
     async def stop(self):
         await super().stop()
-
-def select_best_prompt(self):
-    now = datetime.utcnow()
-    best = None
-    best_score = -1
-
-    for prompt in self.pending_prompts:
-        ts = datetime.fromisoformat(prompt["timestamp"])
-        age = (now - ts).total_seconds()
-
-        decay_factor = max(0.1, 1 - (age / 60))
-        quality = self.estimate_quality(prompt["text"])
-        score = quality * decay_factor
-
-        if score > best_score:
-            best = prompt
-            best_score = score
-
-    self.pending_prompts.clear()
-    return best
-
-def estimate_quality(self, text: str) -> float:
-    if len(text) > 100:
-        return 1.0
-    if len(text) > 50:
-        return 0.8
-    if "?" in text:
-        return 0.7
-    return 0.4
