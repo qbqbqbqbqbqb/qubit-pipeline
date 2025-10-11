@@ -13,6 +13,7 @@ MAYBE
 - hook to vtube studio for movement (if she has model)
 - youtube chat API?
 
+summary i did not bother writing below
 ---------------------------------
 ## Overview
 
