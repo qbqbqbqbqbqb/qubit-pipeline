@@ -6,13 +6,39 @@ from pathlib import Path
 from typing import Dict, Any
 
 
+"""
+User Profile Manager Module
+
+This module provides functionality to manage user profiles in a SQLite database.
+It handles user data such as personality traits, preferences, relationship scores,
+and memory counts, supporting multi-threaded access.
+"""
 class UserProfileManager:
+    """
+    Manager class for handling user profiles using SQLite database.
+
+    This class provides methods to create, retrieve, and update user profiles,
+    storing data like personality traits, preferences, and interaction history.
+    It uses thread-local connections to ensure thread safety.
+    """
     def __init__(self, profile_db_path: str):
+        """
+        Initialize the UserProfileManager.
+
+        Args:
+            profile_db_path (str): Path to the SQLite database file.
+        """
         self.profile_db_path = Path(profile_db_path)
         self.local = threading.local
 
 
     def _get_conn(self):
+        """
+        Get or create a thread-local SQLite connection.
+
+        Returns:
+            sqlite3.Connection: The thread-local database connection.
+        """
         if not hasattr(self.local, 'conn') or self.local.conn is None:
             print(f"[UserProfileManager] Creating SQLite connection in thread {threading.get_ident()}")
             conn = sqlite3.connect(str(self.profile_db_path), check_same_thread=True)
@@ -25,7 +51,15 @@ class UserProfileManager:
 
 
     def _create_table(self, conn):
-        """Create profiles table if it doesn't exist."""
+        """
+        Create the profiles table if it doesn't exist.
+
+        This method sets up the database schema for storing user profiles,
+        including fields for user ID, timestamps, memory counts, traits, scores, and preferences.
+
+        Args:
+            conn (sqlite3.Connection): The database connection to use.
+        """
         create_table_sql = """
         CREATE TABLE IF NOT EXISTS profiles (
             user_id TEXT PRIMARY KEY,
@@ -42,7 +76,17 @@ class UserProfileManager:
 
 
     def get_user_profile(self, user_id: str) -> Dict[str, Any]:
-        """Get user profile by user ID."""
+        """
+        Retrieve or create a user profile by user ID.
+
+        If the profile doesn't exist, a new one is created with default values.
+
+        Args:
+            user_id (str): The unique identifier for the user.
+
+        Returns:
+            Dict[str, Any]: A dictionary containing the user's profile data.
+        """
         conn = self._get_conn()
         cursor = conn.execute("SELECT * FROM profiles WHERE user_id = ?", (user_id,))
         row = cursor.fetchone()
@@ -76,14 +120,24 @@ class UserProfileManager:
             }
 
     def __del__(self):
-        """Close database connection on object destruction."""
+        """
+        Clean up by closing the thread-local database connection on object destruction.
+        """
         if hasattr(self.local, 'conn') and self.local.conn:
             self.local.conn.close()
 
     def update_user_profile(self, user_id: str,
                             personality_trait: str = None, preference: Dict[str, Any] = None,
                             last_seen: str = None) -> None:
-        """Update user profile with new information."""
+        """
+        Update a user's profile with new personality traits, preferences, or last seen time.
+
+        Args:
+            user_id (str): The unique identifier for the user.
+            personality_trait (str, optional): A personality trait to increment. Defaults to None.
+            preference (Dict[str, Any], optional): A dictionary of preferences to update. Defaults to None.
+            last_seen (str, optional): ISO formatted timestamp for last seen. Defaults to current time.
+        """
         profile = self.get_user_profile(user_id)
 
         new_last_seen = last_seen if last_seen else datetime.now().isoformat()
@@ -111,7 +165,16 @@ class UserProfileManager:
         conn.commit()
 
     def _update_user_profile(self, user_id: str, content: str, memory_type: str = "semantic"):
-        """Update user profile based on content and memory type."""
+        """
+        Update user profile based on memory content and type.
+
+        This method increments memory count and adjusts relationship score based on emotional content.
+
+        Args:
+            user_id (str): The unique identifier for the user.
+            content (str): The content of the memory.
+            memory_type (str, optional): Type of memory ('semantic' or 'episodic'). Defaults to 'semantic'.
+        """
         profile = self.get_user_profile(user_id)
 
         new_last_seen = datetime.now().isoformat()

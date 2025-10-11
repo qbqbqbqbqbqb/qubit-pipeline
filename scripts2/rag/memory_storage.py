@@ -1,3 +1,11 @@
+"""
+Module for persistent storage and retrieval of memory objects.
+
+This module provides the MemoryStorage class for managing memory objects,
+including storing them to disk in JSON format, retrieving them based on queries,
+and maintaining a semantic index for efficient retrieval.
+"""
+
 import json
 from datetime import datetime
 from pathlib import Path
@@ -7,7 +15,28 @@ from scripts2.core.memory import Memory
 
 
 class MemoryStorage:
+    """
+    A class for storing and retrieving memory objects persistently.
+
+    This class handles the persistence layer for memories, using JSON files for storage
+    and maintaining an in-memory semantic index for query-based retrieval. It supports
+    different memory types, user-specific filtering, and relevance-based ranking.
+
+    Attributes:
+        base_path (Path): The base directory path for storage.
+        memories_dir (Path): Directory where memory JSON files are stored.
+        memories (Dict[str, Memory]): In-memory dictionary of loaded memories keyed by ID.
+        semantic_index (Dict[str, List[str]]): Index mapping keywords to memory IDs.
+    """
     def __init__(self, base_path: str = "."):
+        """
+        Initialize the MemoryStorage instance.
+
+        Sets up the storage directories and loads existing memories from disk.
+
+        Args:
+            base_path (str): The base directory path for storing memories. Defaults to current directory.
+        """
         self.base_path = Path(base_path)
         self.memories_dir = self.base_path / "memories"
         self.memories_dir.mkdir(exist_ok=True)
@@ -18,7 +47,12 @@ class MemoryStorage:
         self._load_memories()
 
     def _load_memories(self):
-        """Load all memories from storage."""
+        """
+        Load all memories from storage.
+
+        Scans the memories directory for JSON files, loads each memory object,
+        and updates the in-memory storage and semantic index.
+        """
         memory_files = list(self.memories_dir.glob("*.json"))
         for file_path in memory_files:
             try:
@@ -31,7 +65,15 @@ class MemoryStorage:
                 pass
 
     def _update_semantic_index(self, memory: Memory):
-        """Update semantic index with memory keywords."""
+        """
+        Update the semantic index with keywords from a memory.
+
+        Extracts keywords from the memory content and adds the memory ID to the index
+        for each keyword.
+
+        Args:
+            memory (Memory): The memory object to index.
+        """
         words = memory.content.lower().split()
         keywords = [word for word in words if len(word) > 3]
 
@@ -42,7 +84,14 @@ class MemoryStorage:
                 self.semantic_index[keyword].append(memory.id)
 
     def _save_memory(self, memory: Memory):
-        """Save a single memory to file."""
+        """
+        Save a single memory to file.
+
+        Serializes the memory object to JSON and writes it to a file named after the memory ID.
+
+        Args:
+            memory (Memory): The memory object to save.
+        """
         file_path = self.memories_dir / f"{memory.id}.json"
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
@@ -51,7 +100,15 @@ class MemoryStorage:
             pass
 
     def _save_json(self, file_path: Path, data: Any) -> None:
-        """Save data to JSON file."""
+        """
+        Save data to JSON file.
+
+        Generic method to save arbitrary data to a JSON file with proper encoding.
+
+        Args:
+            file_path (Path): The file path to save to.
+            data (Any): The data to serialize and save.
+        """
         try:
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False, default=str)
@@ -59,9 +116,25 @@ class MemoryStorage:
             pass
 
     def store_memory(self, content: str, memory_type: str = "semantic",
-                     user_id: str = None, importance: float = 1.0,
-                     tags: List[str] = None, metadata: Dict = None) -> str:
-        """Store a semantic memory in the system."""
+                      user_id: str = None, importance: float = 1.0,
+                      tags: List[str] = None, metadata: Dict = None) -> str:
+        """
+        Store a new memory in the system.
+
+        Creates a new Memory object, adds it to in-memory storage, updates the semantic index,
+        and persists it to disk.
+
+        Args:
+            content (str): The content of the memory.
+            memory_type (str): The type of memory. Defaults to "semantic".
+            user_id (str): The user ID associated with the memory. Defaults to None.
+            importance (float): The importance score of the memory. Defaults to 1.0.
+            tags (List[str]): List of tags for the memory. Defaults to None.
+            metadata (Dict): Additional metadata for the memory. Defaults to None.
+
+        Returns:
+            str: The ID of the newly stored memory.
+        """
         memory = Memory(content, memory_type, user_id, importance, tags, metadata)
         self.memories[memory.id] = memory
 
@@ -73,7 +146,22 @@ class MemoryStorage:
     def retrieve_memories(self, query: str = None, user_id: str = None,
                           memory_type: str = None, limit: int = 10,
                           min_relevance: float = 0.0) -> List[Memory]:
-        """Retrieve semantic/procedural memories from JSON storage."""
+        """
+        Retrieve memories based on query parameters.
+
+        Filters memories by user, type, and query relevance, ranks them by relevance,
+        importance, and recency, and updates access times for retrieved memories.
+
+        Args:
+            query (str): The search query for semantic matching. Defaults to None.
+            user_id (str): Filter by user ID. Defaults to None.
+            memory_type (str): Filter by memory type. Defaults to None.
+            limit (int): Maximum number of memories to return. Defaults to 10.
+            min_relevance (float): Minimum relevance score for query matches. Defaults to 0.0.
+
+        Returns:
+            List[Memory]: List of retrieved and ranked memory objects.
+        """
         candidates = list(self.memories.values())
 
         if user_id:
@@ -101,7 +189,19 @@ class MemoryStorage:
         return candidates[:limit]
 
     def _rank_memories_by_relevance(self, memories: List[Memory], query: str) -> List[Memory]:
-        """Rank memories by semantic relevance to query."""
+        """
+        Rank memories by semantic relevance to the query.
+
+        Calculates relevance based on word overlap between query and memory content,
+        boosted by importance and recency.
+
+        Args:
+            memories (List[Memory]): List of memories to rank.
+            query (str): The search query.
+
+        Returns:
+            List[Memory]: The list of memories with relevance scores set.
+        """
         query_words = set(query.lower().split())
         scored_memories = []
 

@@ -10,8 +10,46 @@ from scripts2.utils.filter_utils import contains_banned_words
 from scripts2.utils.log_utils import get_logger
 from scripts2.config.config import STREAMER_SCOPES, BOT_SCOPES, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 
+"""
+Module for integrating with Twitch API, handling authentication, chat monitoring, and token refresh.
+
+This module provides functionality to connect to Twitch, authenticate bot and streamer accounts,
+monitor chat messages, filter inappropriate content, and publish events to the central event broker.
+It also manages token refresh to maintain authenticated sessions.
+"""
+
 class TwitchModule(BaseModule):
+    """
+    Twitch integration module for handling Twitch API connections and chat interactions.
+
+    This class manages authentication for bot and streamer accounts, sets up chat monitoring,
+    filters chat messages for banned words, and integrates with the application's event broker
+    and memory management systems. It supports periodic token refresh to maintain connections.
+
+    Attributes:
+        settings: Configuration settings object containing Twitch credentials and channel info.
+        signals: Signal handlers for the module.
+        twitch_enabled: Boolean flag to enable/disable overall Twitch functionality.
+        chat_enabled: Boolean flag to enable/disable chat message monitoring.
+        event_broker: Central event broker instance for publishing chat messages.
+        twitch_bot: Twitch API client instance for bot account operations.
+        twitch_streamer: Twitch API client instance for streamer account operations.
+        chat: Chat monitoring instance for real-time message processing.
+        memory_manager: Memory manager instance for queuing and storing user messages.
+    """
+
     def __init__(self, settings, signals, event_broker, memory_manager, twitch_enabled=True, chat_enabled=True):
+        """
+        Initialize the TwitchModule with necessary dependencies and settings.
+
+        Args:
+            settings: Configuration object containing Twitch client ID, secret, channel, and tokens.
+            signals: Signal handlers for module lifecycle events.
+            event_broker: Event broker for publishing Twitch chat messages to other modules.
+            memory_manager: Memory manager for storing filtered chat messages.
+            twitch_enabled: Whether to enable Twitch integration (default True).
+            chat_enabled: Whether to enable chat message ingestion (default True).
+        """
         super().__init__(name="TwitchModule")
         self.settings = settings
         self.signals = signals
@@ -24,12 +62,30 @@ class TwitchModule(BaseModule):
         self.memory_manager = memory_manager
 
     async def start(self):
+        """
+        Start the TwitchModule if Twitch integration is enabled.
+
+        Checks the twitch_enabled flag and proceeds with starting the module.
+        Calls the parent class start method if enabled.
+
+        Returns:
+            None
+        """
         if not self.twitch_enabled:
             self.logger.info(f"[start] {self.name} is disabled. Not starting.")
             return
         await super().start()
 
     async def run(self):
+        """
+        Main run loop for the TwitchModule.
+
+        Starts the Twitch client, and if successful, enters a loop that refreshes
+        authentication tokens every hour. Runs until the module is stopped.
+
+        Returns:
+            None
+        """
         await super().run()
         connected = await self._start_client()
 
@@ -45,6 +101,15 @@ class TwitchModule(BaseModule):
             await asyncio.sleep(60 * 60)
 
     async def disconnect(self):
+        """
+        Disconnect from Twitch services.
+
+        Stops the chat monitoring, closes bot and streamer Twitch clients,
+        and updates the connection status.
+
+        Returns:
+            None
+        """
         self.logger.info("[disconnect] Disconnecting TwitchClient...")
         if self.chat is not None and self.chat_enabled is True:
             self.chat.stop()
@@ -56,10 +121,30 @@ class TwitchModule(BaseModule):
         self.logger.info("[disconnect] Disconnected successfully.")
 
     async def stop(self):
+        """
+        Stop the TwitchModule.
+
+        Calls disconnect to clean up connections and then calls the parent stop method.
+
+        Returns:
+            None
+        """
         await self.disconnect()
         await super().stop()
 
     async def _start_client(self) -> bool:
+        """
+        Initialize and start the Twitch client connections.
+
+        Authenticates bot and streamer accounts, sets up chat if enabled,
+        and joins the specified Twitch channel.
+
+        Returns:
+            bool: True if connection successful, False otherwise.
+
+        Raises:
+            Exception: If authentication or connection fails.
+        """
         self.logger.info("[start] Starting TwitchClient...")
         try:
             await self._authenticate_bot_account()
@@ -75,6 +160,18 @@ class TwitchModule(BaseModule):
             return False
 
     async def _authenticate_bot_account(self):
+        """
+        Authenticate the bot account with Twitch API.
+
+        Creates a Twitch client for the bot, checks for existing tokens,
+        and performs interactive authentication if needed.
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If authentication fails.
+        """
         self.twitch_bot = await Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
 
         if not self.settings.bot_oauth_token or not self.settings.bot_refresh_token:
@@ -91,6 +188,18 @@ class TwitchModule(BaseModule):
             )
 
     async def _authenticate_streamer_account(self):
+        """
+        Authenticate the streamer account with Twitch API.
+
+        Creates a Twitch client for the streamer, checks for existing tokens,
+        and performs interactive authentication if needed.
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If authentication fails.
+        """
         self.twitch_streamer = await Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
 
         if not self.settings.streamer_oauth_token or not self.settings.streamer_refresh_token:
@@ -107,12 +216,35 @@ class TwitchModule(BaseModule):
             )
 
     async def _setup_chat(self):
+        """
+        Set up chat monitoring for the Twitch channel.
+
+        Creates a Chat instance, registers event handlers for ready and message events,
+        and starts the chat monitoring.
+
+        Returns:
+            None
+        """
         self.chat = await Chat(self.twitch_bot)
         self.chat.register_event(ChatEvent.READY, self._on_ready)
         self.chat.register_event(ChatEvent.MESSAGE, self._on_message)
         self.chat.start()
 
     async def _on_ready(self, event: EventData):
+        """
+        Event handler called when the chat bot is ready.
+
+        Joins the specified Twitch channel upon readiness.
+
+        Args:
+            event: EventData containing chat event information.
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If joining the channel fails.
+        """
         try:
             self.logger.info("[_on_ready] Bot ready, joining channel...")
             await event.chat.join_room(self.settings.twitch_channel)
@@ -121,6 +253,21 @@ class TwitchModule(BaseModule):
             self.logger.error(f"[_on_ready] Failed to join channel: {e}")
 
     async def _on_message(self, msg: ChatMessage):
+        """
+        Event handler for incoming chat messages.
+
+        Processes chat messages, publishes them to the event broker,
+        and queues filtered messages to memory if they pass content filters.
+
+        Args:
+            msg: ChatMessage object containing message details.
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If message processing fails.
+        """
         try:
             author = msg.user.name
             message = msg.text.strip()
@@ -150,6 +297,18 @@ class TwitchModule(BaseModule):
             self.logger.error(f"[_on_message] Error handling message: {e}")
 
     async def _refresh_tokens(self):
+        """
+        Refresh authentication tokens for bot and streamer accounts.
+
+        Uses refresh tokens to obtain new access tokens and updates settings.
+        Saves the updated tokens to persistent storage.
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If token refresh fails.
+        """
         try:
             self.logger.info("[_refresh_tokens] Refreshing tokens...")
 
@@ -172,10 +331,6 @@ class TwitchModule(BaseModule):
                 self.settings.streamer_oauth_token = new_token
                 self.settings.streamer_refresh_token = new_refresh
                 self.logger.info("[_refresh_tokens] Streamer tokens refreshed")
-
-            self.settings.save()
-        except Exception as e:
-            self.logger.error(f"[_refresh_tokens] Error refreshing tokens: {e}")
 
             self.settings.save()
         except Exception as e:

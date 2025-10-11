@@ -1,13 +1,41 @@
 from typing import Optional, List, Dict
 from scripts2.core.broker_event_handler import BrokerEventHandler
 
+"""Prompt Manager Module
+
+This module provides the PromptManager class for managing system prompts and
+building comprehensive prompts for AI responses in an AI Vtuber system. It handles
+dynamic prompt creation based on mood, tone, interaction level, and integrates
+memory context, chat history, and reflections to generate contextually appropriate
+responses.
+"""
+
 class PromptManager:
+    """Manages the creation of system prompts and building of full prompts for AI responses.
+
+    The PromptManager handles dynamic prompt generation based on configured mood, tone,
+    and interaction level. It integrates memory context, chat history, and reflections
+    to provide comprehensive prompts that adapt to user interactions and system state.
+    """
+
     def __init__(self, 
                  system_instructions: Optional[str] = None,
                  mood: str = "energetic",
                  tone: str = "casual and humorous",
                  interaction_level: str = "high",
                  ):
+
+        """Initialize the PromptManager with configuration parameters.
+
+        Args:
+            system_instructions (Optional[str]): Custom system instructions. If None,
+                uses default Qubit AI Vtuber instructions.
+            mood (str): The mood of the AI (e.g., "energetic"). Defaults to "energetic".
+            tone (str): The tone of responses (e.g., "casual and humorous").
+                Defaults to "casual and humorous".
+            interaction_level (str): Level of audience interaction ("low", "medium", "high").
+                Defaults to "high".
+        """
 
         self.cached_memories = {"chat_history": [], "reflections": []}
         self.mood = mood
@@ -23,6 +51,11 @@ class PromptManager:
         )
 
     def create_system_prompt(self):
+        """Create the system prompt based on current configuration.
+
+        Returns:
+            str: The formatted system prompt incorporating mood, tone, and interaction level.
+        """
         interaction_instruction = {
             "low": "Focus mostly on monologue style, little audience interaction.",
             "medium": "Engage with the audience occasionally, reacting to chat.",
@@ -39,6 +72,16 @@ class PromptManager:
         return system_prompt
 
     def build_prompt(self, base_prompt: str, user_id: str = None, current_topic: str = None):
+        """Build a complete prompt including system instructions, memory context, and history.
+
+        Args:
+            base_prompt (str): The base user prompt to respond to.
+            user_id (str, optional): The ID of the user for memory context.
+            current_topic (str, optional): The current conversation topic.
+
+        Returns:
+            List[Dict]: A list of prompt messages with roles and content.
+        """
         prompt = []
         system_prompt = self.create_system_prompt()
         prompt.append({"role": "system", "content": system_prompt})
@@ -61,5 +104,9 @@ class PromptManager:
         return prompt
     
     def handle_memory_update(self, memory_data: Dict):
-        """Update internal memory cache when new memory data arrives."""
+        """Update the internal memory cache with new memory data.
+
+        Args:
+            memory_data (Dict): Dictionary containing 'chat_history' and 'reflections' lists.
+        """
         self.cached_memories = memory_data

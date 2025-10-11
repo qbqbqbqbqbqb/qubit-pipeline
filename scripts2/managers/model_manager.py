@@ -6,6 +6,18 @@ import torch
 # === Setup colorlog logger ===
 from scripts2.utils.log_utils import get_logger
 
+"""
+Module for managing the AI language model used in the application.
+
+This module provides a singleton ModelManager class that handles the loading,
+caching, and access to the Sao10K/L3-8B-Stheno-v3.2 language model with optimized
+4-bit quantization. It ensures efficient memory usage and provides a centralized
+way to access the model and tokenizer for text generation tasks.
+
+Classes:
+    ModelManager: Singleton manager for the AI model and tokenizer.
+"""
+
 
 MODEL_NAME = "Sao10K/L3-8B-Stheno-v3.2"
 
@@ -21,6 +33,17 @@ class ModelManager:
     """
     __instance = None
     def __new__(cls):
+        """
+        Create or return the singleton instance of ModelManager.
+
+        This method implements the singleton pattern to ensure only one instance
+        of the ModelManager exists throughout the application lifecycle.
+        If an instance doesn't exist, it creates one and initializes it.
+        If initialization fails, the exception is re-raised.
+
+        Returns:
+            ModelManager: The singleton instance of the ModelManager.
+        """
         if cls.__instance is None:
             instance = super().__new__(cls)
             try:
@@ -31,6 +54,17 @@ class ModelManager:
         return cls.__instance
     
     def _init(self):
+        """
+        Initialize the ModelManager instance.
+
+        This method loads the tokenizer and the quantized language model from
+        the pretrained Sao10K/L3-8B-Stheno-v3.2 model. It configures the tokenizer
+        with appropriate padding settings and sets up 4-bit quantization for
+        memory efficiency. The model is loaded with automatic device mapping.
+
+        Raises:
+            Exception: If model or tokenizer loading fails, re-raises the exception.
+        """
         self.logger = get_logger("ModelManager")
 
         try:
@@ -72,4 +106,14 @@ class ModelManager:
 
     @classmethod
     def get_instance(cls):
+        """
+        Get the singleton instance of ModelManager.
+
+        This class method provides a convenient way to access the singleton
+        instance. It triggers the creation of the instance if it doesn't exist,
+        or returns the existing one.
+
+        Returns:
+            ModelManager: The singleton instance of the ModelManager.
+        """
         return cls()

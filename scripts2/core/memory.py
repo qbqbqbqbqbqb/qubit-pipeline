@@ -1,3 +1,11 @@
+"""
+Memory data structure module.
+
+This module defines the Memory class, which represents individual memory items
+with attributes for content, type, user, importance, and various metadata.
+Provides methods for serialization, access tracking, and decay calculation.
+"""
+
 from datetime import datetime
 import hashlib
 from typing import Dict, List
@@ -6,9 +14,26 @@ import numpy as np
 
 
 class Memory:
+    """
+    Represents an individual memory item with content and metadata.
+
+    A memory encapsulates content, type, user association, importance score,
+    and tracking information for access patterns and relevance.
+    """
     def __init__(self, content: str, memory_type: str = "episodic",
                  user_id: str = None, importance: float = 1.0,
                  tags: List[str] = None, metadata: Dict = None):
+        """
+        Initializes a Memory instance.
+
+        Args:
+            content (str): The content of the memory.
+            memory_type (str): Type of memory (e.g., 'episodic', 'semantic').
+            user_id (str): ID of the user associated with the memory.
+            importance (float): Importance score of the memory.
+            tags (List[str]): List of tags for the memory.
+            metadata (Dict): Additional metadata dictionary.
+        """
         self.id = hashlib.md5(f"{content}{datetime.now().isoformat()}".encode()).hexdigest()[:8]
         self.content = content
         self.memory_type = memory_type 

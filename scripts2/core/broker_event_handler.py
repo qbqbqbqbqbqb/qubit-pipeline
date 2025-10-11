@@ -1,3 +1,10 @@
+"""
+Broker event handler module for managing event-driven interactions.
+
+This module defines the BrokerEventHandler class which processes events from the central event broker,
+handles input events, generates responses, and coordinates with TTS, memory, and response modules.
+"""
+
 import asyncio
 import datetime
 from collections import deque
@@ -12,12 +19,34 @@ from scripts2.utils.message_tracker import MessageTracker
 from enum import Enum
 
 class EventType(Enum):
+    """
+    Enumeration of event types handled by the event broker.
+
+    Defines the types of events that can be processed, including monologue generation,
+    startup events, and Twitch chat messages.
+    """
     MONOLOGUE = "monologue"
     STARTUP = "startup"
     TWITCH_CHAT = "twitch_chat"
 
 class BrokerEventHandler:
+    """
+    Event handler for the central event broker.
+
+    Processes incoming events, filters and rate-limits messages, generates responses,
+    and coordinates with speech synthesis and memory modules. Handles monologue,
+    startup, and Twitch chat events.
+    """
     def __init__(self, broker: CentralEventBroker, tts_speech_module, response_generator_module, memory_manager):
+        """
+        Initializes the BrokerEventHandler with required modules.
+
+        Args:
+            broker (CentralEventBroker): The central event broker instance.
+            tts_speech_module: The TTS speech module for audio output.
+            response_generator_module: The module for generating responses.
+            memory_manager: The memory management module.
+        """
         self.broker = broker
         self.tts_speech_module = tts_speech_module
         self.response_generator_module = response_generator_module
@@ -28,20 +57,37 @@ class BrokerEventHandler:
         self.message_tracker = MessageTracker()
 
     def start(self):
+        """
+        Starts the event handler task in a separate thread.
+        """
         self._task = asyncio.run_coroutine_threadsafe(self._event_handler(), self.broker.loop)
         self._task.add_done_callback(self._handle_task_result)
 
     def stop(self):
+        """
+        Stops the event handler task.
+        """
         if self._task:
             self._task.cancel()
 
     def _handle_task_result(self, future):
+        """
+        Handles the result of the background task, logging any exceptions.
+
+        Args:
+            future: The future object from the completed task.
+        """
         try:
             future.result()
         except Exception as e:
             self.logger.error(f"Background event handler task failed: {e}")
 
     async def _event_handler(self):
+        """
+        Main event handling loop that processes events from the broker.
+
+        Subscribes to events and dispatches them to appropriate handlers.
+        """
         async for event in self.broker.subscribe():
             try:
                 event_type = event.get("type")
@@ -63,6 +109,14 @@ class BrokerEventHandler:
                 self.logger.error(f"Error processing event {event}: {e}")
 
     async def _handle_input_event(self, event):
+        """
+        Handles input events such as monologue, startup, and Twitch chat.
+
+        Filters, rate-limits, and processes messages before publishing response prompts.
+
+        Args:
+            event (dict): The event data containing type, user, text, etc.
+        """
         self.message_tracker.cleanup()
         event_type = event.get("type")
         user = event.get("user", "someone")
@@ -89,6 +143,12 @@ class BrokerEventHandler:
         self._publish_response_prompt(event_type, user, text)
 
     async def _handle_response_generated(self, event):
+        """
+        Handles generated response events by saving to memory and submitting to TTS.
+
+        Args:
+            event (dict): The response event data.
+        """
         prompt = event.get("original_prompt", "")
         self.message_tracker.cleanup()
 
@@ -119,6 +179,12 @@ class BrokerEventHandler:
         self.message_tracker.add_responded(prompt)
 
     async def _handle_response_prompt(self, event):
+        """
+        Handles response prompt events by submitting them to the response generator with priority.
+
+        Args:
+            event (dict): The prompt event data.
+        """
         if self._is_stale_monologue(event):
             return
 
@@ -126,6 +192,12 @@ class BrokerEventHandler:
         self.response_generator_module.submit_prompt(event, priority)
 
     async def _handle_memories_updated(self, event):
+        """
+        Handles memory update events by notifying the prompt manager.
+
+        Args:
+            event (dict): The memory update event data.
+        """
         handler = getattr(self.response_generator_module.prompt_manager, "handle_memory_update", None)
         if handler:
             handler(event.get("data"))
@@ -133,9 +205,26 @@ class BrokerEventHandler:
     # === Helpers ===
 
     def _should_ignore_message(self, message: str) -> bool:
+        """
+        Determines if a message should be ignored based on length.
+
+        Args:
+            message (str): The message text.
+
+        Returns:
+            bool: True if the message should be ignored.
+        """
         return len(message.strip().split()) < 2
 
     def _log_and_store_ignored_message(self, text: str, user: str, source: str):
+        """
+        Logs and stores ignored messages in memory.
+
+        Args:
+            text (str): The message text.
+            user (str): The user who sent the message.
+            source (str): The source of the message.
+        """
         reason = "short" if self._should_ignore_message(text) else "repeated"
         self.logger.debug(f"Skipping {reason} twitch_chat message: '{text}'")
         if self.memory_manager:
@@ -147,6 +236,15 @@ class BrokerEventHandler:
             )
 
     def _is_stale_monologue(self, event) -> bool:
+        """
+        Checks if a monologue event is stale (older than 5 seconds).
+
+        Args:
+            event (dict): The monologue event.
+
+        Returns:
+            bool: True if the monologue is stale.
+        """
         if event.get("original_type") != EventType.MONOLOGUE.value:
             return False
 
@@ -166,6 +264,14 @@ class BrokerEventHandler:
         return False
 
     def _publish_response_prompt(self, event_type: str, user: str, text: str):
+        """
+        Publishes a response prompt event to the broker.
+
+        Args:
+            event_type (str): The type of the original event.
+            user (str): The user associated with the event.
+            text (str): The text content.
+        """
         event = {
             "type": "response_prompt",
             "source": event_type,

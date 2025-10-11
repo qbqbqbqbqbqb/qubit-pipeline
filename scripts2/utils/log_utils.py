@@ -1,26 +1,42 @@
+"""
+Utilities for logging configuration.
+
+This module provides functions to set up and configure loggers with colored console output,
+file logging for all messages, and separate warning logs. It uses rotating file handlers
+to manage log file sizes and prevent excessive disk usage.
+"""
+
 import logging
 from colorlog import ColoredFormatter
 from logging.handlers import RotatingFileHandler
 
-def get_logger(name: str = "default", 
+
+def get_logger(name: str = "default",
                log_file: str = "app.log",
                warn_log_file: str = "app_warnings.log",
                max_bytes: int = 5 * 1024 * 1024,
                backup_count: int = 0) -> logging.Logger:
-    
-    logger = logging.getLogger(name)
     """
-    Creates and returns a logger with colored, timestamped output.
+    Creates and returns a logger with colored console output and file logging.
 
-    Ensures only one handler is added to avoid duplicate logs.
-    Log messages include timestamp, logger name, level, and message,
-    with colors for different log levels.
+    This function configures a logger with:
+    - Colored, timestamped console output using colorlog.
+    - Rotating file handler for all log levels (DEBUG and above).
+    - Separate rotating file handler for warnings and above.
+    - Ensures only one set of handlers is added to avoid duplicate logs.
 
     Args:
         name (str): Name of the logger. Defaults to "default".
+        log_file (str): Path to the file for all log messages. Defaults to "app.log".
+        warn_log_file (str): Path to the file for warning and above messages. Defaults to "app_warnings.log".
+        max_bytes (int): Maximum size in bytes for each log file before rotation. Defaults to 5MB.
+        backup_count (int): Number of backup log files to keep. Defaults to 0 (no backups).
 
     Returns:
-        logging.Logger: Configured logger instance.
+        logging.Logger: A configured logger instance ready for use.
+
+    Raises:
+        Exception: If there's an error during logger setup, falls back to basic logging configuration.
     """
     logger = logging.getLogger(name)
 

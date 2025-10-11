@@ -5,6 +5,14 @@ from scripts2.utils.filter_utils import filter_banned_words
 from typing import Dict
 import spacy
 
+"""
+Utilities for generating and processing dialogue responses.
+
+This module includes functions for validating responses, normalizing text,
+removing bot names, and converting text to British English spelling using
+spaCy tokenization and custom rules.
+"""
+
 nlp = spacy.load("en_core_web_sm")
 logger = get_logger("Dialogue_Generation_Utils")
 
@@ -39,6 +47,17 @@ def remove_bot_name(response: str):
     return response
 
 def apply_spelling_rules(word: str) -> str:
+    """
+    Apply British English spelling rules to a given word.
+
+    Handles exceptions, plural forms, and various suffix conversions.
+
+    Args:
+        word (str): The word to be converted.
+
+    Returns:
+        str: The word with British English spelling applied, preserving case.
+    """
     lower_word = word.lower()
 
     if lower_word in EXCEPTIONS:
@@ -67,6 +86,18 @@ def apply_spelling_rules(word: str) -> str:
     return word
 
 def convert_token(token, spelling_dict: Dict[str, str]) -> str:
+    """
+    Convert a spaCy token to British English spelling.
+
+    Uses the spelling dictionary and applies morphological rules based on token tags.
+
+    Args:
+        token: A spaCy token object.
+        spelling_dict (Dict[str, str]): Dictionary mapping lemmas to British spellings.
+
+    Returns:
+        str: The converted token text with British English spelling.
+    """
     text = token.text
     lemma = token.lemma_.lower()
 
@@ -110,6 +141,18 @@ def convert_token(token, spelling_dict: Dict[str, str]) -> str:
 
 
 def convert_to_british_english(text: str, spelling_dict: Dict[str, str]) -> str:
+    """
+    Convert a given text to British English spelling.
+
+    Processes each token in the text using spaCy and applies spelling conversions.
+
+    Args:
+        text (str): The input text to convert.
+        spelling_dict (Dict[str, str]): Dictionary of spelling conversions.
+
+    Returns:
+        str: The text with British English spelling applied.
+    """
     doc = nlp(text)
     converted = [convert_token(token, spelling_dict) for token in doc]
     return "".join(converted[i] + doc[i].whitespace_ for i in range(len(doc)))

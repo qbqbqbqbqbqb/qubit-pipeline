@@ -12,7 +12,25 @@ class StatisticsReporter:
         self.chat_history_manager = chat_history_manager
 
     def get_memory_stats(self) -> Dict:
-        """Get memory system statistics."""
+        """
+        Retrieve comprehensive statistics about the memory system and related data.
+
+        This method aggregates various metrics from memory storage, user profiles,
+        chat history collections, and semantic indexing. It handles potential
+        exceptions when accessing external data sources like ChromaDB collections.
+
+        Returns:
+            Dict containing statistics with the following keys:
+                - total_memories: Total number of memories in storage
+                - chromadb_memories: Dict with conversation and reflection counts
+                  - conversations: Number of conversation entries in ChromaDB
+                  - reflections: Number of reflection entries in ChromaDB
+                - memory_types: Dict mapping memory types to their counts
+                - users: Number of user profiles
+                - semantic_index_size: Size of the semantic index
+                - oldest_memory: Timestamp of the oldest memory (or None if empty)
+                - newest_memory: Timestamp of the newest memory (or None if empty)
+        """
         memory_types = {}
         for memory in self.memory_storage.memories.values():
             memory_types[memory.memory_type] = memory_types.get(memory.memory_type, 0) + 1

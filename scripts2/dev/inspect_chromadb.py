@@ -1,6 +1,15 @@
 """
-Script to inspect ChromaDB collections and their contents.
-Shows all stored memories, chat history, monologues, and reflections.
+ChromaDB Inspector Module
+
+This module provides functionality to inspect and display contents of ChromaDB collections
+used in the bot's memory system. It connects to the persistent ChromaDB instance and prints
+detailed information about each collection, including item counts, content previews, and metadata.
+
+Useful for debugging memory storage, verifying data persistence, and understanding the
+structure of stored memories, chat history, monologues, and reflections.
+
+Functions:
+    inspect_chromadb(): Main function to perform the inspection.
 """
 
 import sys
@@ -14,9 +23,21 @@ def inspect_chromadb():
     """
     Inspect and display contents of all ChromaDB collections.
 
-    Connects to the bot's ChromaDB instance and prints detailed information
-    about each collection including item counts, content previews, and metadata.
+    This function connects to the bot's ChromaDB instance located at ROOT/memories/chroma.db
+    and retrieves information about all collections. For each collection, it prints the total
+    number of items and detailed information about each item, including ID, content preview,
+    and associated metadata.
+
     Useful for debugging memory storage and verifying data persistence.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If there is an error connecting to ChromaDB or retrieving collections.
     """
     try:
         chroma_client = chromadb.PersistentClient(

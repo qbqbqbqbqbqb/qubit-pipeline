@@ -8,9 +8,31 @@ from scripts2.config.config import TTS_SUBTITLE_NAME
 # === Setup colorlog logger ===
 from scripts2.utils.log_utils import get_logger
 logger = get_logger("OBS_Websocket_Controller")
+"""
+Module for managing OBS WebSocket connections and subtitle operations.
+
+This module provides the OBSManager class to handle authentication and communication
+with OBS Studio via WebSocket, including updating subtitle text sources.
+"""
+
 
 class OBSManager:
+    """
+    Manages OBS WebSocket connections and subtitle updates.
+
+    This class handles establishing authenticated WebSocket connections to OBS Studio
+    and provides methods to update text sources for subtitles.
+    """
+
     def __init__(self, settings):
+        """
+        Initialize the OBSManager with settings.
+
+        Args:
+            settings: An object containing OBS configuration attributes such as
+                      obs_password, obs_host, obs_port.
+        """
+
         self.settings = settings
         self.obs_password = self.settings.obs_password
         self.obs_host = self.settings.obs_host

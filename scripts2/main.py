@@ -1,3 +1,11 @@
+"""
+Main entry point for qubit
+
+This module initializes and runs the AI Vtuber pipeline, coordinating various modules
+for monologue generation, Twitch chat interaction, memory management, response generation,
+and text-to-speech synthesis.
+"""
+
 import asyncio
 import signal
 import threading
@@ -20,15 +28,30 @@ from scripts2.managers.tts_manager import TTSManager
 logger = get_logger("Main")
 
 def setup_signal_handlers(signals):
+    """
+    Sets up signal handlers for graceful shutdown on SIGINT and SIGTERM.
+
+    Args:
+        signals (Signals): The signals object used for termination flags.
+    """
     def signal_handler(sig, frame):
         sig_name = signal.Signals(sig).name
         logger.info(f"Received signal {sig_name}, shutting down...")
         signals.terminate.set()
-
+ 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
 def start_module_in_thread(module):
+    """
+    Starts a given module in a separate daemon thread using asyncio.
+
+    Args:
+        module: The module instance to start.
+
+    Returns:
+        threading.Thread: The thread running the module.
+    """
     def run_loop():
         logger.info(f"Thread for module {module.name} started")
         try:
@@ -36,12 +59,16 @@ def start_module_in_thread(module):
         except Exception as e:
             logger.error(f"Exception in thread for {module.name}: {e}")
         logger.info(f"Thread for module {module.name} exiting")
-
+ 
     thread = threading.Thread(target=run_loop, daemon=True)
     thread.start()
     return thread
 
 async def main():
+    """
+    Main asynchronous function that initializes all components, starts modules,
+    and handles the application lifecycle.
+    """
     signals = Signals()
     setup_signal_handlers(signals)
 

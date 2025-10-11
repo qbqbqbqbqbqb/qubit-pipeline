@@ -4,9 +4,42 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 import chromadb
 from chromadb.config import Settings
+"""
+Preload ChromaDB Models Script
+
+This module provides functionality to pre-download and initialize ChromaDB sentence transformer models.
+It ensures that the required models are available locally before the main application starts,
+preventing delays during runtime due to model downloads.
+
+The script can be run independently to preload models or imported as a module.
+"""
+
+
 
 def preload_chromadb_models():
-    """Pre-download ChromaDB sentence transformer models."""
+    """
+    Pre-download ChromaDB sentence transformer models.
+
+    This function initializes a persistent ChromaDB client, creates or retrieves a collection,
+    and performs operations to trigger the download of the sentence transformer model.
+    It uses a dummy document insertion and query to ensure the model is loaded,
+    then cleans up the dummy data.
+
+    The process involves:
+    - Creating a ChromaDB PersistentClient with specific settings.
+    - Getting or creating a collection named 'reflections_collection' with cosine space.
+    - Inserting a dummy document to force model download.
+    - Querying the collection to verify model functionality.
+    - Deleting the dummy document to clean up.
+
+    Returns:
+        bool: True if preloading was successful, False otherwise.
+
+    Raises:
+        Exception: Propagated if an error occurs during ChromaDB operations, though
+                   internally caught and handled by returning False. Common issues
+                   include network errors during model download or ChromaDB configuration problems.
+    """
     print("Pre-loading ChromaDB models...")
 
     try:

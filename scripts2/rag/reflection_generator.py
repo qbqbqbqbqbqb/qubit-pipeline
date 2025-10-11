@@ -6,9 +6,58 @@ from typing import Dict, List, Tuple
 from scripts2.modules.response_generator_module import ResponseGeneratorModule
 from scripts2.config.config import MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION
 
+"""
+
+Module for generating reflections from chat history.
+
+This module provides functionality to analyze recent conversation messages and generate
+
+insightful question-answer pairs that capture key aspects of the conversation. These Q&A
+
+pairs are used to create memories for future interactions, improving the AI's contextual
+
+understanding.
+
+Classes:
+
+    ReflectionGenerator: Handles the generation and parsing of reflection-based memories.
+
+"""
 
 class ReflectionGenerator:
+    """
+
+    A class to generate reflective question-answer pairs from recent chat history.
+
+    This class interfaces with the chat history manager and response generator to create
+
+    memories in the form of Q&A pairs that highlight important insights from conversations.
+
+    Attributes:
+
+        chat_history_manager: Manager for accessing chat history.
+
+        response_generator (ResponseGeneratorModule): Module to generate AI responses.
+
+        reflection_threshold (int): Minimum number of messages to trigger reflection.
+
+        reflection_prompt (str): Template prompt for the reflection generation.
+
+    """
     def __init__(self, chat_history_manager, response_generator: ResponseGeneratorModule, reflection_threshold: int = 20):
+        """
+
+        Initialize the ReflectionGenerator.
+
+        Args:
+
+            chat_history_manager: An object managing chat history data.
+
+            response_generator (ResponseGeneratorModule): The response generation module.
+
+            reflection_threshold (int, optional): The number of recent messages to consider for reflection. Defaults to 20.
+
+        """
         self.chat_history_manager = chat_history_manager
         self.response_generator = response_generator
         self.reflection_threshold = reflection_threshold
@@ -30,7 +79,27 @@ A3: [Answer]
 """
 
     async def _perform_reflection(self) -> List[Tuple[str, str]]:
-        """Perform reflection on recent messages to generate Q&A memories."""
+        """
+
+        Perform reflection on recent messages to generate Q&A memories.
+
+        Retrieves recent chat messages, formats them, and uses the response generator
+
+        to create up to 3 insightful question-answer pairs that capture key aspects
+
+        of the conversation.
+
+        Returns:
+
+            List[Tuple[str, str]]: A list of up to 3 tuples, each containing a question and its answer.
+
+            Returns an empty list if there are fewer than 10 messages or on failure.
+
+        Raises:
+
+            No exceptions are raised; errors are handled internally and return empty list.
+
+        """
         recent_messages = self.chat_history_manager.get_recent_chat_history(limit=self.reflection_threshold)
 
         if len(recent_messages) < 10:
@@ -67,7 +136,23 @@ A3: [Answer]
             return []
 
     def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:
-        """Parse Q&A pairs from LLM reflection response."""
+        """
+
+        Parse question-answer pairs from the LLM's reflection response.
+
+        Uses regex to extract Q&A pairs from the response string. If regex fails,
+
+        falls back to line-by-line parsing. Ensures exactly 3 pairs are returned if possible.
+
+        Args:
+
+            response (str): The raw string response from the LLM containing Q&A pairs.
+
+        Returns:
+
+            List[Tuple[str, str]]: A list of tuples, each (question, answer), up to 3 pairs.
+
+        """
         qa_pairs = []
 
         qa_pattern = r'Q(\d+):\s*(.*?)\nA(\d+):\s*(.*?)(?=\nQ\d+:|$)'

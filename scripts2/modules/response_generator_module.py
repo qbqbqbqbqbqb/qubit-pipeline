@@ -3,14 +3,37 @@ import datetime
 import itertools
 from scripts2.modules.base_module import BaseModule
 from scripts2.managers.model_manager import ModelManager
-from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
+from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION,
                                     MAX_GENERATION_ATTEMPTS,
                                     SPELLING_DICTIONARY_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
 from scripts2.managers.prompt_manager import PromptManager
 from scripts2.utils.dialogue_generation_utils import is_valid_response, normalise_response, remove_bot_name, convert_to_british_english
 
+"""
+This module provides the ResponseGeneratorModule class for generating AI responses to user prompts.
+
+It handles asynchronous response generation using a language model, including prompt building, text generation,
+response validation, normalization, and conversion to British English spelling.
+"""
+
 class ResponseGeneratorModule(BaseModule):
+    """
+    ResponseGeneratorModule is responsible for generating AI responses in a dialogue system.
+
+    It uses an event-driven architecture to process prompts asynchronously, with priority queuing and retry mechanisms.
+    The module integrates with model and prompt managers to build and generate responses, applying various filters and transformations.
+    """
     def __init__(self, signals, event_broker, model_manager=ModelManager, prompt_manager:PromptManager = None, response_generation_enabled = True):
+        """
+        Initializes the ResponseGeneratorModule.
+
+        Args:
+            signals: A signals object for synchronization.
+            event_broker: The central event broker for publishing events.
+            model_manager: The ModelManager class or instance for language model access.
+            prompt_manager: Optional PromptManager instance for building prompts.
+            response_generation_enabled: Flag to enable or disable response generation.
+        """
         super().__init__(name="ResponseGeneratorModule")
         self.signals = signals
         self.event_broker = event_broker
@@ -26,6 +49,12 @@ class ResponseGeneratorModule(BaseModule):
         self._task_done_calls = 0
 
     async def start(self):
+        """
+        Starts the ResponseGeneratorModule.
+
+        Initializes the model manager, assigns the event loop, and signals readiness.
+        If response generation is disabled, it logs and returns without starting.
+        """
         if not self.response_generation_enabled:
             self.logger.info(f"[start] {self.name} is disabled. Not starting.")
             return
@@ -40,6 +69,12 @@ class ResponseGeneratorModule(BaseModule):
         self.signals.response_generator_ready.set()
 
     async def run(self):
+        """
+        Main asynchronous loop for processing prompts.
+
+        Continuously retrieves prompts from the priority queue and processes them.
+        Handles exceptions during processing.
+        """
         while self._running:
             try:
                 priority, count, event = await self.queue.get()
@@ -49,6 +84,14 @@ class ResponseGeneratorModule(BaseModule):
                 self.logger.error(f"Error processing prompt: {e}")
 
     async def process_prompt(self, event_data):
+        """
+        Processes a single prompt event to generate and publish a response.
+
+        Generates a response with retries, validates it, applies transformations, and publishes the result via the event broker.
+
+        Args:
+            event_data (dict): The event data containing the prompt text and user information.
+        """
         text = event_data["text"]
         user_id = event_data.get("user")
         response = await self._generate_response_with_retries(text, user_id=user_id)
@@ -73,16 +116,39 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.info(f"Generated response: {british_response}")
     
     def submit_prompt(self, event_data, priority=5):
+        """
+        Submits a prompt to the processing queue with a given priority.
+
+        Uses run_coroutine_threadsafe to add the prompt to the asyncio queue.
+
+        Args:
+            event_data (dict): The event data for the prompt.
+            priority (int): The priority level for the prompt (default 5).
+        """
         if self.loop is None:
             self.logger.warning(f"submit_prompt called but loop is None. Ignoring prompt: {event_data}")
             return
         self.logger.info(f"ResponseGenerator received prompt: {event_data} with priority {priority}")
         count = next(self.counter)
         asyncio.run_coroutine_threadsafe(
-            self.queue.put((priority, count, event_data)), 
+            self.queue.put((priority, count, event_data)),
             self.loop)
 
     async def _generate_response(self, raw_prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, use_system_prompt=True, user_id=None):
+        """
+        Generates a response to the given prompt using the language model.
+
+        Builds the prompt if needed, applies chat template, generates text, and returns the output.
+
+        Args:
+            raw_prompt (str): The raw user prompt.
+            max_new_tokens (int): Maximum new tokens to generate.
+            use_system_prompt (bool): Whether to use system prompt building.
+            user_id: Optional user identifier for prompt building.
+
+        Returns:
+            str: The generated response text.
+        """
         try:
             self.signals.ai_thinking.set()
             if use_system_prompt:
@@ -192,7 +258,18 @@ class ResponseGeneratorModule(BaseModule):
                                   chat: list,
                                   ) -> str:
         """
-        i dont remember why i added this initially but i cant get my advanced prompts to work without it
+        Applies the chat template to the conversation for model input.
+
+        Uses the tokenizer's apply_chat_template method to format the chat for generation.
+
+        Args:
+            chat (list): The chat conversation as a list of messages.
+
+        Returns:
+            str: The formatted chat string.
+
+        Raises:
+            Exception: If chat template application fails.
         """
         try:
             return self.model_manager.tokeniser.apply_chat_template(
@@ -205,4 +282,9 @@ class ResponseGeneratorModule(BaseModule):
             raise
 
     async def stop(self):
+        """
+        Stops the ResponseGeneratorModule.
+
+        Calls the parent stop method to clean up resources.
+        """
         await super().stop()

@@ -1,3 +1,10 @@
+"""
+Configuration module for qubit
+
+This module defines constants, authentication scopes, token limits, TTS settings,
+and loads external configuration files such as instructions, word lists, and dictionaries.
+"""
+
 from twitchAPI.type import AuthScope
 from scripts2.utils.file_utils import load_text_file, get_root, get_file_path, load_word_list, load_phrases, load_json_file
 

@@ -1,15 +1,55 @@
 from typing import Optional
 
+"""
+Module for providing memory context in RAG systems.
+
+This module contains the MemoryContextProvider class which aggregates
+relevant memory information from various sources to generate contextual
+information for AI prompts.
+"""
+
 
 class MemoryContextProvider:
+    """
+    Class responsible for generating memory context for AI prompts.
+
+    It integrates data from memory storage, chat history, reflection generator,
+    and user profiles to provide relevant context.
+    """
+
     def __init__(self, memory_storage, chat_history_manager, reflection_generator, user_profile_manager):
+        """
+        Initialize the MemoryContextProvider.
+
+        Args:
+            memory_storage: Instance for accessing memory data.
+            chat_history_manager: Manager for chat history operations.
+            reflection_generator: Generator for reflections based on history.
+            user_profile_manager: Manager for user profile data.
+        """
         self.memory_storage = memory_storage
         self.chat_history_manager = chat_history_manager
         self.reflection_generator = reflection_generator
         self.user_profile_manager = user_profile_manager
 
     def get_memory_context(self, user_id: Optional[str] = None, current_topic: Optional[str] = None) -> str:
-        """Generate memory context for prompts."""
+        """
+        Generate memory context string for AI prompts based on user and topic.
+
+        This method queries various data sources to build a context string
+        that includes key insights, user personality traits, user memories,
+        topic-related memories, and recent context.
+
+        Args:
+            user_id (Optional[str]): The ID of the user. Defaults to None.
+            current_topic (Optional[str]): The current conversation topic. Defaults to None.
+
+        Returns:
+            str: A newline-separated string of context parts, or empty string if no context.
+
+        Raises:
+            Exception: If there's an error querying ChromaDB (handled internally with print).
+        """
         context_parts = []
 
         if current_topic:
