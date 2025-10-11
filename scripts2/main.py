@@ -2,7 +2,7 @@ import asyncio
 import signal
 import threading
 
-from scripts2.config.config import INSTRUCTIONS_FILE
+from scripts2.config.config import INSTRUCTIONS_FILE, ROOT
 from scripts2.core.signals import Signals
 from scripts2.managers.prompt_manager import PromptManager
 from scripts2.modules.memory_module import MemoryModule
@@ -73,6 +73,7 @@ async def main():
         logger.warning("ResponseGeneratorModule did not start in time")
 
     memory_module = MemoryModule(
+        base_path=ROOT,
         memory_enabled=True,
         response_generator=response_generator_module)
     

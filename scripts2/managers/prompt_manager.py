@@ -16,7 +16,10 @@ class PromptManager:
         self.system_instructions = system_instructions or (
             "You are Qubit, an AI Vtuber talking to a chat. "
             "You are feeling {mood}, and talk in a {tone} tone. "
-            "You will {interaction_instruction}"
+            "You will {interaction_instruction}. "
+            "Adapt your response style and tone based on the user's personality traits and relationship score provided in the user context. "
+            "Match the user's communication style - if they are sarcastic, respond sarcastically; if aggressive, be direct; etc. "
+            "Adjust your friendliness: if relationship score is high (>0.5), be more casual and affectionate; if low (<0.2), be more formal and reserved."
         )
 
     def create_system_prompt(self):
@@ -35,10 +38,16 @@ class PromptManager:
 
         return system_prompt
 
-    def build_prompt(self, base_prompt: str):
+    def build_prompt(self, base_prompt: str, user_id: str = None, current_topic: str = None):
         prompt = []
         system_prompt = self.create_system_prompt()
         prompt.append({"role": "system", "content": system_prompt})
+
+        # Add memory context if available
+        if hasattr(self, 'memory_module') and self.memory_module:
+            context = self.memory_module.get_memory_context(user_id, current_topic)
+            if context:
+                prompt.append({"role": "system", "content": f"User context:\n{context}"})
 
         chat_history = self.cached_memories.get("chat_history", [])
         reflections = self.cached_memories.get("reflections", [])

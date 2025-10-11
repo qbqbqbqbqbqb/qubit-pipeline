@@ -6,7 +6,7 @@ Shows all stored memories, chat history, monologues, and reflections.
 import sys
 import os
 from pathlib import Path
-
+from scripts2.config.config import ROOT
 import chromadb
 from chromadb.config import Settings
 
@@ -19,9 +19,8 @@ def inspect_chromadb():
     Useful for debugging memory storage and verifying data persistence.
     """
     try:
-        base_path = Path(__file__).parent.parent
         chroma_client = chromadb.PersistentClient(
-            path=str(base_path / "memories" / "chroma.db"),
+            path=str(ROOT / "memories" / "chroma.db"),
             settings=Settings(
                 anonymized_telemetry=False,
                 chroma_server_host=None,

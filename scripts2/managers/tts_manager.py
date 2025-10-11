@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from piper import PiperVoice, SynthesisConfig
 from scripts2.utils.log_utils import get_logger
-from scripts2.config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME
+from scripts2.config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME, ROOT
 
 
 class TTSManager:
@@ -24,7 +24,7 @@ class TTSManager:
         self.logger = get_logger("TTSManager")
 
         this_file = Path(__file__).resolve()
-        self.project_root = this_file.parent.parent.parent
+        self.project_root = ROOT
         self.model_path = self.project_root / TTS_MODEL_NAME
         self.voice = None
 
