@@ -315,15 +315,33 @@ class TwitchModule(BaseModule):
 
     async def _on_subscription(self, event: EventData):
         try:
-            user = event.user.name
-            tier = event.subscription_plan
-            message = f"{user} just subscribed with {tier}!"
+            self.logger.debug(f"Sub System Message {event.system_message}")
+            self.logger.debug(f"Sub Plan Name {event.sub_plan_name}")
+            self.logger.debug(f"Sub Type {event.sub_type}")           
+            self.logger.debug(f"Sub Message{event.sub_message}")       
+
+            user = "Someone"
+            tier = event.sub_plan_name
+            sub_msg = event.sub_message
+            sub_type = event.sub_type
 
             self.logger.info(f"Subscription event: {message}")
 
             if contains_banned_words(user, blacklist=BLACKLISTED_WORDS_LIST, 
                                      whitelist=WHITELISTED_WORDS_LIST):
-                user = "Someone"
+                user = "Someone"    
+            
+            if sub_type == "resub":
+                message = f"{user} just resubscribed with {tier}!"
+            elif sub_type == "gift":
+                message = f"{user} just gifted a {tier} subscription!"
+            elif sub_type == "prime":
+                message = f"{user} just subscribed with Prime Gaming!"
+            else:
+                message = f"{user} just subscribed with {tier}!"
+
+            if sub_msg:
+                message += f" They said: {sub_msg}"
 
             self.event_broker.publish_event({
                 "type": "twitch_subscription",
