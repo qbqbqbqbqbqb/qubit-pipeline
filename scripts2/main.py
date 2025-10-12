@@ -9,6 +9,9 @@ and text-to-speech synthesis.
 import asyncio
 import signal
 import threading
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+import uvicorn
 
 from scripts2.config.config import INSTRUCTIONS_FILE, ROOT
 from scripts2.core.signals import Signals
@@ -26,6 +29,36 @@ from scripts2.modules.tts_speech_module import TtsSpeechModule
 from scripts2.managers.tts_manager import TTSManager
 
 logger = get_logger("Main")
+
+app = FastAPI()
+
+@app.get("/", response_class=HTMLResponse)
+async def control_page():
+    return """
+    <html>
+        <head><title>Stream Controller</title></head>
+        <body>
+            <h1>Start Stream Modules</h1>
+            <form action="/start" method="post">
+                <button type="submit">Start Twitch & Monologue</button>
+            </form>
+        </body>
+    </html>
+    """
+
+@app.post("/start")
+async def start_modules():
+    if not state.startup_trigger.is_set():
+        state.startup_trigger.set()
+        return {"status": "started"}
+    return {"status": "already started"}
+
+
+class SharedState:
+    startup_trigger: asyncio.Event = None
+
+state = SharedState()
+
 
 def setup_signal_handlers(signals):
     """
@@ -71,6 +104,7 @@ async def main():
     """
     signals = Signals()
     setup_signal_handlers(signals)
+    state.startup_trigger = asyncio.Event()
 
     event_broker = CentralEventBroker()
     tts_manager = TTSManager()
@@ -122,37 +156,57 @@ async def main():
     )
     broker_handler.start()
 
-    event_broker.publish_event({
-        "type": "startup",
-        "text": "Write a short greeting to say hello and welcome viewers to the stream."
-    })
 
-    modules = {
-        'twitch': TwitchModule(
-            signals=signals,
-            settings=settings,
-            event_broker=event_broker,
-            memory_manager=memory_module,
-            twitch_enabled=True,
-            chat_enabled=True,
-        ),
-        'monologue': MonologueModule(
-            signals=signals,
-            event_broker=event_broker,
-            monologue_enabled=True,
-        ),
-        'memory_manager': memory_module,
-    }
+    config = uvicorn.Config(app=app, host="127.0.0.1", port=8000, log_level="info")
+    server = uvicorn.Server(config)
 
-    module_threads = {
-        'response': response_thread,
-        'tts': tts_thread,
-    }
+    server_task = asyncio.create_task(server.serve())
 
-    for name, module in modules.items():
-        thread = start_module_in_thread(module)
-        module_threads[name] = thread
-        logger.info(f"Started module '{name}' in thread.")
+    logger.info("Web controller started at http://127.0.0.1:8000")
+
+
+    logger.info("Waiting for browser button press to start Twitch and Monologue...")
+    await state.startup_trigger.wait()
+
+    try:
+        logger.info("Startup trigger received. Starting Twitch and Monologue modules...")
+
+        event_broker.publish_event({
+            "type": "startup",
+            "text": "Write a short greeting to say hello and welcome viewers to the stream."
+        })
+
+        modules = {
+            'twitch': TwitchModule(
+                signals=signals,
+                settings=settings,
+                event_broker=event_broker,
+                memory_manager=memory_module,
+                twitch_enabled=True,
+                chat_enabled=True,
+            ),
+            'monologue': MonologueModule(
+                signals=signals,
+                event_broker=event_broker,
+                monologue_enabled=True,
+            ),
+            'memory_manager': memory_module,
+        }
+
+
+        module_threads = {
+            'response': response_thread,
+            'tts': tts_thread,
+        }
+
+
+        for name, module in modules.items():
+            thread = start_module_in_thread(module)
+            module_threads[name] = thread
+            logger.info(f"Started module '{name}' in thread.")
+
+    except Exception as e:
+        logger.exception("Failed to start Twitch/Monologue modules: %s", e)
 
     try:
         while not signals.terminate.is_set():
