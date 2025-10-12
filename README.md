@@ -2,12 +2,17 @@
 this is my pipeline for running qubit. if you are wondering why i did something a certain way, it is because i do not respect python as a language. thank you.
 
 TODO - by priority
+figure out why she randomly stops responding to twitch??
+add message filters to stop replying to @ and !
+filter out random non text from some messages
+make skipping messages on speed stricter, lower speed
 1. add mood class for more advanced prompt control
 2. add STT detection with speech and response generation priority for STT
 3. ability to send events from elsewhere so she can reference whats on screen
 4. Improve status controller to handle pause/resume
 
 MAYBE
+figure out a way to avoid her ignoring or saying her prompt
 - add singing via audio files
 - hook to vtube studio for movement (if she has model)
 - youtube chat API?
