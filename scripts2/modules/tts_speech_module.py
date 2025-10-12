@@ -93,7 +93,7 @@ class TtsSpeechModule(BaseModule):
                     await self.speak(pair['user_text'])
                     await self.speak(pair['response_text'])
 
-                    for _ in range(3):
+                    for _ in range(1):
                         if self.monologues_queue:
                             monologue = self.monologues_queue.popleft()
                             self.logger.debug(f"[TTS] Processing monologue after pair: {monologue}")
