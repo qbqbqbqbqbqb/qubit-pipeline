@@ -1,5 +1,7 @@
 from typing import Optional, List, Dict
 from scripts2.core.broker_event_handler import BrokerEventHandler
+from datetime import datetime
+from scripts2.rag.chat_history_manager import ChatHistoryManager
 
 """Prompt Manager Module
 
@@ -23,6 +25,7 @@ class PromptManager:
                  mood: str = "energetic",
                  tone: str = "casual and humorous",
                  interaction_level: str = "high",
+                 chat_history_manager = None
                  ):
 
         """Initialize the PromptManager with configuration parameters.
@@ -39,6 +42,7 @@ class PromptManager:
 
         self.cached_memories = {"chat_history": [], "reflections": []}
         self.mood = mood
+        self.chat_history_manager = chat_history_manager
         self.tone = tone
         self.interaction_level = interaction_level
         self.system_instructions = system_instructions or (
@@ -72,35 +76,35 @@ class PromptManager:
         return system_prompt
 
     def build_prompt(self, base_prompt: str, user_id: str = None, current_topic: str = None):
-        """Build a complete prompt including system instructions, memory context, and history.
-
-        Args:
-            base_prompt (str): The base user prompt to respond to.
-            user_id (str, optional): The ID of the user for memory context.
-            current_topic (str, optional): The current conversation topic.
-
-        Returns:
-            List[Dict]: A list of prompt messages with roles and content.
-        """
         prompt = []
+
         system_prompt = self.create_system_prompt()
         prompt.append({"role": "system", "content": system_prompt})
 
-        # Add memory context if available
         if hasattr(self, 'memory_module') and self.memory_module:
             context = self.memory_module.get_memory_context(user_id, current_topic)
             if context:
-                prompt.append({"role": "system", "content": f"User context:\n{context}"})
+                prompt.append({"role": "system", "content": context})
 
-        chat_history = self.cached_memories.get("chat_history", [])
-        reflections = self.cached_memories.get("reflections", [])
+        recent_memories = self.chat_history_manager.get_recent_memories(limit_chat=15, limit_reflections=2)
+        chat_history = recent_memories["chat_history"]
+        reflections = recent_memories["reflections"]
 
-        prompt.append({"role": "system", "content": "Chat history:"})
-        prompt.extend(chat_history)
-        prompt.append({"role": "system", "content": "Reflections:"})
-        prompt.extend(reflections)
+        for message in chat_history:
+            prompt.append({
+                "role": message["role"],
+                "content": message["content"]
+            })
+
+            """         
+            for reflection in reflections:
+            prompt.append({
+                "role": "system",
+                "content": f"Note to self: {reflection['content']}"
+            }) """
 
         prompt.append({"role": "user", "content": base_prompt})
+
         return prompt
     
     def handle_memory_update(self, memory_data: Dict):

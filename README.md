@@ -4,6 +4,7 @@ this is my pipeline for running qubit. if you are wondering why i did something 
 TODO - by priority
 figure out why she randomly stops responding to twitch??
 add message filters to stop replying to @ and !
+move relationship score out of context directly and make it control a relationship_var i insert instead
 filter out random non text from some messages
 make skipping messages on speed stricter, lower speed
 1. add mood class for more advanced prompt control
@@ -12,6 +13,7 @@ make skipping messages on speed stricter, lower speed
 4. Improve status controller to handle pause/resume
 
 MAYBE
+check user relationship table is working correctly
 figure out a way to avoid her ignoring or saying her prompt
 - add singing via audio files
 - hook to vtube studio for movement (if she has model)

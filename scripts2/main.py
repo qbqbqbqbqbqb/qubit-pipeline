@@ -116,7 +116,15 @@ async def main():
         tts_manager=tts_manager,
         tts_enabled=True
     )
-    prompt_manager = PromptManager(system_instructions=INSTRUCTIONS_FILE)
+
+    memory_module = MemoryModule(
+        base_path=ROOT,
+        memory_enabled=True,
+        response_generator=None
+    )
+
+    prompt_manager = PromptManager(system_instructions=INSTRUCTIONS_FILE, chat_history_manager=memory_module.chat_history_manager)
+    
     response_generator_module = ResponseGeneratorModule(
         signals=signals,
         event_broker=event_broker,
@@ -127,6 +135,8 @@ async def main():
 
     response_thread = start_module_in_thread(response_generator_module)
 
+    prompt_manager.memory_module = memory_module
+    
     try:
         await asyncio.wait_for(signals.response_generator_ready.wait(), timeout=10)
         logger.info("ResponseGeneratorModule is ready")

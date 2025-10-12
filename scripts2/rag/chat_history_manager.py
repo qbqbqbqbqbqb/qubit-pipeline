@@ -71,7 +71,7 @@ class ChatHistoryManager:
         timestamped and assigned a unique ID.
 
         Args:
-            role (str): The role of the message sender (e.g., 'user', 'assistant').
+            role (str): The role of the message sender (e.g., 'user', 'qubit').
             content (str): The text content of the chat message.
             user_id (str, optional): Identifier for the user. Defaults to None.
             metadata (Dict, optional): Additional metadata to store with the message.
@@ -157,7 +157,10 @@ class ChatHistoryManager:
 
                 chat_history.append(chat_entry)
 
-            return chat_history
+            chat_history.sort(key=lambda x: x["timestamp"], reverse=True)
+
+            return chat_history[:limit]
+    
         except Exception as e:
             print(f"Error retrieving chat history from ChromaDB: {e}")
             return []

@@ -321,7 +321,7 @@ class MemoryModule(BaseModule):
         Increments the message counter and triggers reflection if threshold is reached.
 
         Args:
-            role (str): Role of the speaker ('user' or 'assistant').
+            role (str): Role of the speaker ('user' or 'qubit').
             content (str): Content of the message.
             user_id (str): ID of the user (optional).
             metadata (Dict): Additional metadata for the message (optional).
@@ -553,7 +553,7 @@ Respond only with the JSON object, no additional text."""
         self._pending_conversation_items.clear()
 
         self.add_conversation_item(
-            role="assistant",
+            role="qubit",
             content=assistant_content,
             user_id="ai",
             metadata=assistant_metadata or {}

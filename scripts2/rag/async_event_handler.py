@@ -193,7 +193,7 @@ class AsyncEventHandler(BaseModule):
 
         Args:
 
-            role (str): The role of the message (e.g., 'user', 'assistant').
+            role (str): The role of the message (e.g., 'user', 'qubit').
 
             content (str): The content of the message.
 

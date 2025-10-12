@@ -42,8 +42,21 @@ def normalise_response(response: str):
 def remove_bot_name(response: str):
     """Remove 'Bot:' from speech if it adds it"""
     bot_name_lower = BOT_NAME.lower()
+    assistant = "assistant"
+    user = "user"
     if response.lower().startswith(f"{bot_name_lower}:"):
+        logger.info(response)
         response = response[len(f"{bot_name_lower}:"):].lstrip()
+        logger.info(response)
+    if response.lower().startswith(f"{assistant}:"):
+        logger.info(response)
+        response = response[len(f"{assistant}:"):].lstrip()
+        logger.info(response)
+    if response.lower().startswith(f"{user}:"):
+        logger.info(response)
+        response = response[len(f"{user}:"):].lstrip()
+        logger.info(response)
+
     return response
 
 def apply_spelling_rules(word: str) -> str:

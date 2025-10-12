@@ -113,12 +113,12 @@ A3: [Answer]
             if role == "user":
                 formatted_messages.append(f"User {user_id}: {content}")
             else:
-                formatted_messages.append(f"Assistant: {content}")
+                formatted_messages.append(f"Qubit: {content}")
 
         messages_text = "\n".join(formatted_messages)
 
         reflection_messages = [
-            {"role": "system", "content": "You are an AI assistant that analyzes conversations and creates insightful question-answer pairs."},
+            {"role": "system", "content": "You are an AI qubit that analyzes conversations and creates insightful question-answer pairs."},
             {"role": "user", "content": self.reflection_prompt.format(recent_messages=messages_text)}
         ]
 
