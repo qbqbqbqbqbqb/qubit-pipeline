@@ -94,18 +94,17 @@ class PromptManager:
 
         for message in chat_history:
             metadata = message["metadata"]
+            raw_content = metadata.get('content', '')
             if message["role"] == "user":
                 user_id = message.get("user_id", "unknown")
-                if not user_id or contains_banned_words(user_id, 
-                                        blacklist=BLACKLISTED_WORDS_LIST, 
+                if not user_id or contains_banned_words(user_id,
+                                        blacklist=BLACKLISTED_WORDS_LIST,
                                         whitelist=WHITELISTED_WORDS_LIST):
                     user_id = "Someone"
-                content = f"{user_id} says {message['content']}"
+                content = f"{user_id} says {raw_content}"
             else:
-                content = message["content"]
+                content = raw_content
 
-            print(content)
-            print(message["role"])
             prompt.append({
                 "role": message["role"],
                 "content": content
@@ -122,7 +121,7 @@ class PromptManager:
             if not user_id or contains_banned_words(user_id, 
                                      blacklist=BLACKLISTED_WORDS_LIST, 
                                      whitelist=WHITELISTED_WORDS_LIST):
-                user_id == "Someone"
+                user_id = "Someone"
             prompt.append({"role": "user", "content": f"{user_id} says {base_prompt}"})
         else:
             prompt.append({"role": "user", "content": base_prompt})
