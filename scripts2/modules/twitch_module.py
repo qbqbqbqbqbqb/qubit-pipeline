@@ -325,8 +325,6 @@ class TwitchModule(BaseModule):
             sub_msg = event.sub_message
             sub_type = event.sub_type
 
-            self.logger.info(f"Subscription event: {message}")
-
             if contains_banned_words(user, blacklist=BLACKLISTED_WORDS_LIST, 
                                      whitelist=WHITELISTED_WORDS_LIST):
                 user = "Someone"    
@@ -342,6 +340,8 @@ class TwitchModule(BaseModule):
 
             if sub_msg:
                 message += f" They said: {sub_msg}"
+
+            self.logger.info(f"Subscription event: {message}")
 
             self.event_broker.publish_event({
                 "type": "twitch_subscription",
