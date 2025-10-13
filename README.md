@@ -2,9 +2,8 @@
 this is my pipeline for running qubit. if you are wondering why i did something a certain way, it is because i do not respect python as a language. thank you.
 
 TODO - by priority
-fix z->s word filter
+fix z->s word filter and horrour
 change qubit to assistant in logs
-figure out why she randomly stops responding to twitch??
 add message filters to stop replying to @ and !
 move relationship score out of context directly and make it control a relationship_var i insert instead -> also make sure its working as expected
 filter out random non text from some messages

@@ -183,10 +183,10 @@ cython_debug/
 /Data
 /scripts/Archive
 *.wav
-*.txt
 /vllm
 en_GB-vctk-medium.onnx
 /memories
 /.venv2
 whitelisted_words.txt
 blacklisted_words.txt
+instructions.txt
