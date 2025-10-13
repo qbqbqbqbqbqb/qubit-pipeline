@@ -2,6 +2,8 @@ from typing import Optional, List, Dict
 from scripts2.core.broker_event_handler import BrokerEventHandler
 from datetime import datetime
 from scripts2.rag.chat_history_manager import ChatHistoryManager
+from scripts2.utils.filter_utils import contains_banned_words
+from scripts2.config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 
 """Prompt Manager Module
 
@@ -75,9 +77,9 @@ class PromptManager:
 
         return system_prompt
 
-    def build_prompt(self, base_prompt: str, user_id: str = None, current_topic: str = None):
+    def build_prompt(self, base_prompt: str, user_id: str = None, current_topic: str = None, original_type=None):
         prompt = []
-
+        
         system_prompt = self.create_system_prompt()
         prompt.append({"role": "system", "content": system_prompt})
 
@@ -91,9 +93,22 @@ class PromptManager:
         reflections = recent_memories["reflections"]
 
         for message in chat_history:
+            metadata = message["metadata"]
+            if message["role"] == "user":
+                user_id = message.get("user_id", "unknown")
+                if not user_id or contains_banned_words(user_id, 
+                                        blacklist=BLACKLISTED_WORDS_LIST, 
+                                        whitelist=WHITELISTED_WORDS_LIST):
+                    user_id = "Someone"
+                content = f"{user_id} says {message['content']}"
+            else:
+                content = message["content"]
+
+            print(content)
+            print(message["role"])
             prompt.append({
                 "role": message["role"],
-                "content": message["content"]
+                "content": content
             })
 
             """         
@@ -103,7 +118,14 @@ class PromptManager:
                 "content": f"Note to self: {reflection['content']}"
             }) """
 
-        prompt.append({"role": "user", "content": base_prompt})
+        if original_type == "twitch_chat":
+            if not user_id or contains_banned_words(user_id, 
+                                     blacklist=BLACKLISTED_WORDS_LIST, 
+                                     whitelist=WHITELISTED_WORDS_LIST):
+                user_id == "Someone"
+            prompt.append({"role": "user", "content": f"{user_id} says {base_prompt}"})
+        else:
+            prompt.append({"role": "user", "content": base_prompt})
 
         return prompt
     

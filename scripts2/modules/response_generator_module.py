@@ -94,7 +94,8 @@ class ResponseGeneratorModule(BaseModule):
         """
         text = event_data["text"]
         user_id = event_data.get("user")
-        response = await self._generate_response_with_retries(text, user_id=user_id)
+        original_type = event_data.get("original_type")
+        response = await self._generate_response_with_retries(prompt=text, user_id=user_id, original_type=original_type)
 
         is_valid, filtered_response = is_valid_response(response=response, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
         if not is_valid:
@@ -134,7 +135,11 @@ class ResponseGeneratorModule(BaseModule):
             self.queue.put((priority, count, event_data)),
             self.loop)
 
-    async def _generate_response(self, raw_prompt, max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, use_system_prompt=True, user_id=None):
+    async def _generate_response(self, raw_prompt, 
+                                 max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
+                                 use_system_prompt=True, 
+                                 user_id=None,
+                                 original_type = None):
         """
         Generates a response to the given prompt using the language model.
 
@@ -152,7 +157,7 @@ class ResponseGeneratorModule(BaseModule):
         try:
             self.signals.ai_thinking.set()
             if use_system_prompt:
-                prompt = self.prompt_manager.build_prompt(raw_prompt, user_id=user_id)
+                prompt = self.prompt_manager.build_prompt(raw_prompt, user_id=user_id, original_type=original_type)
             else:
                 prompt = raw_prompt
 
@@ -235,7 +240,11 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.warning(f"Failed generating text. {e}")
             return "Something went wrong!"
         
-    async def _generate_response_with_retries(self, prompt, max_generation_attempts: int = MAX_GENERATION_ATTEMPTS, use_system_prompt=True, max_new_tokens=MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, user_id=None) -> str:
+    async def _generate_response_with_retries(self, prompt, 
+                                              max_generation_attempts: int = MAX_GENERATION_ATTEMPTS, 
+                                              use_system_prompt=True, 
+                                              max_new_tokens=MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
+                                              user_id=None, original_type=None) -> str:
         """
         Generate AI response with error handling and retries.
 
@@ -247,7 +256,7 @@ class ResponseGeneratorModule(BaseModule):
         """
         for attempt in range(1, max_generation_attempts + 1):
             try:
-                response = await self._generate_response(prompt, use_system_prompt=use_system_prompt, user_id=user_id)
+                response = await self._generate_response(prompt, use_system_prompt=use_system_prompt, user_id=user_id, original_type=original_type)
                 return response
             except Exception as e:
                 self.logger.exception(f"[Attempt {attempt}/{max_generation_attempts}] Error generating response: {e}")
