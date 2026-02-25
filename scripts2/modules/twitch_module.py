@@ -361,15 +361,15 @@ class TwitchModule(BaseModule):
 
     async def _on_raid(self, event: EventData):
         try:
-            raider = event.raid_raider
-            viewers = event.raid_viewers
+            raider = event.get("from_broadcaster_user_name")
+            viewers = event.get("viewers")
             message = f"{raider} is raiding with {viewers} viewers!"
 
             self.logger.info(f"Raid event: {message}")
 
-            if contains_banned_words(user, blacklist=BLACKLISTED_WORDS_LIST, 
+            if contains_banned_words(raider, blacklist=BLACKLISTED_WORDS_LIST, 
                                      whitelist=WHITELISTED_WORDS_LIST):
-                user = "Someone"
+                raider = "Someone"
 
             self.event_broker.publish_event({
                 "type": "twitch_raid",
