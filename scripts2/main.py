@@ -1,3 +1,6 @@
+import os
+os.environ["TRANSFORMERS_NO_AUTO_CONVERT"] = "1"
+
 """
 Main entry point for qubit
 
@@ -24,7 +27,7 @@ from scripts2.config.env_config import settings
 from scripts2.core.central_event_broker import CentralEventBroker
 from scripts2.core.broker_event_handler import BrokerEventHandler
 from scripts2.modules.response_generator_module import ResponseGeneratorModule
-from scripts2.managers.model_manager import ModelManager
+from scripts2.models.model_manager import ModelManager
 from scripts2.modules.tts_speech_module import TtsSpeechModule
 from scripts2.managers.tts_manager import TTSManager
 

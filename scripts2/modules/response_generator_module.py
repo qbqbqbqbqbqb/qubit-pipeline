@@ -1,8 +1,9 @@
 import asyncio
 import datetime
 import itertools
+import os
 from scripts2.modules.base_module import BaseModule
-from scripts2.managers.model_manager import ModelManager
+from scripts2.models.model_manager import ModelManager
 from scripts2.config.config import ( MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION,
                                     MAX_GENERATION_ATTEMPTS,
                                     SPELLING_DICTIONARY_FILE, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST)
@@ -56,8 +57,16 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.info(f"[start] {self.name} is disabled. Not starting.")
             return
         self.model_manager = ModelManager.get_instance()
-        self._model = self.model_manager._model
-        self.tokeniser = self.model_manager.__tokeniser
+        self._model = self.model_manager.model
+        self.tokeniser = self.model_manager.tokenizer
+
+        from peft import PeftModel
+
+        if isinstance(self._model, PeftModel):
+            print("LoRA adapter attached:", self._model.active_adapter)
+            print("LoRA weights in model:", any('lora' in n.lower() for n, _ in self._model.named_parameters()))
+        else:
+            print("No LoRA adapter loaded")
 
         self.loop = asyncio.get_running_loop()
         self.logger.info(f"Assigned event loop: {self.loop}")
@@ -132,6 +141,9 @@ class ResponseGeneratorModule(BaseModule):
             self.queue.put((priority, count, event_data)),
             self.loop)
 
+
+        
+
     async def _generate_response(self, raw_prompt, 
                                  max_new_tokens: int = MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
                                  use_system_prompt=True, 
@@ -151,19 +163,33 @@ class ResponseGeneratorModule(BaseModule):
         Returns:
             str: The generated response text.
         """
+
         try:
             self.signals.ai_thinking.set()
+
             if use_system_prompt:
-                prompt = self.prompt_manager.build_prompt(raw_prompt, user_id=user_id, original_type=original_type)
+                prompt = self.prompt_manager.build_prompt(
+                    raw_prompt, user_id=user_id, original_type=original_type
+                )
             else:
                 prompt = raw_prompt
 
-            output = await self._generate_text(prompt, max_new_tokens)
+            prompt = self.model_manager.prepare_prompt(prompt)
+
+            loop = asyncio.get_running_loop()
+            output = await loop.run_in_executor(
+                None,
+                self.model_manager.generate_dialogue,
+                prompt,
+                max_new_tokens
+            )
 
             return output
+
         except Exception:
             self.logger.exception("[generate_response] Exception during generation")
             return "Something went wrong!"
+        
         finally:
             self.signals.ai_thinking.clear()
         
@@ -190,6 +216,7 @@ class ResponseGeneratorModule(BaseModule):
                 if attempt == max_generation_attempts:
                     return "Something went wrong!"
                 
+
     async def stop(self):
         """
         Stops the ResponseGeneratorModule.
