@@ -1,9 +1,11 @@
 # === Setup sentence tokenisation ===
+import asyncio
 import time
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
 
 # === Setup colorlog logger ===
+from scripts2.managers.base_model_manager import BaseModelManager
 from scripts2.utils.log_utils import get_logger
 
 """
@@ -21,7 +23,7 @@ Classes:
 
 MODEL_NAME = "Sao10K/L3-8B-Stheno-v3.2"
 
-class ModelManager:
+class ModelManager(BaseModelManager):
     """
     Singleton manager for the AI language model and tokeniser.
 
@@ -32,7 +34,40 @@ class ModelManager:
     Provides access to both the model and tokeniser for text generation tasks.
     """
     __instance = None
+
+    @property
+    def _model(self):
+        """
+        Get the loaded language model.
+
+        Returns:
+            AutoModelForCausalLM: The loaded language model instance.
+        """
+        return self.__model
+    
+    @property
+    def __tokeniser(self):
+        """
+        Get the loaded tokenizer.
+
+        Returns:
+            PreTrainedTokenizer: The loaded tokenizer instance.
+        """
+        return self._tokeniser
+
+    @property
+    def _model(self, value):
+        """
+        Set the language model instance.
+
+        Args:
+            value (AutoModelForCausalLM): The language model instance to set.
+        """
+        self.__model = value
+
+    @property
     def __new__(cls):
+
         """
         Create or return the singleton instance of ModelManager.
 
@@ -73,11 +108,11 @@ class ModelManager:
 
             # === Load tokenizer first ===
             self.logger.info("[ModelManager] Loading tokeniser...")
-            self.tokeniser = AutoTokenizer.from_pretrained(
+            self.__tokeniser = AutoTokenizer.from_pretrained(
                 MODEL_NAME,
                 trust_remote_code=False
             )
-            self.tokeniser.pad_token = self.tokeniser.eos_token
+            self.__tokeniser.pad_token = self.__tokeniser.eos_token
             self.logger.info("[ModelManager] Tokeniser loaded.")
 
             # === Prepare quantisation config ===
@@ -91,7 +126,7 @@ class ModelManager:
 
             # === Load model ===
             self.logger.info("[ModelManager] Loading model weights (this can take a few minutes)...")
-            self.model = AutoModelForCausalLM.from_pretrained(
+            self._model = AutoModelForCausalLM.from_pretrained(
                 MODEL_NAME,
                 quantization_config=quantisation_config,
                 device_map="auto",
@@ -103,7 +138,101 @@ class ModelManager:
         except Exception as e:
             self.logger.error(f"[ModelManager] Model initialization failed: {e}", exc_info=True)
             raise
+        
 
+    def _get_generation_config(self, max_tokens: int):
+        """
+        Returns generation configuration parameters.
+        """
+        return {
+            'temperature': 1.14,  
+            'min_p': 0.075,
+            'top_p': 0.9, 
+            'top_k': 50,
+            'max_new_tokens': max_tokens,
+            'repetition_penalty': 1.1,
+            'do_sample': True,
+            'pad_token_id': self.tokeniser.eos_token_id,
+            'eos_token_id': [
+                self.tokeniser.eos_token_id,
+                self.tokeniser.convert_tokens_to_ids("<|eot_id|>"),
+                self.tokeniser.convert_tokens_to_ids("<|end_of_text|>")
+            ] if "<|eot_id|>" in self.tokeniser.get_vocab() else self.tokeniser.eos_token_id
+        }
+
+    def generate_dialogue(self,
+                            prompt: str,
+                            max_new_tokens: int,
+                            timeout: float = 60.0
+                            ) -> str:
+        """
+        Performs the text generation call using transformers.
+        """
+        try:
+            if isinstance(prompt, list): 
+                prompt = self._apply_chat_template(prompt)
+
+            self.logger.debug("[generate_text] Starting generation...")
+
+            inputs = self.tokeniser(
+                prompt,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=2048
+            ).to(self._model.device)
+
+            loop = asyncio.get_running_loop()
+            gen_config = self._get_generation_config(max_new_tokens)
+
+            outputs = self._model.generate(
+                        **inputs,
+                        **gen_config
+                    )
+
+            generated_text = self.tokeniser.decode(
+                outputs[0][inputs['input_ids'].shape[1]:],
+                skip_special_tokens=True
+            ).strip()
+
+            self.logger.debug("[generate_text] Generation completed...")
+            self.logger.debug(f"[generate_text] Raw output: {generated_text[:60]}...")
+            return generated_text
+
+        except asyncio.TimeoutError:
+            self.logger.warning(f"Text gen timed out after {timeout}")
+            return "Timed out"
+        except Exception as e:
+            self.logger.warning(f"Failed generating text. {e}")
+            return "Something went wrong!"
+
+    def _apply_chat_template(self,
+                            chat: list,
+                            ) -> str:
+        """
+        Applies the chat template to the conversation for model input.
+
+        Uses the tokenizer's apply_chat_template method to format the chat for generation.
+
+        Args:
+            chat (list): The chat conversation as a list of messages.
+
+        Returns:
+            str: The formatted chat string.
+
+        Raises:
+            Exception: If chat template application fails.
+        """
+        try:
+            return self.tokeniser.apply_chat_template(
+                chat,
+                tokenize=False,
+                add_generation_prompt=True
+            )
+        except Exception as e:
+            self.logger.error(f"Error applying chat template: {e}")
+            raise
+    
     @classmethod
     def get_instance(cls):
         """

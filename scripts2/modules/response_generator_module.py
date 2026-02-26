@@ -45,9 +45,6 @@ class ResponseGeneratorModule(BaseModule):
         self.queue = asyncio.PriorityQueue()
         self.loop = None
         
-        self._get_calls = 0
-        self._task_done_calls = 0
-
     async def start(self):
         """
         Starts the ResponseGeneratorModule.
@@ -59,8 +56,8 @@ class ResponseGeneratorModule(BaseModule):
             self.logger.info(f"[start] {self.name} is disabled. Not starting.")
             return
         self.model_manager = ModelManager.get_instance()
-        self.model = self.model_manager.model
-        self.tokeniser = self.model_manager.tokeniser
+        self._model = self.model_manager._model
+        self.tokeniser = self.model_manager.__tokeniser
 
         self.loop = asyncio.get_running_loop()
         self.logger.info(f"Assigned event loop: {self.loop}")
@@ -95,7 +92,7 @@ class ResponseGeneratorModule(BaseModule):
         text = event_data["text"]
         user_id = event_data.get("user")
         original_type = event_data.get("original_type")
-        response = await self._generate_response_with_retries(prompt=text, user_id=user_id, original_type=original_type)
+        response = await self._generate_response_with_retries(raw_prompt=text, user_id=user_id, original_type=original_type)
 
         is_valid, filtered_response = is_valid_response(response=response, blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
         if not is_valid:
@@ -161,8 +158,7 @@ class ResponseGeneratorModule(BaseModule):
             else:
                 prompt = raw_prompt
 
-            full_prompt = await self._apply_chat_template(chat=prompt)
-            output = await self._generate_text(full_prompt, max_new_tokens)
+            output = await self._generate_text(prompt, max_new_tokens)
 
             return output
         except Exception:
@@ -170,77 +166,8 @@ class ResponseGeneratorModule(BaseModule):
             return "Something went wrong!"
         finally:
             self.signals.ai_thinking.clear()
-
-    def _get_generation_config(self, max_tokens: int):
-        """
-        Returns generation configuration parameters.
-        """
-        return {
-            'temperature': 1.14,  
-            'min_p': 0.075,
-            'top_p': 0.9, 
-            'top_k': 50,
-            'max_new_tokens': max_tokens,
-            'repetition_penalty': 1.1,
-            'do_sample': True,
-            'pad_token_id': self.model_manager.tokeniser.eos_token_id,
-            'eos_token_id': [
-                self.model_manager.tokeniser.eos_token_id,
-                self.model_manager.tokeniser.convert_tokens_to_ids("<|eot_id|>"),
-                self.model_manager.tokeniser.convert_tokens_to_ids("<|end_of_text|>")
-            ] if "<|eot_id|>" in self.model_manager.tokeniser.get_vocab() else self.model_manager.tokeniser.eos_token_id
-        }
-
-    async def _generate_text(self,
-                            prompt: str,
-                            max_tokens: int,
-                            timeout: float = 60.0
-                            ) -> str:
-        """
-        Performs the text generation call using transformers.
-        """
-        try:
-            self.logger.debug("[generate_text] Starting generation...")
-
-            inputs = self.model_manager.tokeniser(
-                prompt,
-                return_tensors="pt",
-                padding=True,
-                truncation=True,
-                max_length=2048
-            ).to(self.model_manager.model.device)
-
-            loop = asyncio.get_running_loop()
-            gen_config = self._get_generation_config(max_tokens)
-
-            outputs = await asyncio.wait_for(
-                loop.run_in_executor(
-                    None,
-                    lambda: self.model_manager.model.generate(
-                        **inputs,
-                        **gen_config
-                    )
-                ),
-                timeout
-            )
-
-            generated_text = self.model_manager.tokeniser.decode(
-                outputs[0][inputs['input_ids'].shape[1]:],
-                skip_special_tokens=True
-            ).strip()
-
-            self.logger.debug("[generate_text] Generation completed...")
-            self.logger.debug(f"[generate_text] Raw output: {generated_text[:60]}...")
-            return generated_text
-
-        except asyncio.TimeoutError:
-            self.logger.warning(f"Text gen timed out after {timeout}")
-            return "Timed out"
-        except Exception as e:
-            self.logger.warning(f"Failed generating text. {e}")
-            return "Something went wrong!"
         
-    async def _generate_response_with_retries(self, prompt, 
+    async def _generate_response_with_retries(self, raw_prompt, 
                                               max_generation_attempts: int = MAX_GENERATION_ATTEMPTS, 
                                               use_system_prompt=True, 
                                               max_new_tokens=MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION, 
@@ -256,40 +183,13 @@ class ResponseGeneratorModule(BaseModule):
         """
         for attempt in range(1, max_generation_attempts + 1):
             try:
-                response = await self._generate_response(prompt, use_system_prompt=use_system_prompt, user_id=user_id, original_type=original_type)
+                response = await self._generate_response(raw_prompt, use_system_prompt=use_system_prompt, user_id=user_id, original_type=original_type)
                 return response
             except Exception as e:
                 self.logger.exception(f"[Attempt {attempt}/{max_generation_attempts}] Error generating response: {e}")
                 if attempt == max_generation_attempts:
                     return "Something went wrong!"
                 
-    async def _apply_chat_template(self,
-                                  chat: list,
-                                  ) -> str:
-        """
-        Applies the chat template to the conversation for model input.
-
-        Uses the tokenizer's apply_chat_template method to format the chat for generation.
-
-        Args:
-            chat (list): The chat conversation as a list of messages.
-
-        Returns:
-            str: The formatted chat string.
-
-        Raises:
-            Exception: If chat template application fails.
-        """
-        try:
-            return self.model_manager.tokeniser.apply_chat_template(
-                chat,
-                tokenize=False,
-                add_generation_prompt=True
-            )
-        except Exception as e:
-            self.logger.error(f"Error applying chat template: {e}")
-            raise
-
     async def stop(self):
         """
         Stops the ResponseGeneratorModule.

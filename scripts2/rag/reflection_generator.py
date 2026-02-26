@@ -124,7 +124,7 @@ A3: [Answer]
 
         try:
             reflection_response = await self.response_generator._generate_response_with_retries(
-                prompt=reflection_messages,
+                raw_prompt=reflection_messages,
                 use_system_prompt=False,
                 max_new_tokens=MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION,
             )
