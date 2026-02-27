@@ -117,7 +117,7 @@ async def main():
         model_enabled=True,
     )
 
-    vtube_thread = start_module_in_thread(vtube_module)
+    await vtube_module.init()
 
     tts_speech_module = TtsSpeechModule(
         signals=signals,
@@ -217,9 +217,7 @@ async def main():
         module_threads = {
             'response': response_thread,
             'tts': tts_thread,
-            'vtube_studio': vtube_thread,
         }
-
 
         for name, module in modules.items():
             thread = start_module_in_thread(module)

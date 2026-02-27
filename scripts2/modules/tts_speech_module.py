@@ -165,14 +165,14 @@ class TtsSpeechModule(BaseModule):
             wav_bytes = self._generate_wav_bytes(normalised_text, syn_config)
             sample_rate, audio_np = self._decode_wav_bytes(wav_bytes)
 
+            mouth_task = None
             if self.vtube_module:
-                try:
-                    self.logger.info("TTS sent to Vtube Studio queue")
-                    await self.vtube_module.enqueue_audio(wav_bytes, sample_rate)
+                    self.logger.info("Starting VTube Studio lip-sync animation")
+                    self.vtube_module.speaking = True
+                    mouth_task = asyncio.create_task(self.vtube_module.mouthanimation())
                     loop = asyncio.get_running_loop()
                     await loop.run_in_executor(None, self._play_audio, sample_rate, audio_np)
-                except Exception as e:
-                    self.logger.error(f"VTube Studio lip-sync error: {e}")
+
             else:
                 loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, self._play_audio, sample_rate, audio_np)
@@ -181,6 +181,10 @@ class TtsSpeechModule(BaseModule):
             self.logger.error(f"Error in TTS speak: {e}")
         finally:
             self.signals.ai_speaking.clear()
+            if self.vtube_module:
+                self.vtube_module.speaking = False
+                if mouth_task:
+                    await mouth_task
 
     def _get_speaker_id(self) -> int:
         """
