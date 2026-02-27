@@ -24,5 +24,6 @@ class Signals:
 
         self.response_generator_ready = asyncio.Event()
         self.tts_module_ready = asyncio.Event()
+        self.vtube_studio_module_ready = asyncio.Event()
 
 

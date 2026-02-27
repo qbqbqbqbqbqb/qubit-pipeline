@@ -12,6 +12,7 @@ from piper import PiperVoice, SynthesisConfig
 from scripts2.config.config import TTS_SPEAKER_NAME, TTS_DELAY
 from scripts2.utils.tts_utils import normalise_text_for_tts
 from scripts2.managers.obs_manager import OBSManager
+from scripts2.modules.vtube_studio_module import VTubeStudioModule
 """
 This module provides Text-to-Speech (TTS) functionality for the application.
 
@@ -40,7 +41,7 @@ class TtsSpeechModule(BaseModule):
         loop: Current event loop.
         obs_manager: OBSManager for subtitle updates.
     """
-    def __init__(self, signals, settings, tts_manager, tts_enabled = True):
+    def __init__(self, signals, settings, tts_manager, tts_enabled = True, vtube_module = None):
         """
         Initialize the TtsSpeechModule.
 
@@ -49,16 +50,18 @@ class TtsSpeechModule(BaseModule):
             settings: Application settings dictionary.
             tts_manager: TTSManager instance.
             tts_enabled (bool): Whether TTS is enabled. Defaults to True.
+            vtube_module: Optional VTubeStudioModule instance for lip-sync.
         """
         super().__init__("TTSSpeechModule")
         self.signals = signals
         self.settings = settings
         self.tts_enabled = tts_enabled
         self.tts_manager = tts_manager
+        self.vtube_module = vtube_module
         self.pairs_queue = deque()
         self.monologues_queue = deque()
         self.loop = None
-        self.obs_manager = OBSManager(self.settings)
+        #self.obs_manager = OBSManager(self.settings)
 
     async def start(self):
         """
@@ -148,9 +151,9 @@ class TtsSpeechModule(BaseModule):
                 self.logger.warning("Empty text received for TTS, skipping.")
                 return
             
-            self.obs_manager.update_subtitle_text_and_style(
+            """             self.obs_manager.update_subtitle_text_and_style(
                 new_text=text
-            )
+            ) """
 
             normalised_text = normalise_text_for_tts(text)
 
@@ -162,8 +165,17 @@ class TtsSpeechModule(BaseModule):
             wav_bytes = self._generate_wav_bytes(normalised_text, syn_config)
             sample_rate, audio_np = self._decode_wav_bytes(wav_bytes)
 
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, self._play_audio, sample_rate, audio_np)
+            if self.vtube_module:
+                try:
+                    self.logger.info("TTS sent to Vtube Studio queue")
+                    await self.vtube_module.enqueue_audio(wav_bytes, sample_rate)
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(None, self._play_audio, sample_rate, audio_np)
+                except Exception as e:
+                    self.logger.error(f"VTube Studio lip-sync error: {e}")
+            else:
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, self._play_audio, sample_rate, audio_np)
 
         except Exception as e:
             self.logger.error(f"Error in TTS speak: {e}")
@@ -274,3 +286,4 @@ class TtsSpeechModule(BaseModule):
         Calls the superclass stop method to perform cleanup.
         """
         await super().stop()
+

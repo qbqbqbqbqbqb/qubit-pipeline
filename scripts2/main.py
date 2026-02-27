@@ -1,5 +1,3 @@
-import os
-os.environ["TRANSFORMERS_NO_AUTO_CONVERT"] = "1"
 
 """
 Main entry point for qubit
@@ -30,6 +28,7 @@ from scripts2.modules.response_generator_module import ResponseGeneratorModule
 from scripts2.models.model_manager import ModelManager
 from scripts2.modules.tts_speech_module import TtsSpeechModule
 from scripts2.managers.tts_manager import TTSManager
+from scripts2.modules.vtube_studio_module import VTubeStudioModule
 
 logger = get_logger("Main")
 
@@ -113,11 +112,19 @@ async def main():
     tts_manager = TTSManager()
     model_manager = ModelManager()
 
+    vtube_module = VTubeStudioModule(
+        signals=signals,
+        model_enabled=True,
+    )
+
+    vtube_thread = start_module_in_thread(vtube_module)
+
     tts_speech_module = TtsSpeechModule(
         signals=signals,
         settings = settings,
         tts_manager=tts_manager,
-        tts_enabled=True
+        tts_enabled=True,
+        vtube_module=vtube_module
     )
 
     memory_module = MemoryModule(
@@ -210,6 +217,7 @@ async def main():
         module_threads = {
             'response': response_thread,
             'tts': tts_thread,
+            'vtube_studio': vtube_thread,
         }
 
 
