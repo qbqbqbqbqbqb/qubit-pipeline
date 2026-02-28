@@ -273,7 +273,7 @@ class TtsSpeechModule(BaseModule):
         pa = pyaudio.PyAudio()
         stream = pa.open(
             format=pyaudio.paInt16,
-            channels=1,
+            channels=1, 
             rate=sample_rate,
             output=True,
             frames_per_buffer=1024,

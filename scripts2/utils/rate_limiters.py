@@ -1,4 +1,4 @@
-import datetime
+import datetime import datetime, timezone
 
 """
 Module for rate limiting utilities.
@@ -30,7 +30,7 @@ class TokenBucketLimiter:
         self.rate = rate
         self.burst = burst
         self.tokens = burst
-        self.last_checked = datetime.datetime.now(datetime.timezone.utc)
+        self.last_checked = datetime.now(timezone.utc)
 
     def allow(self) -> bool:
         """Check if a request is allowed based on available tokens.
@@ -41,7 +41,7 @@ class TokenBucketLimiter:
         Returns:
             bool: True if the request is allowed, False otherwise.
         """
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         elapsed = (now - self.last_checked).total_seconds()
         self.last_checked = now
         self.tokens = min(self.burst, self.tokens + elapsed * self.rate)

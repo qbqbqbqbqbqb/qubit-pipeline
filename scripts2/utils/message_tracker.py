@@ -1,4 +1,4 @@
-import datetime
+import datetime import datetime, timezone
 from collections import deque
 
 """
@@ -42,7 +42,7 @@ class MessageTracker:
         Args:
             text (str): The message text to add.
         """
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         self.recent_messages.append((text, now))
         self.last_seen[text] = now
 
@@ -55,7 +55,7 @@ class MessageTracker:
         Returns:
             bool: True if the message is considered a repetition, False otherwise.
         """
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         return text in self.last_seen and (now - self.last_seen[text]).total_seconds() < self.recent_expiry
 
     def add_responded(self, text):
@@ -64,7 +64,7 @@ class MessageTracker:
         Args:
             text (str): The message text that was responded to.
         """
-        self.responded[text] = datetime.datetime.now(datetime.timezone.utc)
+        self.responded[text] = datetime.now(timezone.utc)
 
     def is_responded(self, text) -> bool:
         """Check if the given message has already been responded to.
@@ -84,7 +84,7 @@ class MessageTracker:
 
     def _cleanup_recent_messages(self):
         """Remove expired messages from the recent messages queue and last_seen dict."""
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         while self.recent_messages and (now - self.recent_messages[0][1]).total_seconds() > self.recent_expiry:
             old_text, _ = self.recent_messages.popleft()
             if old_text in self.last_seen:
@@ -92,7 +92,7 @@ class MessageTracker:
 
     def _cleanup_responded_messages(self):
         """Remove expired responded messages from the responded dict."""
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.now(timezone.utc)
         expired = [text for text, ts in self.responded.items()
                 if (now - ts).total_seconds() > self.response_expiry]
         for text in expired:

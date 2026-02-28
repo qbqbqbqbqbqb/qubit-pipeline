@@ -1,17 +1,76 @@
 from dataclasses import dataclass
-from enum import Enum, auto
-from typing import Any
-
-class EventType(Enum):
-    CHAT_MESSAGE        = auto()
-    AI_RESPONSE_READY   = auto()
-    TTS_FINISHED        = auto()
-    MONOLOGUE_TRIGGER   = auto()
-    SHUTDOWN            = auto()
-
+from datetime import datetime
+from typing import Optional, Dict, Any
 
 @dataclass
 class Event:
-    type: EventType
-    payload: Any = None
-    source: str = "unknown"
+    type: str
+    timestamp: str
+    data: Dict[str, Any]
+
+@dataclass
+class TwitchEvent(Event):
+    pass
+
+@dataclass
+class TwitchChatEvent(TwitchEvent):
+    user: str
+    text: str
+
+@dataclass
+class TwitchSubscriptionEvent(TwitchEvent):
+    user: str
+    tier: str
+    sub_type: str
+    sub_message: Optional[str] = None
+
+@dataclass
+class TwitchRaidEvent(TwitchEvent):
+    user: str 
+    viewers: int
+
+@dataclass
+class TwitchFollowEvent(TwitchEvent):
+    user: str
+    followed_at: str
+
+@dataclass
+class YoutubeEvent(Event):
+    video_id: str
+    title: str
+    channel: str
+
+@dataclass
+class KickEvent(Event):
+    user: str
+    reason: str
+
+@dataclass
+class ModeratedEvent(Event):
+    user: str
+    text: str
+    reason: str
+
+@dataclass
+class SpeechEvent(Event):
+    text: str
+
+@dataclass
+class MonologueEvent(Event):
+    text: str
+
+@dataclass
+class InputEvent(Event):
+    source: str
+    text: str
+
+@dataclass
+class ResponsePromptEvent(Event):
+    source: str
+    prompt: str
+
+@dataclass
+class ResponseGeneratedEvent(Event):
+    prompt: str
+    source: str
+    response: str
