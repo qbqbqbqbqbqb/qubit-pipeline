@@ -10,7 +10,7 @@ from twitchAPI.object.eventsub import ChannelFollowEvent
 from src.qubit.core import app
 from src.qubit.core.service import Service
 from src.qubit.input.twitch.events import TwitchEvents
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 from src.qubit.input.twitch.auth import TwitchAuth
 from src.qubit.input.twitch.subscriptions import TwitchWebsocketSub
 

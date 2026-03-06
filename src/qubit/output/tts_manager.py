@@ -11,8 +11,8 @@ import os
 from dotenv import load_dotenv
 
 from piper import PiperVoice, SynthesisConfig
-from scripts2.utils.log_utils import get_logger
-from scripts2.config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME, ROOT
+from src.utils.log_utils import get_logger
+from config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME, ROOT
 
 """
 TTS Manager Module

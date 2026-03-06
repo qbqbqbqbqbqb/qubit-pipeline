@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from typing import Callable, Dict, List
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 from src.qubit.core.events import Event
 
 logger = get_logger(__name__)

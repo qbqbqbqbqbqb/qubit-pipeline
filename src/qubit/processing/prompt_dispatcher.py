@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from src.qubit.core.service import Service
 from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 
 from src.qubit.core.event_bus import event_bus
 from src.qubit.core.events import ResponseGeneratedEvent, ResponsePromptEvent

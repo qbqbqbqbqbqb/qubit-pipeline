@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
-from scripts2.models.hf_model_manager import HuggingFaceModelManager
-from scripts2.models.model_registry import MODEL_REGISTRY
+from src.qubit.models.hf_model_manager import HuggingFaceModelManager
+from src.qubit.models.model_registry import MODEL_REGISTRY
 import os
 
 

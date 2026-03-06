@@ -4,7 +4,7 @@ import wave
 import numpy as np
 import pyaudio
 from config.config import TTS_SPEAKER_NAME
-from scripts2.utils.tts_utils import normalise_text_for_tts
+from src.qubit.utils.tts_utils import normalise_text_for_tts
 from src.qubit.output.tts_manager import TTSManager
 
 class TTSHandler:

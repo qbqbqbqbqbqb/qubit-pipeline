@@ -6,7 +6,7 @@ and loads external configuration files such as instructions, word lists, and dic
 """
 
 from twitchAPI.type import AuthScope
-from scripts2.utils.file_utils import load_text_file, get_root, get_file_path, load_word_list, load_phrases, load_json_file
+from src.utils.file_utills import load_text_file, get_root, get_file_path, load_word_list, load_phrases, load_json_file
 
 BOT_SCOPES = [
     AuthScope.CHAT_READ,
@@ -29,27 +29,27 @@ TTS_DELAY = 1.5
 
 ROOT = get_root()
 INSTRUCTIONS_FILENAME = "instructions.txt"
-INSTRUCTIONS_PATH = get_file_path(ROOT, INSTRUCTIONS_FILENAME)
+INSTRUCTIONS_PATH = get_file_path(ROOT, f"data/{INSTRUCTIONS_FILENAME}")
 INSTRUCTIONS_FILE = load_text_file(INSTRUCTIONS_PATH)
 
 BLACKLISTED_WORDS_FILENAME = "blacklisted_words.txt"
-BLACKLISTED_WORDS_PATH = get_file_path(ROOT, BLACKLISTED_WORDS_FILENAME)
+BLACKLISTED_WORDS_PATH = get_file_path(ROOT, f"data/{BLACKLISTED_WORDS_FILENAME}")
 BLACKLISTED_WORDS_LIST = load_word_list(BLACKLISTED_WORDS_PATH)
 
 WHITELISTED_WORDS_FILENAME = "whitelisted_words.txt"
-WHITELISTED_WORDS_PATH = get_file_path(ROOT, WHITELISTED_WORDS_FILENAME)
+WHITELISTED_WORDS_PATH = get_file_path(ROOT, f"data/{WHITELISTED_WORDS_FILENAME}")
 WHITELISTED_WORDS_LIST = load_word_list(WHITELISTED_WORDS_PATH)
 
 ACRONYMS_LIST_FILENAME = "acronyms.txt"
-ACRONYMS_LIST_PATH = get_file_path(ROOT, ACRONYMS_LIST_FILENAME)
+ACRONYMS_LIST_PATH = get_file_path(ROOT, f"data/{ACRONYMS_LIST_FILENAME}")
 ACRONYMS_LIST = load_word_list(ACRONYMS_LIST_PATH)
 
 MONOLOGUE_PROMPTS_FILENAME = "monologue_prompts.txt"
-MONOLOGUE_PROMPTS_PATH = get_file_path(ROOT, MONOLOGUE_PROMPTS_FILENAME)
+MONOLOGUE_PROMPTS_PATH = get_file_path(ROOT, f"data/{MONOLOGUE_PROMPTS_FILENAME}")
 MONOLOGUE_PROMPTS_FILE = load_phrases(MONOLOGUE_PROMPTS_PATH)
 
 SPELLING_DICTIONARY_FILENAME = "am_to_br_english.json"
-SPELLING_DICTIONARY_PATH = get_file_path(ROOT, SPELLING_DICTIONARY_FILENAME)
+SPELLING_DICTIONARY_PATH = get_file_path(ROOT, f"data/{SPELLING_DICTIONARY_FILENAME}")
 SPELLING_DICTIONARY_FILE = load_json_file(SPELLING_DICTIONARY_PATH)
 
 EXCEPTIONS = {"analysis", "thesis", "crisis", "basis"}

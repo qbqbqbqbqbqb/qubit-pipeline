@@ -1,8 +1,8 @@
 import difflib
 from pathlib import Path
 import re
-from scripts2.utils.log_utils import get_logger
-from scripts2.config.config import BOT_NAME
+from src.utils.log_utils import get_logger
+from config.config import BOT_NAME
 
 logger = get_logger("Filter_Utils")
 

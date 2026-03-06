@@ -1,4 +1,4 @@
-from scripts2.models.model_config import ModelConfig, GenerationConfig
+from src.qubit.models.model_config import ModelConfig, GenerationConfig
 
 MODEL_REGISTRY = {
 

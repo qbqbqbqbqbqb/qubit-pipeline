@@ -8,7 +8,7 @@ and perform other transformations to improve TTS pronunciation and clarity.
 import re
 import inflect
 p = inflect.engine()
-from scripts2.config.config import ACRONYMS_LIST
+from config.config import ACRONYMS_LIST
 
 def normalise_text_for_tts(text: str) -> str:
     """

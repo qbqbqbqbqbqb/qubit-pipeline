@@ -4,10 +4,10 @@ import hashlib
 import json
 import websocket
 
-from scripts2.config.config import TTS_SUBTITLE_NAME
+from config.config import TTS_SUBTITLE_NAME
 
 # === Setup colorlog logger ===
-from scripts2.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 logger = get_logger("OBS_Websocket_Controller")
 """
 Module for managing OBS WebSocket connections and subtitle operations.

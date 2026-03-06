@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 from src.qubit.output.obs_handler import OBSHandler
 from src.qubit.output.tts_handler import TTSHandler
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 from src.qubit.core.event_bus import event_bus
 from src.qubit.core.events import ResponseGeneratedEvent
 from src.qubit.output.output_sanitiser import DialogueSanitiser

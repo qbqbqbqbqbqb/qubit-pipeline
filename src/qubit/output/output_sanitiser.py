@@ -1,7 +1,7 @@
 import re
 import string
 
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 from config.config import BOT_NAME
 from src.qubit.utils.filter_utils import filter_banned_words
 

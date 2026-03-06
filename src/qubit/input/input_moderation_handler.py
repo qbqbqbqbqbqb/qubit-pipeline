@@ -1,5 +1,5 @@
 from src.qubit.core.service import Service
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 from src.qubit.core.event_bus import event_bus
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 from src.qubit.core.events import (

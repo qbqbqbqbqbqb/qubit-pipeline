@@ -9,7 +9,7 @@ from twitchAPI.chat import Chat, ChatMessage, EventData
 from twitchAPI.oauth import UserAuthenticator, refresh_access_token
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.object.eventsub import ChannelFollowEvent
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 from src.qubit.core.events import TwitchChatEvent, TwitchFollowEvent, TwitchRaidEvent, TwitchSubscriptionEvent
 
 

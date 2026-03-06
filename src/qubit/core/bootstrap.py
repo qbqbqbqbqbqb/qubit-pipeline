@@ -17,7 +17,7 @@ from src.qubit.processing.prompt_dispatcher import PromptDispatcher
 
 from src.qubit.models.model_manager import ModelManager
 from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
-from src.qubit.config.env_config import settings
+from config.env_config import settings
 
 async def create_app():
 

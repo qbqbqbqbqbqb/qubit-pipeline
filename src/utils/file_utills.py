@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 import json
 
-from scripts2.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 logger = get_logger("File_Utils")
 
 """

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from src.qubit.core.service import Service
 from src.qubit.core.event_bus import event_bus
 from src.qubit.core.events import MonologueEvent
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
 

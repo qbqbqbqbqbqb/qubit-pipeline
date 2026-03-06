@@ -1,4 +1,4 @@
-from src.qubit.utils.log_utils import get_logger
+from src.utils.log_utils import get_logger
 from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticator, refresh_access_token
 from config.config import BOT_SCOPES, STREAMER_SCOPES
