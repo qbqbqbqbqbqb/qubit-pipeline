@@ -10,12 +10,13 @@ class MonologueInputHandler(Service):
         "monologue_prompt": "handle_event",
     }
         
-    def __init__(self, max_age_seconds=30, prompt_handler=None):
+    def __init__(self, max_age_seconds=30, prompt_handler=None, memory_handler=None):
         super().__init__(" monologue input handler")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
         self.prompt_handler = prompt_handler
-
+        self.memory_handler = memory_handler
+        
     async def start(self, app):
         logger.info("Starting MonologueInputHandlerService")
         self.event_bus = app.event_bus
@@ -35,6 +36,8 @@ class MonologueInputHandler(Service):
             logger.debug(f"Dropping stale monologue: {text}") 
             return
 
+        self.memory_handler.handle_event(event)
+            
         if self.prompt_handler and event.type in self.prompt_handler.builders:
             builder = self.prompt_handler.builders[event.type]
             prompt_event = builder(event)

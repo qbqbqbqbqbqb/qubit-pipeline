@@ -18,18 +18,18 @@ class OutputHandler(Service):
         "response_generated": "handle_response"
 
     }
-    def __init__(self, tts_handler: TTSHandler, obs_handler: OBSHandler,  vtube_studio_handler=None, max_age_seconds=30,  enable_subtitles=False):
+    def __init__(self, tts_handler: TTSHandler, obs_handler: OBSHandler,  vtube_studio_handler=None, max_age_seconds=30,  enable_subtitles=False, memory_handler=None):
         super().__init__("output_handler")
         self.tts_handler = tts_handler
         self.obs_handler = obs_handler
         self.vtube_studio_handler = vtube_studio_handler
+        self.memory_handler = memory_handler
         self.dialogue_sanitiser = DialogueSanitiser(bot_name="Qubit", blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
         self.queue = deque()
         self.max_age = timedelta(seconds=max_age_seconds)
         self.enable_subtitles = enable_subtitles
 
         self._running = True
-        asyncio.create_task(self._process_queue())
 
 
     async def start(self, app):
@@ -64,6 +64,9 @@ class OutputHandler(Service):
             self.dialogue_sanitiser.remove_trailing_text(
             self.dialogue_sanitiser.remove_bot_name(filtered_response)))
 
+        event.response = response_clean
+        self.memory_handler.handle_event(event)
+        
         if source == "twitch_chat_processed" and prompt:
             pair = {
                 "prompt": prompt,

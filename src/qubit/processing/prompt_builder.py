@@ -23,8 +23,10 @@ class LLMPromptHandler:
             logger.warning(f"No builder found for event type: {event.type}")
             return
 
-        prompt_event = builder(event)
-        await self.dispatcher.enqueue(prompt_event)
+        return builder(event)
+
+    async def queue_event(self, event):
+        await self.dispatcher.enqueue(event)
 
     def _build_monologue_prompt(self, event):
         prompt = event.prompt

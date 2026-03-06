@@ -1,4 +1,5 @@
 
+from src.qubit.memory.memory_handler import MemoryHandler
 from src.qubit.input.monologue_gen import MonologueScheduler
 from src.qubit.input.monologue_input_handler import MonologueInputHandler
 from src.qubit.input.input_handler import InputHandler
@@ -14,6 +15,7 @@ from src.qubit.input.twitch.listener import TwitchListener
 from src.qubit.output.tts_handler import TTSHandler
 from src.qubit.output.obs_handler import OBSHandler
 from src.qubit.processing.prompt_dispatcher import PromptDispatcher
+from src.qubit.memory.memory_service import MemoryService
 
 from src.qubit.models.model_manager import ModelManager
 from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
@@ -25,6 +27,8 @@ async def create_app():
 
     app.state = RuntimeState()
     app.event_bus = event_bus
+    memory_service = MemoryService()
+    memory_handler = MemoryHandler(memory_service)
 
     ws_service = WebSocketServerService(host="0.0.0.0", port=8765)
     app.add_service(ws_service)
@@ -34,13 +38,15 @@ async def create_app():
     dispatcher = PromptDispatcher(llm_client)
 
     llm_handler = LLMPromptHandler(dispatcher=dispatcher)
-    input_handler = InputHandler(max_age_seconds=30, prompt_handler=llm_handler)
+    input_handler = InputHandler(max_age_seconds=30, prompt_handler=llm_handler, memory_handler=memory_handler)
     moderation_handler = ModerationHandler()
     monologue_scheduler = MonologueScheduler(dispatcher=dispatcher, llm=llm_handler, inactivity_timeout=120)
-    monologue_input_handler = MonologueInputHandler(max_age_seconds=30, prompt_handler=llm_handler)
+    monologue_input_handler = MonologueInputHandler(max_age_seconds=30, prompt_handler=llm_handler, memory_handler=memory_handler)
 
     twitch = TwitchListener(settings=settings)
-    output_handler = OutputHandler(TTSHandler(), OBSHandler(settings=settings))
+    output_handler = OutputHandler(TTSHandler(), OBSHandler(settings=settings),  memory_handler=memory_handler)
+
+
 
     app.add_service(input_handler)
     app.add_service(moderation_handler)
@@ -49,5 +55,6 @@ async def create_app():
     app.add_service(twitch)
     app.add_service(output_handler)
     app.add_service(dispatcher)
+    app.add_service(memory_service)
 
     return app

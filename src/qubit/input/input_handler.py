@@ -14,11 +14,12 @@ class InputHandler(Service):
         "twitch_follow_processed": "handle_event",
     }
         
-    def __init__(self, max_age_seconds=30, prompt_handler=None):
+    def __init__(self, max_age_seconds=30, prompt_handler=None, memory_handler=None):
         super().__init__("input_handler")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
         self.prompt_handler = prompt_handler
+        self.memory_handler = memory_handler
 
     async def start(self, app):
         logger.info("Starting InputHandlerService")
@@ -45,4 +46,10 @@ class InputHandler(Service):
             return
         
         if self.prompt_handler and event.type in self.prompt_handler.builders:
-            await self.prompt_handler.handle_event(event)
+            built_input = await self.prompt_handler.handle_event(event)
+
+        self.memory_handler.handle_event(event)
+
+        if self.prompt_handler:
+            await self.prompt_handler.queue_event(built_input)
+

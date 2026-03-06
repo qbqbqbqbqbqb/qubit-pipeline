@@ -15,7 +15,7 @@ Functions:
 import sys
 import os
 from pathlib import Path
-from scripts2.config.config import ROOT
+from config.config import ROOT
 import chromadb
 from chromadb.config import Settings
 
