@@ -13,7 +13,9 @@ from src.qubit.input.twitch.auth import TwitchAuth
 from src.qubit.input.twitch.subscriptions import TwitchWebsocketSub
 
 class TwitchListener(TwitchAuth, TwitchEvents, TwitchWebsocketSub):
-    def __init__(self, settings, terminate_event: asyncio.Event):
+    def __init__(self, settings, twitch_enabled = None,
+                 chat_enabled = None, raid_enabled = None, 
+                 follow_enabled = None, subs_enabled = None):
         self.settings = settings
         self.logger = get_logger(__name__)
         self.twitch_bot = None
@@ -21,16 +23,16 @@ class TwitchListener(TwitchAuth, TwitchEvents, TwitchWebsocketSub):
         self.chat = None
         self.eventsub = None
         self.connected = False
-        self.chat_enabled = True
-        self.terminate_event = terminate_event
+        self.twitch_enabled = twitch_enabled
+        self.chat_enabled = chat_enabled
+        self.raid_enabled = raid_enabled
+        self.follow_enabled = follow_enabled
+        self.subs_enabled = subs_enabled
 
-    async def listen(self, event_bus, enabled_event: asyncio.Event):
+
+    async def listen(self, event_bus):
         self.event_bus = event_bus 
-        while not self.terminate_event.is_set():
-            if not enabled_event.is_set():
-                await asyncio.sleep(1)
-                continue
-
+        while self.twitch_enabled.is_set():   
             try:
                 if not self.connected:
                     self.connected = await self._start_client()
@@ -56,10 +58,7 @@ class TwitchListener(TwitchAuth, TwitchEvents, TwitchWebsocketSub):
         try:
             await self._authenticate_bot_account()
             await self._authenticate_streamer_account()
-            if self.chat_enabled:
-                await self._setup_chat()
-            else:
-                self.logger.info("[_start_client] Twitch chat ingestion currently disabled")
+            await self._setup_chat()
             self.logger.info(f"[start] Connected to Twitch channel: {self.settings.twitch_channel}")
             return True
         except Exception as e:
@@ -77,7 +76,7 @@ class TwitchListener(TwitchAuth, TwitchEvents, TwitchWebsocketSub):
             None
         """
         self.logger.info("[disconnect] Disconnecting TwitchClient...")
-        if self.chat and self.chat_enabled:
+        if self.chat:
             self.chat.stop()
         if self.twitch_bot:
             await self.twitch_bot.close()

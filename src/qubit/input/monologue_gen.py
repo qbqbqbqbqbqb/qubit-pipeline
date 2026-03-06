@@ -8,11 +8,11 @@ from src.qubit.utils.log_utils import get_logger
 logger = get_logger(__name__)
 
 class MonologueScheduler:
-    def __init__(self, dispatcher, inactivity_timeout=120, terminate_event=None):
+    def __init__(self, dispatcher, inactivity_timeout=120, monologue_enabled=None):
         self.dispatcher = dispatcher
         self.inactivity_timeout = inactivity_timeout
         self.last_activity = datetime.now(timezone.utc)
-        self.terminate_event = terminate_event or asyncio.Event()
+        self.monologue_enabled = monologue_enabled
         self.task = asyncio.create_task(self._loop())
 
     def notify_activity(self, event=None):
@@ -20,7 +20,7 @@ class MonologueScheduler:
         self.last_activity = datetime.now(timezone.utc)
 
     async def _loop(self):
-        while not self.terminate_event.is_set(): 
+        while self.monologue_enabled.is_set(): 
             elapsed = (datetime.now(timezone.utc) - self.last_activity).total_seconds()
             if elapsed >= self.inactivity_timeout:
                 logger.info("Inactivity timeout reached, generating monologue")
