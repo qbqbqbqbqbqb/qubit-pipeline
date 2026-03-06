@@ -1,15 +1,29 @@
 from datetime import datetime, timedelta, timezone
+from src.qubit.core.service import Service
 from src.qubit.core.event_bus import event_bus
-from src.qubit.core.events import ResponsePromptEvent
 from src.qubit.utils.message_tracker import MessageTracker
 from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
-class MonologueInputHandler:
+class MonologueInputHandler(Service):
+    SUBSCRIPTIONS = {
+        "monologue_prompt": "handle_event",
+    }
+        
     def __init__(self, max_age_seconds=30, prompt_handler=None):
+        super().__init__(" monologue input handler")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
         self.prompt_handler = prompt_handler
+
+    async def start(self, app):
+        logger.info("Starting MonologueInputHandlerService")
+        self.event_bus = app.event_bus
+        await super().start(app)
+
+
+    async def stop(self):
+        logger.info("Stopping MonologueInputHandlerService")
 
     async def handle_event(self, event):
         text = event.data.get("text", "").lower().strip()

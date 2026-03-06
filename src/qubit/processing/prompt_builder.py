@@ -1,7 +1,9 @@
 from datetime import datetime, timezone
+from src.qubit.utils.log_utils import get_logger
 from src.qubit.core.events import ResponsePromptEvent
 
 
+logger = get_logger(__name__)
 class LLMPromptHandler:
 
     def __init__(self, dispatcher):
@@ -15,11 +17,10 @@ class LLMPromptHandler:
             "monologue_prompt": self._build_monologue_prompt
         }
         
-    # for no handling
     async def handle_event(self, event):
         builder = self.builders.get(event.type)
-
         if not builder:
+            logger.warning(f"No builder found for event type: {event.type}")
             return
 
         prompt_event = builder(event)

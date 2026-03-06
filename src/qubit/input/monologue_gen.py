@@ -1,32 +1,50 @@
 import asyncio
 from datetime import datetime, timezone
 
+
+from src.qubit.core.service import Service
 from src.qubit.core.event_bus import event_bus
-from src.qubit.core.events import MonologueEvent, ResponsePromptEvent
+from src.qubit.core.events import MonologueEvent
 from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
 
-class MonologueScheduler:
-    def __init__(self, dispatcher, inactivity_timeout=120, monologue_enabled=None):
+class MonologueScheduler(Service):
+    def __init__(self, dispatcher,  llm, inactivity_timeout=120):
+        super().__init__("monologue scheduler")
         self.dispatcher = dispatcher
+        self.llm = llm
         self.inactivity_timeout = inactivity_timeout
         self.last_activity = datetime.now(timezone.utc)
-        self.monologue_enabled = monologue_enabled
-        self.task = asyncio.create_task(self._loop())
 
-    def notify_activity(self, event=None):
-        logger.info("Chat processed")
-        self.last_activity = datetime.now(timezone.utc)
+    async def start(self, app):
+        logger.info("Starting MonologueScheduler")
+        self.event_bus = app.event_bus
+        self._worker_task = asyncio.create_task(self._worker(app))
+        await super().start(app)
 
-    async def _loop(self):
-        while self.monologue_enabled.is_set(): 
+    async def stop(self):
+        logger.info("Stopping MonologueScheduler")
+        if self._worker_task:
+            self._worker_task.cancel()
+            await asyncio.gather(self._worker_task, return_exceptions=True)
+
+    async def _worker(self, app):
+        app.event_bus.subscribe("twitch_chat_processed", self.notify_activity)
+
+        monologue_enabled = app.state.features.get("monologue", True)
+
+        while monologue_enabled: 
             elapsed = (datetime.now(timezone.utc) - self.last_activity).total_seconds()
             if elapsed >= self.inactivity_timeout:
                 logger.info("Inactivity timeout reached, generating monologue")
                 await self.generate_monologue()
                 self.last_activity = datetime.now(timezone.utc)
             await asyncio.sleep(5)
+
+    def notify_activity(self, event=None):
+        logger.info("Chat processed")
+        self.last_activity = datetime.now(timezone.utc)
 
     async def generate_monologue(self):
         logger.info("Monologue generated")

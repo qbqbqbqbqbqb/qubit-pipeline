@@ -3,15 +3,23 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
+from src.qubit.output.obs_handler import OBSHandler
+from src.qubit.output.tts_handler import TTSHandler
 from src.qubit.utils.log_utils import get_logger
 from src.qubit.core.event_bus import event_bus
 from src.qubit.core.events import ResponseGeneratedEvent
 from src.qubit.output.output_sanitiser import DialogueSanitiser
+from src.qubit.core.service import Service
 
 logger = get_logger(__name__)
 
-class OutputHandler:
-    def __init__(self, tts_handler=None, obs_handler=None,  vtube_studio_handler=None, max_age_seconds=30,  enable_subtitles=False):
+class OutputHandler(Service):
+    SUBSCRIPTIONS = {
+        "response_generated": "handle_response"
+
+    }
+    def __init__(self, tts_handler: TTSHandler, obs_handler: OBSHandler,  vtube_studio_handler=None, max_age_seconds=30,  enable_subtitles=False):
+        super().__init__("output_handler")
         self.tts_handler = tts_handler
         self.obs_handler = obs_handler
         self.vtube_studio_handler = vtube_studio_handler
@@ -23,7 +31,20 @@ class OutputHandler:
         self._running = True
         asyncio.create_task(self._process_queue())
 
-        event_bus.subscribe("response_generated", self.handle_response)
+
+    async def start(self, app):
+        logger.info("Starting OutputHandlerService")
+        self._running = True
+
+        self._task = asyncio.create_task(self._process_queue())
+        await super().start(app)
+
+    async def stop(self):
+        logger.info("Stopping OutputHandlerService")
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            await asyncio.gather(self._task, return_exceptions=True)
 
     async def handle_response(self, event: ResponseGeneratedEvent):
         prompt = event.data.get("prompt")
@@ -36,12 +57,12 @@ class OutputHandler:
 
         is_valid, filtered_response = self.dialogue_sanitiser.is_valid(response)
         if not is_valid:
-            logger.warning("[OutputHandler] Invalid response, skipping.")
+            logger.warning("[OutputHandlerService] Invalid response, skipping.")
             return
 
         response_clean = self.dialogue_sanitiser.strip_leading_punctuation(
-                    self.dialogue_sanitiser.remove_trailing_text(
-                    self.dialogue_sanitiser.remove_bot_name(filtered_response)))
+            self.dialogue_sanitiser.remove_trailing_text(
+            self.dialogue_sanitiser.remove_bot_name(filtered_response)))
 
         if source == "twitch_chat_processed" and prompt:
             pair = {
@@ -62,7 +83,6 @@ class OutputHandler:
 
     async def _process_queue(self):
         logger.info("Output processor started")
-
         while self._running:
             try:
                 if not self.queue:
@@ -70,7 +90,7 @@ class OutputHandler:
                     continue
 
                 item = self.queue.popleft()
-                logger.info(f"[OutputHandler] Processing item: {item}")
+                logger.info(f"[OutputHandlerService] Processing item: {item}")
 
                 timestamp = item.get("timestamp")
                 if not timestamp:
@@ -97,7 +117,6 @@ class OutputHandler:
 
     async def _handle_text_output(self, text: str):
         mouth_task = None
-
         try:
             if self.enable_subtitles and self.obs_handler:
                 await self.obs_handler.update_subtitle_text_and_style(new_text=text)

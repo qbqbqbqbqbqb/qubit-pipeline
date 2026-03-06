@@ -1,3 +1,4 @@
+from src.qubit.core.service import Service
 from src.qubit.utils.log_utils import get_logger
 from src.qubit.core.event_bus import event_bus
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
@@ -12,14 +13,33 @@ from src.qubit.utils.filter_utils import contains_banned_words
 
 logger = get_logger(__name__)
 
-class ModerationHandler:
+class ModerationHandler(Service):
+    
     """
     Sole responsibility: filter and sanitize Twitch events.
     Produces sanitized events for downstream consumers.
     """
+    SUBSCRIPTIONS = {
+        "twitch_chat": "handle_event",
+        "twitch_subscription": "handle_event",
+        "twitch_raid": "handle_event",
+        "twitch_follow": "handle_event",
+    }
+
+    def __init__(self):
+        super().__init__(" input moderation handler")
+
+    async def start(self, app):
+        logger.info("Starting ModerationHandlerService")
+        self.event_bus = app.event_bus
+        await super().start(app)
+
+    async def stop(self):
+        logger.info("Stopping ModerationHandlerService")
 
     async def handle_event(self, event: Event):
         if isinstance(event, TwitchChatEvent):
+            logger.info("moderating twitch chat event")
             await self._moderate_chat(event)
         elif isinstance(event, TwitchSubscriptionEvent):
             await self._moderate_subscription(event)

@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from src.qubit.core.service import Service
 from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
 from src.qubit.utils.log_utils import get_logger
 
@@ -12,15 +13,55 @@ from src.qubit.prompting.modules.personality import personality_module
 
 logger = get_logger(__name__)
 
-class PromptDispatcher:
+class PromptDispatcher(Service):
+    SUBSCRIPTIONS = {
+        "response_prompt": "enqueue",
+    }
+        
     def __init__(self, llm_client = AsyncHuggingFaceLLM, max_age_seconds=30):
+        super().__init__("prompt_dispatcher")
         self.llm = llm_client
         self.queue = asyncio.Queue()
         self.system_mood = "energetic"
         self.system_tone = "casual and humorous"
         self.system_interaction = "high"
         self.max_age = timedelta(seconds=max_age_seconds)
-        asyncio.create_task(self._worker())
+        self._worker_task = None
+
+    async def start(self, app):
+        logger.info("Starting PromptDispatcher")
+        self._worker_task = asyncio.create_task(self._worker(app))
+        await super().start(app)
+
+    async def _worker(self, app):
+        while True:
+            logger.info("queue eaten nomonomonomm")
+            event: ResponsePromptEvent = await self.queue.get()
+            try:
+                if self._is_stale(event):
+                    logger.info(f"Dropping stale prompt for {event.data.get('user')}: {event.prompt}")
+                    continue
+
+                response = await self._generate_response(event)
+
+                logger.info(f"Response generated. Publishing {response}")
+                await self._publish_response(event, response, app.event_bus)
+
+            except Exception as e:
+                logger.error(f"[LLM Worker] Error: {e}")
+            finally:
+                self.queue.task_done()
+
+    async def stop(self):
+        logger.info("Stopping PromptDispatcher")
+        if self._worker_task:
+            self._worker_task.cancel()
+            await asyncio.gather(self._worker_task, return_exceptions=True)
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+            except asyncio.queues.QueueEmpty:
+                break
 
     async def enqueue(self, event: ResponsePromptEvent):
         event_type = getattr(event, "type", "unknown")
@@ -49,6 +90,7 @@ class PromptDispatcher:
         for attempt in range(1, max_attempts + 1):
             logger.info(f"[Attempt {attempt}] prompt: {prompt}")
             try:
+                logger.info(f"[LLM] Generating response")
                 response = await self.llm.generate_response(prompt)
                 if response and response.strip():
                     logger.info(f"[Attempt {attempt}] response: {response}")
@@ -62,25 +104,6 @@ class PromptDispatcher:
 
         logger.error(f"All {max_attempts} attempts failed for prompt: {prompt}")
         return "Sorry, I couldn't generate a response right now."
-
-    async def _worker(self):
-        while True:
-            event: ResponsePromptEvent = await self.queue.get()
-            try:
-                if self._is_stale(event):
-                    logger.info(f"Dropping stale prompt for {event.data.get('user')}: {event.prompt}")
-                    continue
-
-                response = await self._generate_response(event)
-
-                logger.info(f"Response generated. Publishing {response}")
-                await self._publish_response(event, response)
-
-            except Exception as e:
-                logger.error(f"[LLM Worker] Error: {e}")
-            finally:
-                self.queue.task_done()
-
 
     def _is_stale(self, event) -> bool:
         ts = getattr(event, "timestamp", None)
@@ -111,7 +134,7 @@ class PromptDispatcher:
         return await self._generate_with_retries(final_prompt, max_attempts=3)
 
 
-    async def _publish_response(self, event: ResponsePromptEvent, response: str):
+    async def _publish_response(self, event: ResponsePromptEvent, response: str, event_bus):
         user = event.data.get("user")
         generated_event = ResponseGeneratedEvent(
             type="response_generated",
@@ -127,4 +150,4 @@ class PromptDispatcher:
             response=response
         )
         await event_bus.publish(generated_event)
-        logger.info(f"Pubished {generated_event}")
+        logger.info(f"Published {generated_event}")

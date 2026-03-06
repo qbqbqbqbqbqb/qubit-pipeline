@@ -19,7 +19,7 @@ MODEL_REGISTRY = {
 
     "gpt6": ModelConfig(
         model_name="PygmalionAI/pygmalion-6b",
-        load_in_4bit=False,
+        load_in_4bit=True,
         lora_path="training_data/training/qubit-lora-final",
         use_chat_template=False,
         system_model_specific_prompt="Respond as Qubit to this Twitch message.",

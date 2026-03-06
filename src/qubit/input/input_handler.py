@@ -1,17 +1,35 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
+from src.qubit.core.service import Service
 from src.qubit.core.event_bus import event_bus
-from src.qubit.core.events import ResponsePromptEvent
 from src.qubit.utils.message_tracker import MessageTracker
 from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
-class InputHandler:
+class InputHandler(Service):
+    SUBSCRIPTIONS = {
+        "twitch_chat_processed": "handle_event",
+        "twitch_subscription_processed": "handle_event",
+        "twitch_raid_processed": "handle_event",
+        "twitch_follow_processed": "handle_event",
+    }
+        
     def __init__(self, max_age_seconds=30, prompt_handler=None):
+        super().__init__("input_handler")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
         self.prompt_handler = prompt_handler
 
+    async def start(self, app):
+        logger.info("Starting InputHandlerService")
+        self.event_bus = app.event_bus
+        await super().start(app)    
+
+    async def stop(self):
+        logger.info("Stopping InputHandlerService")
+
     async def handle_event(self, event):
+        logger.info("Handling event in InputHandlerService")
         text = event.data.get("text", "").lower().strip()
 
         if self.message_tracker.is_repeated(text):
@@ -25,8 +43,6 @@ class InputHandler:
         if datetime.now(timezone.utc) - ts > self.max_age:
             logger.debug(f"Dropping stale message: {text}") 
             return
-
+        
         if self.prompt_handler and event.type in self.prompt_handler.builders:
-            builder = self.prompt_handler.builders[event.type]
-            prompt_event = builder(event)
-            await self.prompt_handler.dispatcher.enqueue(prompt_event)
+            await self.prompt_handler.handle_event(event)

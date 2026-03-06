@@ -36,7 +36,8 @@ class TwitchEvents:
         self.chat.start()
 
     async def _on_subscription(self, event: EventData):
-        if not self.subs_enabled.is_set():
+        subs_enabled = self.app.state.features.get("subs", True)
+        if not subs_enabled:
             return
         try:
             self.logger.debug(f"Sub System Message {event.system_message}")
@@ -60,13 +61,14 @@ class TwitchEvents:
                 sub_message=sub_msg,
                 timestamp = datetime.now(timezone.utc).isoformat()
             )
-            self.event_bus.publish(event)
+            await self.event_bus.publish(event)
 
         except Exception as e:
             self.logger.error(f"[_on_subscription] Error handling subscription event: {e}")
 
     async def _on_raid(self, event: EventData):
-        if not self.raid_enabled.is_set():
+        raid_enabled = self.app.state.features.get("raid", True)
+        if not raid_enabled:
             return
         try:
             raider = event.get("from_broadcaster_user_name")
@@ -88,7 +90,8 @@ class TwitchEvents:
             self.logger.error(f"[_on_raid] Error handling raid event: {e}")
 
     async def _on_follow(self, event: ChannelFollowEvent):
-        if not self.follow_enabled.is_set():
+        follow_enabled = self.app.state.features.get("follow", True)
+        if not follow_enabled:
             return
         try:
             user = event.event.user_name
@@ -149,7 +152,8 @@ class TwitchEvents:
         Raises:
             Exception: If message processing fails.
         """
-        if not self.chat_enabled.is_set():
+        chat_enabled = self.app.state.features.get("chat", True)
+        if not chat_enabled:
             return
         try:
             user = msg.user.name
