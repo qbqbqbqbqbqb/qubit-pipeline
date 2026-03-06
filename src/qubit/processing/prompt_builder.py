@@ -12,8 +12,10 @@ class LLMPromptHandler:
             "twitch_raid_processed": self._build_raid_prompt,
             "twitch_follow_processed": self._build_follow_prompt,
             "twitch_subscription_processed": self._build_subscription_prompt,
+            "monologue_prompt": self._build_monologue_prompt
         }
         
+    # for no handling
     async def handle_event(self, event):
         builder = self.builders.get(event.type)
 
@@ -23,6 +25,14 @@ class LLMPromptHandler:
         prompt_event = builder(event)
         await self.dispatcher.enqueue(prompt_event)
 
+    def _build_monologue_prompt(self, event):
+        prompt = event.prompt
+        return self._create_prompt_event(
+            event,
+            prompt,
+            "monologue_response_prompt"
+        )
+    
     def _build_chat_prompt(self, event):
         prompt = f"{event.user}: {event.text}"
         return self._create_prompt_event(event, prompt, "twitch_chat_response_prompt")
@@ -55,6 +65,7 @@ class LLMPromptHandler:
     def _create_prompt_event(self, event, prompt, event_type):
         return ResponsePromptEvent(
             type=event_type,
+            user=event.user,
             source=event.type,
             timestamp=datetime.now(timezone.utc).isoformat(),
             data={"user": event.user, "prompt": prompt},

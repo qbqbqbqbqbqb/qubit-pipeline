@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from src.qubit.core.event_bus import event_bus
-from src.qubit.core.events import ResponsePromptEvent
+from src.qubit.core.events import MonologueEvent, ResponsePromptEvent
 from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
@@ -40,12 +40,12 @@ class MonologueScheduler:
         ]
         topic = random.choice(topics)
         prompt = f"Monologue about {topic}, in character as Qubit."
-
-        event = ResponsePromptEvent(
+    
+        event = MonologueEvent(
             type="monologue_prompt",
-            source="monologue_scheduler",
+            user="system",
             timestamp=datetime.now(timezone.utc).isoformat(),
-            data={"topic": topic, "prompt": prompt},
+            data={"user": "system", "topic": topic, "prompt": prompt},
             prompt=prompt
         )
 

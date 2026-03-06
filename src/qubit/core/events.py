@@ -57,7 +57,8 @@ class SpeechEvent(Event):
 
 @dataclass
 class MonologueEvent(Event):
-    text: str
+    user: str
+    prompt: str
 
 @dataclass
 class InputEvent(Event):
@@ -66,6 +67,7 @@ class InputEvent(Event):
 
 @dataclass
 class ResponsePromptEvent(Event):
+    user: str
     source: str
     prompt: str
 

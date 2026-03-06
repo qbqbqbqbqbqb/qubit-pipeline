@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 import uvicorn
 
+from src.qubit.input.monologue_input_handler import MonologueInputHandler
 from src.qubit.core.signals import Signals
 from src.qubit.core.server import WebSocketServer
 from src.qubit.utils.log_utils import get_logger
@@ -78,6 +79,7 @@ async def main():
     llm_handler = LLMPromptHandler(dispatcher=dispatcher)
 
     input_handler = InputHandler(max_age_seconds=30, prompt_handler=llm_handler)
+    monologue_input_handler = MonologueInputHandler(max_age_seconds=30, prompt_handler=llm_handler)
 
     event_bus.subscribe("twitch_chat_processed", input_handler.handle_event)
     event_bus.subscribe("twitch_subscription_processed", input_handler.handle_event)
@@ -93,7 +95,7 @@ async def main():
     monologue_scheduler = MonologueScheduler(dispatcher=dispatcher, inactivity_timeout=120, monologue_enabled=signals.monologue_enabled)
     for event_type in llm_handler.builders.keys():
         event_bus.subscribe(event_type, monologue_scheduler.notify_activity)
-    event_bus.subscribe("monologue_prompt", llm_handler.handle_event)
+    event_bus.subscribe("monologue_prompt", monologue_input_handler.handle_event)
 
     tts_handler = TTSHandler()
     obs_Handler = OBSHandler(settings=settings)
