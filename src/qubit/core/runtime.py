@@ -6,7 +6,6 @@ async def run_app(app):
 
     tasks = []
 
-    # start services
     for service in app.services:
         task = asyncio.create_task(service.start(app))
         tasks.append(task)

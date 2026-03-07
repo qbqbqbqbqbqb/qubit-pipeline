@@ -64,7 +64,7 @@ class MemoryHandler:
             "User",
             text,
             user_id=event.user,
-            metadata={"category": "event", "timestamp": getattr(event, "timestamp", None)}
+            metadata={"source": "event", "timestamp": getattr(event, "timestamp", None)}
         )
 
     def monologue_memory(self, event):
@@ -73,5 +73,5 @@ class MemoryHandler:
         self.memory_service.add_conversation_item(
             "Qubit",
             event.prompt,
-            metadata={"category": "monologue", "timestamp": getattr(event, "timestamp", None)}
+            metadata={"source": "monologue", "timestamp": getattr(event, "timestamp", None)}
         )

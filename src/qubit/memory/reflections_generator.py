@@ -35,14 +35,14 @@ class ReflectionGenerator:
 .
 
     """
-    def __init__(self, chat_history_manager, dispatcher: PromptDispatcher, reflection_threshold: int = 20):
+    def __init__(self, memory_manager, dispatcher: PromptDispatcher, reflection_threshold: int = 20):
         """
 
         Initialize the ReflectionGenerator.
 
 
         """
-        self.chat_history_manager = chat_history_manager
+        self.memory_manager = memory_manager  
         self.dispatcher = dispatcher
         self.reflection_threshold = reflection_threshold
         self.reflection_prompt = """
@@ -75,7 +75,7 @@ A3: [Answer]
 
 
         """
-        recent_messages = self.chat_history_manager.get_recent_chat_history(limit=self.reflection_threshold)
+        recent_messages = self.memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
 
         if len(recent_messages) < 10:
             return []
@@ -93,12 +93,12 @@ A3: [Answer]
         messages_text = "\n".join(formatted_messages)
 
         reflection_messages = [
-            {"role": "System", "content": "You are an AI qubit that analyzes conversations and creates insightful question-answer pairs."},
+            {"role": "System", "content": "You are an AI assistant that analyzes conversations and creates insightful question-answer pairs."},
             {"role": "User", "content": self.reflection_prompt.format(recent_messages=messages_text)}
         ]
 
         try:
-            reflection_response = await self.dispatcher._generate_response_with_retries(
+            reflection_response = await self.dispatcher._generate_with_retries(
                 raw_prompt=reflection_messages,
                 use_system_prompt=False,
                 max_new_tokens=MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION,
@@ -109,6 +109,7 @@ A3: [Answer]
 
         except Exception as e:
             return []
+
 
     def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:
         """
@@ -148,3 +149,5 @@ A3: [Answer]
                 qa_pairs.append((current_q, current_a))
 
         return qa_pairs[:3]
+    
+

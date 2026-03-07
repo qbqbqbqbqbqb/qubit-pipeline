@@ -15,7 +15,6 @@ class AsyncHuggingFaceLLM:
         logger.info(f"[AsyncHuggingFaceLLM] Generating response, prompt length={len(prompt)}")
 
         try:
-            # run in executor to avoid blocking the event loop
             response = await loop.run_in_executor(
                 None,
                 lambda: self._safe_generate(prompt)

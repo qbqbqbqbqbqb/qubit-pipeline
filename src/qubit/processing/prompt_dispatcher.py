@@ -1,15 +1,18 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from src.qubit.prompting.modules.chat import chat_memory_module
+from src.qubit.prompting.modules.reflection import reflection_memory_module
 from src.qubit.core.service import Service
 from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
 from src.utils.log_utils import get_logger
 
 from src.qubit.core.event_bus import event_bus
-from src.qubit.core.events import ResponseGeneratedEvent, ResponsePromptEvent
+from src.qubit.core.events import PromptAssemblyEvent, ResponseGeneratedEvent, ResponsePromptEvent
 from src.qubit.prompting.prompt_assembler import PromptAssembler
 from src.qubit.prompting.modules.core import core_system_module
 from src.qubit.prompting.modules.input import input_module
 from src.qubit.prompting.modules.personality import personality_module
+from src.qubit.prompting.modules.stream_type import stream_type_module
 
 logger = get_logger(__name__)
 
@@ -28,7 +31,9 @@ class PromptDispatcher(Service):
         self.max_age = timedelta(seconds=max_age_seconds)
         self._worker_task = None
 
+
     async def start(self, app):
+        self.app = app
         logger.info("Starting PromptDispatcher")
         self._worker_task = asyncio.create_task(self._worker(app))
         await super().start(app)
@@ -128,8 +133,25 @@ class PromptDispatcher(Service):
             mood=self.system_mood,
             tone=self.system_tone,
             interaction_level=self.system_interaction))
-        assembler.add(input_module(prompt_text))
+        assembler.add(stream_type_module())
 
+        assembly_event = PromptAssemblyEvent(
+            type="prompt_assembly",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            data={},
+            assembler=assembler,
+            user=user,
+            prompt_text=prompt_text
+        )
+        await self.app.event_bus.publish(assembly_event)
+
+        for injection in assembly_event.contributions:
+            assembler.add(injection)
+
+        assembler.add(input_module(prompt_text))
+        for inj in assembly_event.contributions:
+            logger.info(f"Injection ({inj.priority}): {inj.content[:80]}")
+                    
         final_prompt = assembler.build()
         return await self._generate_with_retries(final_prompt, max_attempts=3)
 

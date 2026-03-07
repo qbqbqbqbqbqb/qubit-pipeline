@@ -26,5 +26,5 @@ def personality_module(
         f"You are feeling {mood}, and talk in a {tone} tone.\n"
         f"{interaction_instruction}\n"
     ),
-        priority=80
+        priority=90
     )

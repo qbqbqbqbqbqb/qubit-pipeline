@@ -1,6 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import List, Optional, Dict, Any
+
+from src.qubit.prompting.injections import PromptInjection
+from src.qubit.prompting.prompt_assembler import PromptAssembler
 
 @dataclass
 class Event:
@@ -76,3 +79,10 @@ class ResponseGeneratedEvent(Event):
     prompt: str
     source: str
     response: str
+
+@dataclass
+class PromptAssemblyEvent(Event):
+    assembler: PromptAssembler  
+    user: str
+    prompt_text: str
+    contributions: List[PromptInjection] = field(default_factory=list) 
