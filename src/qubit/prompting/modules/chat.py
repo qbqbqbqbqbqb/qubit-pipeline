@@ -1,10 +1,8 @@
 
 from src.qubit.prompting.injections import PromptInjection
 
-
-
-def memory_module(memory_text: str):
+def memory_module(chats: str):
     return PromptInjection(
-        content=f"Recent reflection:\n{memory_text}",
+        content=f"Recent chat history:\n{chats}",
         priority=60
     )

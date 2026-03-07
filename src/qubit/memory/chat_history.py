@@ -43,41 +43,55 @@ class ChatHistoryManager:
             metadata={"hnsw:space": "l2"}
         )
 
-    def add_conversation_item_sync(self, role: str, content: str, user_id: str = None,
-                             metadata: Dict = None) -> None:
+    def add_conversation_item_sync(self, role: str, content: str, user_id: str = None) -> None:
         """
         Add a chat message to the persistent conversation history synchronously.
         """
-        self.logger.info(f"adding message: {content} with {metadata} from {role} {user_id}")
+        self.logger.info(f"adding message: {content} from {role} {user_id}")
         try:
-            message = {
-                "timestamp": datetime.now().isoformat(),
-                "role": role,
-                "content": content,
-                "user_id": user_id,
-                "metadata": metadata or {}
-            }
-
-            message_id = str(uuid.uuid4())
-
             chromadb_metadata = {
+                "user_id": user_id or "Unknown",
                 "role": role,
-                "content": content,
-                "user_id": user_id or "unknown",
-                "timestamp": message["timestamp"],
+                "timestamp":datetime.now().isoformat(),
                 "type": "chat"
             }
 
-            if metadata:
-                for key, value in metadata.items():
-                    chromadb_metadata[f"meta_{key}"] = value
-
             self.conversation_collection.upsert(
-                ids=[message_id],
+                ids=str(uuid.uuid4()),
                 documents=[f"{role}: {content}"],
                 metadatas=[chromadb_metadata]
             )
         except Exception as e:
-            print(f"Error adding chat message: {e}")
+            self.logger.error(f"Error adding chat message: {e}")
 
+    def get_recent_chat_history(self, limit: int = 20) -> List[Dict]:
+        """
+        Retrieve recent chat history from the ChromaDB conversation collection.
+
+        This method fetches the most recent chat messages stored in the conversation
+        collection, up to the specified limit. Messages are returned in the order
+        they were stored, with metadata properly parsed.
+        """
+        try:
+            results = self.conversation_collection.get(limit=limit)
+            chat_history = []
+
+            for i, _ in enumerate(results['ids']):
+                metadata = results['metadatas'][i] if results['metadatas'] and i < len(results['metadatas']) else {}
+
+                chat_entry = {
+                    "timestamp": metadata.get("timestamp", ""),
+                    "role": metadata.get("role", "Unknown"),
+                    "content": results['documents'][i],
+                    "user_id": metadata.get("user_id", "unknown"),
+                }
+
+                chat_history.append(chat_entry)
+
+            chat_history.sort(key=lambda x: x["timestamp"], reverse=True)
+
+            return chat_history[:limit]
     
+        except Exception as e:
+            print(f"Error retrieving chat history from ChromaDB: {e}")
+            return []
