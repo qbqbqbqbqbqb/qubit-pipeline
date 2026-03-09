@@ -191,3 +191,4 @@ whitelisted_words.txt
 blacklisted_words.txt
 instructions.txt
 /training_data
+*.db

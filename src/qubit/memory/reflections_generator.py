@@ -7,42 +7,28 @@ from src.qubit.processing.prompt_dispatcher import PromptDispatcher
 from config.config import MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION
 
 """
-
 Module for generating reflections from chat history.
 
 This module provides functionality to analyze recent conversation messages and generate
-
 insightful question-answer pairs that capture key aspects of the conversation. These Q&A
-
 pairs are used to create memories for future interactions, improving the AI's contextual
-
 understanding.
 
 Classes:
-
     ReflectionGenerator: Handles the generation and parsing of reflection-based memories.
-
 """
 
 class ReflectionGenerator:
     """
-
     A class to generate reflective question-answer pairs from recent chat history.
 
     This class interfaces with the chat history manager and response generator to create
-
     memories in the form of Q&A pairs that highlight important insights from conversations.
-.
-
     """
-    def __init__(self, memory_manager, dispatcher: PromptDispatcher, reflection_threshold: int = 20):
+    def __init__(self, dispatcher: PromptDispatcher = None, reflection_threshold: int = 20):
         """
-
         Initialize the ReflectionGenerator.
-
-
         """
-        self.memory_manager = memory_manager  
         self.dispatcher = dispatcher
         self.reflection_threshold = reflection_threshold
         self.reflection_prompt = """
@@ -62,20 +48,15 @@ Q3: [Question]
 A3: [Answer]
 """
 
-    async def perform_reflection(self) -> List[Tuple[str, str]]:
+    async def perform_reflection(self, memory_manager) -> List[Tuple[str, str]]:
         """
-
         Perform reflection on recent messages to generate Q&A memories.
 
         Retrieves recent chat messages, formats them, and uses the response generator
-
         to create up to 3 insightful question-answer pairs that capture key aspects
-
         of the conversation.
-
-
         """
-        recent_messages = self.memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
+        recent_messages = memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
 
         if len(recent_messages) < 10:
             return []
@@ -98,6 +79,8 @@ A3: [Answer]
         ]
 
         try:
+            if self.dispatcher is None:
+                raise ValueError("Dispatcher not set for reflection generation")
             reflection_response = await self.dispatcher._generate_with_retries(
                 raw_prompt=reflection_messages,
                 use_system_prompt=False,
@@ -110,14 +93,11 @@ A3: [Answer]
         except Exception as e:
             return []
 
-
     def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:
         """
-
         Parse question-answer pairs from the LLM's reflection response.
 
         Uses regex to extract Q&A pairs from the response string. If regex fails,
-
         falls back to line-by-line parsing. Ensures exactly 3 pairs are returned if possible.
         """
         qa_pairs = []
@@ -149,5 +129,3 @@ A3: [Answer]
                 qa_pairs.append((current_q, current_a))
 
         return qa_pairs[:3]
-    
-

@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Dict
 import chromadb
 
+from src.qubit.processing.prompt_dispatcher import PromptDispatcher
+from src.qubit.memory.reflections_generator import ReflectionGenerator
 from chromadb.config import Settings
 from src.qubit.core.events import PromptAssemblyEvent
 from src.qubit.prompting.modules.chat import chat_memory_module
@@ -10,30 +12,55 @@ from src.qubit.prompting.modules.reflection import reflection_memory_module
 from src.qubit.core.service import Service
 from src.qubit.memory.memory_manager import MemoryManager
 from src.utils.log_utils import get_logger
-
+import sqlite3
+from sqlite3 import Connection
 
 class MemoryService(Service):
     SUBSCRIPTIONS = {"prompt_assembly": "handle_prompt_assembly"}
 
-    def __init__(self, base_path: str = "."):
+    def __init__(self, base_path: str = ".", dispatcher: PromptDispatcher= None):
         self.logger = get_logger(__name__)
         super().__init__("MemoryService")
     
         self.base_path = Path(base_path)
         self.memories_dir = self.base_path / "memories"
         self.memories_dir.mkdir(exist_ok=True)
+        self.sql_dir = self.memories_dir / "sql"
+        self.sql_dir.mkdir(exist_ok=True)  # Ensure SQL dir exists
+        self.dispatcher = dispatcher
 
         self.chroma_client = chromadb.PersistentClient(
-        path=str(self.base_path / "memories" / "chroma.db"),
-        settings=Settings(
-            anonymized_telemetry=False,
-            chroma_server_host=None,
-            chroma_server_http_port=None
+            path=str(self.memories_dir / "chroma.db"),
+            settings=Settings(
+                anonymized_telemetry=False,
+                chroma_server_host=None,
+                chroma_server_http_port=None
+            )
         )
-    )
+        db_path = self.sql_dir / "memory_index.db"
+        self.conn: Connection = sqlite3.connect(
+            db_path,
+            detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+            check_same_thread=False
+        )
+        self.conn.row_factory = sqlite3.Row 
         
-        self.memory_manager = MemoryManager(self.chroma_client, dispatcher=None)
-
+        self.memory_manager = MemoryManager(self.chroma_client, dispatcher=self.dispatcher, conn=self.conn)
+        with self.memory_manager.lock:
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS memory_index (
+                    id TEXT PRIMARY KEY,
+                    timestamp TEXT,
+                    user_id TEXT,
+                    type TEXT,
+                    collection TEXT
+                )
+            """)
+            self.conn.commit()
+        
+        self.reflections_generator = ReflectionGenerator(dispatcher=self.dispatcher)
+        self.memory_manager.reflections_generator = self.reflections_generator
+        
     async def start(self, app):
         self.logger.info("MemoryService started")
         self._running = True
@@ -44,10 +71,13 @@ class MemoryService(Service):
         REFLECTIONS_THRESHOLD = 20
         while self._running:
             await asyncio.sleep(60)
+            self.logger.info("MemoryService worker checking for reflections...")
             recent_chats = self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
+            self.logger.info(f"Found {len(recent_chats)} recent chat items for reflection check")
             unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
+            self.logger.info(f"Found {len(unreflected)} unreflected chat items")
             if len(unreflected) >= REFLECTIONS_THRESHOLD:
-                self.logger.info("creating reflection")
+                self.logger.info("creating reflections")
                 reflections = await self.memory_manager.generate_reflections()
                 for q, a in reflections:
                     self.memory_manager.add_reflection_item(f"Q: {q}\nA: {a}")

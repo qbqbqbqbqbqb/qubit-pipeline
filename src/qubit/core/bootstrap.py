@@ -27,15 +27,18 @@ async def create_app():
 
     app.state = RuntimeState()
     app.event_bus = event_bus
-    memory_service = MemoryService()
+
+    llm_client = AsyncHuggingFaceLLM(ModelManager.get_instance(), max_tokens=150)
+    dispatcher = PromptDispatcher(llm_client)
+    
+    memory_service = MemoryService(dispatcher=dispatcher)
     memory_handler = MemoryHandler(memory_service)
 
     ws_service = WebSocketServerService(host="0.0.0.0", port=8765)
     app.add_service(ws_service)
 
 
-    llm_client = AsyncHuggingFaceLLM(ModelManager.get_instance(), max_tokens=150)
-    dispatcher = PromptDispatcher(llm_client)
+
 
     llm_handler = LLMPromptHandler(dispatcher=dispatcher)
     input_handler = InputHandler(max_age_seconds=30, prompt_handler=llm_handler, memory_handler=memory_handler)

@@ -25,7 +25,7 @@ class MemoryHandler:
         }
 
     def handle_event(self, event):
-        self.logger.info("Handling memory event {event}")
+        self.logger.info(f"Handling memory event {event}")
         event_type = getattr(event, "type", None)
 
         handler = self.routes.get(event_type)
