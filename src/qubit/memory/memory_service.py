@@ -26,7 +26,7 @@ class MemoryService(Service):
         self.memories_dir = self.base_path / "memories"
         self.memories_dir.mkdir(exist_ok=True)
         self.sql_dir = self.memories_dir / "sql"
-        self.sql_dir.mkdir(exist_ok=True)  # Ensure SQL dir exists
+        self.sql_dir.mkdir(exist_ok=True)
         self.dispatcher = dispatcher
 
         self.chroma_client = chromadb.PersistentClient(
@@ -50,12 +50,13 @@ class MemoryService(Service):
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS memory_index (
                     id TEXT PRIMARY KEY,
-                    timestamp TEXT,
+                    timestamp REAL,
                     user_id TEXT,
                     type TEXT,
                     collection TEXT
                 )
             """)
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_timestamp ON memory_index (collection, timestamp)")
             self.conn.commit()
         
         self.reflections_generator = ReflectionGenerator(dispatcher=self.dispatcher)
@@ -68,7 +69,7 @@ class MemoryService(Service):
         await super().start(app)
 
     async def _worker(self):
-        REFLECTIONS_THRESHOLD = 20
+        REFLECTIONS_THRESHOLD = 5
         while self._running:
             await asyncio.sleep(60)
             self.logger.info("MemoryService worker checking for reflections...")
@@ -79,9 +80,11 @@ class MemoryService(Service):
             if len(unreflected) >= REFLECTIONS_THRESHOLD:
                 self.logger.info("creating reflections")
                 reflections = await self.memory_manager.generate_reflections()
+                self.logger.info(f"Generated {len(reflections)} reflections")
                 for q, a in reflections:
                     self.memory_manager.add_reflection_item(f"Q: {q}\nA: {a}")
                 ids_to_update = [chat["id"] for chat in unreflected] 
+                self.logger.info(f"Marking {len(ids_to_update)} chat items as reflected")
                 self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
 
     async def stop(self):

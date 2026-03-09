@@ -86,11 +86,13 @@ A3: [Answer]
                 use_system_prompt=False,
                 max_new_tokens=MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION,
             )
+            self.logger.info(f"Reflection response: {reflection_response}")
 
             qa_pairs = self._parse_qa_pairs(reflection_response)
             return qa_pairs
 
         except Exception as e:
+            self.logger.error(f"Error during reflection generation: {e}")
             return []
 
     def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:

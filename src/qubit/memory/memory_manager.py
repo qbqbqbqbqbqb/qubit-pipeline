@@ -4,7 +4,7 @@ import uuid
 from typing import Dict, List, Tuple
 import re
 import asyncio
-import threading  # Added for Lock
+import threading
 
 from src.qubit.memory.reflections_generator import ReflectionGenerator
 from src.utils.log_utils import get_logger
@@ -22,7 +22,7 @@ class MemoryManager:
         }
         self.reflections_generator = reflections_generator
         self.conn = conn
-        self.lock = threading.Lock()  # Added to serialize SQLite access
+        self.lock = threading.Lock()
 
     def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
         """
@@ -38,7 +38,7 @@ class MemoryManager:
             timestamp = (
                 metadata.get("timestamp")
                 if metadata and "timestamp" in metadata
-                else datetime.now(timezone.utc).isoformat()
+                else datetime.now(timezone.utc).timestamp()
             )
 
             source = (
@@ -52,15 +52,16 @@ class MemoryManager:
                 "role": role,
                 "timestamp": timestamp,
                 "type": source,
+                "reflected": False  # Explicitly set
             }
 
-            coll.upsert(
-                ids=[item_id],
-                documents=[f"{role}: {content}"],
-                metadatas=[chromadb_metadata]
-            )
-
             with self.lock:
+                coll.upsert(
+                    ids=[item_id],
+                    documents=[content],
+                    metadatas=[chromadb_metadata]
+                )
+
                 self.conn.execute(
                     "INSERT INTO memory_index (id, timestamp, user_id, type, collection) VALUES (?, ?, ?, ?, ?)",
                     (item_id, timestamp, user_id or "Unknown", "chat", "conversation_collection")
@@ -79,20 +80,20 @@ class MemoryManager:
 
         try:
             item_id = str(uuid.uuid4())
-            timestamp = datetime.now(timezone.utc).isoformat()
+            timestamp = datetime.now(timezone.utc).timestamp()
 
             chromadb_metadata = {
                 "timestamp": timestamp,
                 "type": "reflection"
             }
 
-            coll.upsert(
-                ids=[item_id],
-                documents=[content],
-                metadatas=[chromadb_metadata]
-            )
-
             with self.lock:
+                coll.upsert(
+                    ids=[item_id],
+                    documents=[content],
+                    metadatas=[chromadb_metadata]
+                )
+
                 self.conn.execute(
                     "INSERT INTO memory_index (id, timestamp, user_id, type, collection) VALUES (?, ?, ?, ?, ?)",
                     (item_id, timestamp, "system", "reflection", "reflections_collection")
@@ -116,7 +117,7 @@ class MemoryManager:
         coll_name = "conversation_collection" if collection_type == "chat" else "reflections_collection"
 
         try:
-            cutoff = (datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)).isoformat()
+            cutoff = (datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)).timestamp()
 
             with self.lock:
                 cursor = self.conn.execute(
@@ -132,10 +133,10 @@ class MemoryManager:
                 )
                 ids = [row[0] for row in cursor.fetchall()]
 
-            if not ids:
-                return []
+                if not ids:
+                    return []
 
-            results = coll.get(ids=ids)
+                results = coll.get(ids=ids)
 
             items = []
 
@@ -143,7 +144,7 @@ class MemoryManager:
                 meta = results["metadatas"][i]
                 items.append({
                     "id": results["ids"][i],
-                    "timestamp": meta.get("timestamp", ""),
+                    "timestamp": meta.get("timestamp", 0.0),
                     "role": meta.get("role", "Unknown"),
                     "content": results["documents"][i],
                     "user_id": meta.get("user_id", "Unknown"),
@@ -161,11 +162,12 @@ class MemoryManager:
     def update_items_metadata(self, item_ids: List[str], new_metadata: Dict) -> None:
         coll = self.collections["chat"] 
         try:
-            for item_id in item_ids:
-                existing = coll.get(ids=[item_id])
-                if existing['metadatas']:
-                    updated_meta = {**existing['metadatas'][0], **new_metadata}
-                    coll.update(ids=[item_id], metadatas=[updated_meta])
+            with self.lock:
+                for item_id in item_ids:
+                    existing = coll.get(ids=[item_id])
+                    if existing['metadatas']:
+                        updated_meta = {**existing['metadatas'][0], **new_metadata}
+                        coll.update(ids=[item_id], metadatas=[updated_meta])
         except Exception as e:
             self.logger.error(f"Error updating metadata for items: {e}")
 
