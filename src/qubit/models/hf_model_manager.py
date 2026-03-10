@@ -85,7 +85,18 @@ class HuggingFaceModelManager(BaseModelManager):
 
         return config
 
+    def format_chat_prompt(self,messages):
+        parts = []
+        for m in messages:
+            role = m["role"]
+            content = m["content"]
+            parts.append(f"{role}: {content}")
+        return "\n".join(parts)
+
     def generate_dialogue(self, prompt: str, max_new_tokens: int):
+
+        if isinstance(prompt, list):
+            prompt = self.format_chat_prompt(prompt)
 
         inputs = self.tokenizer(
             prompt,

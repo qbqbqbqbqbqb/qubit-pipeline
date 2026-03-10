@@ -172,6 +172,14 @@ class MemoryManager:
             self.logger.error(f"Error updating metadata for items: {e}")
 
     async def generate_reflections(self) -> List[Tuple[str, str]]:
+        self.logger.info("Generating reflections")
+        self.logger.info(f"Reflections generator: {self.reflections_generator}")
         if self.reflections_generator is None:
             raise ValueError("Reflections generator not set")
-        return await self.reflections_generator.perform_reflection(self)
+        try:
+            reflections = await self.reflections_generator.perform_reflection(self)
+            self.logger.info(f"Generated reflections: {reflections}")
+            return reflections
+        except Exception as e:
+            self.logger.error(f"Error generating reflections: {e}")
+            return []

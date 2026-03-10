@@ -45,7 +45,8 @@ class MemoryService(Service):
         )
         self.conn.row_factory = sqlite3.Row 
         
-        self.memory_manager = MemoryManager(self.chroma_client, dispatcher=self.dispatcher, conn=self.conn)
+        self.reflections_generator = ReflectionGenerator(dispatcher=self.dispatcher)
+        self.memory_manager = MemoryManager(self.chroma_client, dispatcher=self.dispatcher, conn=self.conn, reflections_generator=self.reflections_generator)
         with self.memory_manager.lock:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS memory_index (
@@ -58,9 +59,6 @@ class MemoryService(Service):
             """)
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_timestamp ON memory_index (collection, timestamp)")
             self.conn.commit()
-        
-        self.reflections_generator = ReflectionGenerator(dispatcher=self.dispatcher)
-        self.memory_manager.reflections_generator = self.reflections_generator
         
     async def start(self, app):
         self.logger.info("MemoryService started")

@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple
 
 from src.qubit.processing.prompt_dispatcher import PromptDispatcher
 from config.config import MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION
+from src.utils.log_utils import get_logger
 
 """
 Module for generating reflections from chat history.
@@ -29,6 +30,7 @@ class ReflectionGenerator:
         """
         Initialize the ReflectionGenerator.
         """
+        self.logger = get_logger("ReflectionGenerator")
         self.dispatcher = dispatcher
         self.reflection_threshold = reflection_threshold
         self.reflection_prompt = """
@@ -56,9 +58,11 @@ A3: [Answer]
         to create up to 3 insightful question-answer pairs that capture key aspects
         of the conversation.
         """
+        self.logger.info("Starting reflection generation")
         recent_messages = memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
 
         if len(recent_messages) < 10:
+            self.logger.info("Not enough messages for reflection generation")   
             return []
 
         formatted_messages = []
@@ -78,13 +82,12 @@ A3: [Answer]
             {"role": "User", "content": self.reflection_prompt.format(recent_messages=messages_text)}
         ]
 
+        self.logger.info("Generated reflection messages")
         try:
             if self.dispatcher is None:
                 raise ValueError("Dispatcher not set for reflection generation")
             reflection_response = await self.dispatcher._generate_with_retries(
-                raw_prompt=reflection_messages,
-                use_system_prompt=False,
-                max_new_tokens=MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION,
+                prompt=reflection_messages
             )
             self.logger.info(f"Reflection response: {reflection_response}")
 
