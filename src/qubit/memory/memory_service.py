@@ -67,6 +67,11 @@ class MemoryService(Service):
         await super().start(app)
 
     async def _worker(self):
+        while not self.app.state.shutdown.is_set():
+            if not self.app.state.start.is_set():
+                await asyncio.sleep(1)
+                continue
+            
         REFLECTIONS_THRESHOLD = 5
         while self._running:
             await asyncio.sleep(60)

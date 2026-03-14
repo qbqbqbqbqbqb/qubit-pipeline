@@ -39,6 +39,11 @@ class PromptDispatcher(Service):
         await super().start(app)
 
     async def _worker(self, app):
+        while not self.app.state.shutdown.is_set():
+            if not self.app.state.start.is_set():
+                await asyncio.sleep(1)
+                continue
+    
         while True:
             logger.info("queue eaten nomonomonomm")
             event: ResponsePromptEvent = await self.queue.get()

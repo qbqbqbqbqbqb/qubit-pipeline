@@ -1,6 +1,8 @@
 import asyncio
+from datetime import datetime, timezone
 import json
 import websockets
+from src.qubit.core.events import Event
 from src.qubit.core.service import Service
 from src.utils.log_utils import get_logger
 
@@ -14,9 +16,11 @@ class WebSocketServerService(Service):
         self.connected_clients = set()
         self.server = None
         self.app = None
+        self.event_bus = None
 
     async def start(self, app):
         self.app = app 
+        self.event_bus = app.event_bus 
         self.server = await websockets.serve(self.webSocketHandler, self.host, self.port)
         logger.info(f"WebSocketServer started on {self.host}:{self.port}")
 
@@ -27,7 +31,7 @@ class WebSocketServerService(Service):
             await self.server.wait_closed()
         logger.info("WebSocketServer stopped.")
 
-    async def webSocketHandler(self, websocket, path):
+    async def webSocketHandler(self, websocket):
         self.connected_clients.add(websocket)
         try:
             await self.send_states(websocket)
@@ -46,6 +50,26 @@ class WebSocketServerService(Service):
                 elif action == "terminate":
                     logger.info("terminate")
                     self.app.state.shutdown.set()
+                elif action == 'start':
+                    logger.info("Start command from frontend")
+                    self.app.state.start.set()
+                """                     self.signals.twitch_enabled.set()
+                    self.signals.kick_enabled.set()
+                    self.signals.youtube_enabled.set()
+                    self.signals.stt_enabled.set() 
+                    self.signals.chat_enabled.set()
+                    self.signals.raid_enabled.set()
+                    self.signals.follow_enabled.set()
+                    self.signals.subs_enabled.set()
+                    self.signals.monologue_enabled.set() """
+                
+                event = Event(
+                        type="bot_started",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        data={"status": "active"},
+                    )
+                await self.event_bus.publish(event)
+                await self.broadcast_states()
         except Exception as e:
             logger.error(e)
         finally:

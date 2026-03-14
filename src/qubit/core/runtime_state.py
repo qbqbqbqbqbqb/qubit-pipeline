@@ -4,6 +4,7 @@ class RuntimeState:
 
     def __init__(self):
         self.shutdown = asyncio.Event()
+        self.start = asyncio.Event()
 
         self.features = {
             "twitch": True,

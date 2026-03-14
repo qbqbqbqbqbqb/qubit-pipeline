@@ -30,6 +30,11 @@ class MonologueScheduler(Service):
             await asyncio.gather(self._worker_task, return_exceptions=True)
 
     async def _worker(self, app):
+        while not self.app.state.shutdown.is_set():
+            if not self.app.state.start.is_set():
+                await asyncio.sleep(1)
+                continue
+
         app.event_bus.subscribe("twitch_chat_processed", self.notify_activity)
 
         monologue_enabled = app.state.features.get("monologue", True)

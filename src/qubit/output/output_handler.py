@@ -85,6 +85,11 @@ class OutputHandler(Service):
             self.queue.append(monologue)
 
     async def _process_queue(self):
+        while not self.app.state.shutdown.is_set():
+            if not self.app.state.start.is_set():
+                await asyncio.sleep(1)
+                continue
+            
         logger.info("Output processor started")
         while self._running:
             try:

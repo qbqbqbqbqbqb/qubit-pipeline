@@ -31,7 +31,12 @@ class TwitchListener(Service, TwitchAuth, TwitchEvents, TwitchWebsocketSub):
 
         twitch_enabled = app.state.features.get("twitch", True)
 
-        while not app.state.shutdown.is_set() and twitch_enabled:
+        while not self.app.state.shutdown.is_set():
+            if not self.app.state.start.is_set():
+                await asyncio.sleep(1)
+                continue
+
+        while twitch_enabled:
             try:
                 if not self.connected:
                     self.connected = await self._start_client()
