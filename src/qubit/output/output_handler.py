@@ -90,38 +90,38 @@ class OutputHandler(Service):
                 await asyncio.sleep(1)
                 continue
             
-        logger.info("Output processor started")
-        while self._running:
-            try:
-                if not self.queue:
-                    await asyncio.sleep(0.05)
-                    continue
-
-                item = self.queue.popleft()
-                logger.info(f"[OutputHandlerService] Processing item: {item}")
-
-                timestamp = item.get("timestamp")
-                if not timestamp:
-                    logger.warning("Item missing timestamp, skipping.")
-                    continue
-
-                if datetime.now(timezone.utc) - timestamp > self.max_age:
-                    logger.info(f"Dropping stale output: {item}")
-                    continue
-
-                for key in ("prompt", "response"):
-                    text = item.get(key)
-                    if not text:
+            logger.info("Output processor started")
+            while self._running:
+                try:
+                    if not self.queue:
+                        await asyncio.sleep(0.05)
                         continue
 
-                    await self._handle_text_output(text)
+                    item = self.queue.popleft()
+                    logger.info(f"[OutputHandlerService] Processing item: {item}")
 
-            except asyncio.CancelledError:
-                logger.info("Output processor cancelled")
-                break
-            except Exception as e:
-                logger.exception(f"Error in output processor: {e}")
-                await asyncio.sleep(0.1)
+                    timestamp = item.get("timestamp")
+                    if not timestamp:
+                        logger.warning("Item missing timestamp, skipping.")
+                        continue
+
+                    if datetime.now(timezone.utc) - timestamp > self.max_age:
+                        logger.info(f"Dropping stale output: {item}")
+                        continue
+
+                    for key in ("prompt", "response"):
+                        text = item.get(key)
+                        if not text:
+                            continue
+
+                        await self._handle_text_output(text)
+
+                except asyncio.CancelledError:
+                    logger.info("Output processor cancelled")
+                    break
+                except Exception as e:
+                    logger.exception(f"Error in output processor: {e}")
+                    await asyncio.sleep(0.1)
 
     async def _handle_text_output(self, text: str):
         mouth_task = None

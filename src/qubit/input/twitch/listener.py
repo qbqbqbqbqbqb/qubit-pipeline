@@ -36,26 +36,27 @@ class TwitchListener(Service, TwitchAuth, TwitchEvents, TwitchWebsocketSub):
                 await asyncio.sleep(1)
                 continue
 
-        while twitch_enabled:
-            try:
-                if not self.connected:
-                    self.connected = await self._start_client()
+            while twitch_enabled:
+                try:
                     if not self.connected:
-                        self.logger.error("Failed to connect. Retrying in 10s...")
-                        await asyncio.sleep(10)
-                        continue
+                        self.connected = await self._start_client()
+                        if not self.connected:
+                            self.logger.error("Failed to connect. Retrying in 10s...")
+                            await asyncio.sleep(10)
+                            continue
 
-                    self.eventsub = EventSubWebsocket(self.twitch_streamer)
-                    self.eventsub.start()
-                    await self._subscribe_to_follow_events()
+                        self.eventsub = EventSubWebsocket(self.twitch_streamer)
+                        self.eventsub.start()
+                        await self._subscribe_to_follow_events()
 
-                await self._refresh_tokens()
-                await asyncio.sleep(60 * 60)
+                    await self._refresh_tokens()
+                    await asyncio.sleep(60 * 60)
 
-            except Exception as e:
-                self.logger.error(f"Listener error: {e}. Restarting...")
-                await self.stop()
-                await asyncio.sleep(5)
+                except Exception as e:
+                    self.logger.error(f"Listener error: {e}. Restarting...")
+                    await self.stop()
+                    await asyncio.sleep(5)
+            await super().start(app)
 
     async def _start_client(self) -> bool:
         self.logger.info("[start] Starting TwitchClient...")

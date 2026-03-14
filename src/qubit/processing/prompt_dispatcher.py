@@ -44,23 +44,23 @@ class PromptDispatcher(Service):
                 await asyncio.sleep(1)
                 continue
     
-        while True:
-            logger.info("queue eaten nomonomonomm")
-            event: ResponsePromptEvent = await self.queue.get()
-            try:
-                if self._is_stale(event):
-                    logger.info(f"Dropping stale prompt for {event.data.get('user')}: {event.prompt}")
-                    continue
+            while True:
+                logger.info("queue eaten nomonomonomm")
+                event: ResponsePromptEvent = await self.queue.get()
+                try:
+                    if self._is_stale(event):
+                        logger.info(f"Dropping stale prompt for {event.data.get('user')}: {event.prompt}")
+                        continue
 
-                response = await self._generate_response(event)
+                    response = await self._generate_response(event)
 
-                logger.info(f"Response generated. Publishing {response}")
-                await self._publish_response(event, response, app.event_bus)
+                    logger.info(f"Response generated. Publishing {response}")
+                    await self._publish_response(event, response, app.event_bus)
 
-            except Exception as e:
-                logger.error(f"[LLM Worker] Error: {e}")
-            finally:
-                self.queue.task_done()
+                except Exception as e:
+                    logger.error(f"[LLM Worker] Error: {e}")
+                finally:
+                    self.queue.task_done()
 
     async def stop(self):
         logger.info("Stopping PromptDispatcher")
