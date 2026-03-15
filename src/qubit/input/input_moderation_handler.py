@@ -1,6 +1,6 @@
+# dont know whether to keep this as a service without a main loop
+# might be cleaner to leave as is?
 from src.qubit.core.service import Service
-from src.utils.log_utils import get_logger
-from src.qubit.core.event_bus import event_bus
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 from src.qubit.core.events import (
     TwitchChatEvent,
@@ -10,8 +10,6 @@ from src.qubit.core.events import (
     Event
 )
 from src.qubit.utils.filter_utils import contains_banned_words
-
-logger = get_logger(__name__)
 
 class ModerationHandler(Service):
     
@@ -27,19 +25,17 @@ class ModerationHandler(Service):
     }
 
     def __init__(self):
-        super().__init__(" input moderation handler")
+        super().__init__("input moderation handler")
 
-    async def start(self, app):
-        logger.info("Starting ModerationHandlerService")
-        self.event_bus = app.event_bus
-        await super().start(app)
+    async def _start(self, app) -> None:
+        await super()._start(app)
 
-    async def stop(self):
-        logger.info("Stopping ModerationHandlerService")
+    async def _stop(self) -> None:
+        await super()._stop(())
 
-    async def handle_event(self, event: Event):
+    async def handle_event(self, event: Event) -> None:
         if isinstance(event, TwitchChatEvent):
-            logger.info("moderating twitch chat event")
+            self.logger.info("moderating twitch chat event")
             await self._moderate_chat(event)
         elif isinstance(event, TwitchSubscriptionEvent):
             await self._moderate_subscription(event)
@@ -48,60 +44,60 @@ class ModerationHandler(Service):
         elif isinstance(event, TwitchFollowEvent):
             await self._moderate_follow(event)
         else:
-            logger.warning(f"[ModerationHandler] Unknown event type: {type(event)}")
+            self.logger.warning(f"[ModerationHandler] Unknown event type: {type(event)}")
 
-    async def _moderate_chat(self, event: TwitchChatEvent):
-        sanitized_user = self._sanitize(event.user, default="Someone")
-        sanitized_msg =  self._sanitize(event.text, default="")
+    async def _moderate_chat(self, event: TwitchChatEvent) -> None:
+        sanitised_user = self._sanitise(event.user, default="Someone")
+        sanitised_msg =  self._sanitise(event.text, default="")
 
-        sanitized_event = TwitchChatEvent(
+        sanitised_event = TwitchChatEvent(
             type="twitch_chat_processed",
-            data={**event.data, "user": sanitized_user, "text": sanitized_msg},
-            user=sanitized_user,
-            text=sanitized_msg,
+            data={**event.data, "user": sanitised_user, "text": sanitised_msg},
+            user=sanitised_user,
+            text=sanitised_msg,
             timestamp=event.timestamp
         )
-        await event_bus.publish(sanitized_event)
+        await self.event_bus.publish(sanitised_event)
 
-    async def _moderate_subscription(self, event: TwitchSubscriptionEvent):
-        sanitized_user = self._sanitize(event.user, default="Someone")
-        sanitized_msg =  self._sanitize(event.sub_message, default="")
+    async def _moderate_subscription(self, event: TwitchSubscriptionEvent) -> None:
+        sanitised_user = self._sanitise(event.user, default="Someone")
+        sanitised_msg =  self._sanitise(event.sub_message, default="")
         
-        sanitized_event = TwitchSubscriptionEvent(
+        sanitised_event = TwitchSubscriptionEvent(
             type="twitch_subscription_processed",
-            data={**event.data, "user": sanitized_user, "sub_message": sanitized_msg},
-            user=sanitized_user,
+            data={**event.data, "user": sanitised_user, "sub_message": sanitised_msg},
+            user=sanitised_user,
             tier=event.tier,
             sub_type=event.sub_type,
             sub_message=event.sub_message,
             timestamp=event.timestamp
         )
 
-        await event_bus.publish(sanitized_event)
+        await self.event_bus.publish(sanitised_event)
 
-    async def _moderate_raid(self, event: TwitchRaidEvent):
-        sanitized_user = self._sanitize(event.user, default="Someone")
+    async def _moderate_raid(self, event: TwitchRaidEvent) -> None:
+        sanitised_user = self._sanitise(event.user, default="Someone")
 
-        sanitized_event = TwitchRaidEvent(
+        sanitised_event = TwitchRaidEvent(
             type="twitch_raid_processed",
-            data={**event.data, "user": sanitized_user},
-            user=sanitized_user,
+            data={**event.data, "user": sanitised_user},
+            user=sanitised_user,
             timestamp=event.timestamp
         )
-        await event_bus.publish(sanitized_event)
+        await self.event_bus.publish(sanitised_event)
 
-    async def _moderate_follow(self, event: TwitchFollowEvent):
-        sanitized_user = self._sanitize(event.user, default="Someone")
+    async def _moderate_follow(self, event: TwitchFollowEvent) -> None:
+        sanitised_user = self._sanitise(event.user, default="Someone")
 
-        sanitized_event = TwitchFollowEvent(
+        sanitised_event = TwitchFollowEvent(
             type="twitch_follow_processed",
-            data={**event.data, "user": sanitized_user},
-            user=sanitized_user,
+            data={**event.data, "user": sanitised_user},
+            user=sanitised_user,
             timestamp=event.timestamp
         )
-        await event_bus.publish(sanitized_event)
+        await self.event_bus.publish(sanitised_event)
 
-    def _sanitize(self, value: str, default: str = "") -> str:
+    def _sanitise(self, value: str, default: str = "") -> str:
         """
         Generic sanitizer for usernames or text.
         Returns `default` if `value` contains banned words, otherwise returns `value`.

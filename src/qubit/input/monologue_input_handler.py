@@ -17,28 +17,43 @@ class MonologueInputHandler(Service):
         self.prompt_handler = prompt_handler
         self.memory_handler = memory_handler
         
-    async def start(self, app):
+    async def _start(self, app) -> None:
         logger.info("Starting MonologueInputHandlerService")
         self.event_bus = app.event_bus
-        await super().start(app)
+        await super()._start(app)
 
 
-    async def stop(self):
+    async def _stop(self) -> None:
         logger.info("Stopping MonologueInputHandlerService")
 
-    async def handle_event(self, event):
+    # TODO: consolidate redundant methods btwn input handlers here later
+    async def handle_event(self, event) -> None:
         text = event.data.get("text", "").lower().strip()
 
+        await self._check_stale_message(event, text)
+
+        await self._handle_memory_event(event)
+            
+        await self._enqueue_event_prompt(event)
+
+    async def _check_stale_message(self, event, text) -> bool:
         ts = getattr(event, "timestamp", datetime.now(timezone.utc))
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
         if datetime.now(timezone.utc) - ts > self.max_age:
-            logger.debug(f"Dropping stale monologue: {text}") 
-            return
-
-        self.memory_handler.handle_event(event)
-            
+            self.logger.debug(f"Dropping stale monologue: {text}") 
+            return True
+        return False
+    
+    # i forgot why i made this different to chat handling
+    # TODO: check if logic can be merged
+    async def _enqueue_event_prompt(self, event) -> None:
         if self.prompt_handler and event.type in self.prompt_handler.builders:
             builder = self.prompt_handler.builders[event.type]
             prompt_event = builder(event)
             await self.prompt_handler.dispatcher.enqueue(prompt_event)
+
+
+    async def _handle_memory_event(self, event) -> None:
+        if self.memory_handler:
+            self.memory_handler.handle_event(event)

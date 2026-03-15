@@ -1,8 +1,7 @@
 import asyncio
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 import chromadb
-
 from src.qubit.processing.prompt_dispatcher import PromptDispatcher
 from src.qubit.memory.reflections_generator import ReflectionGenerator
 from chromadb.config import Settings
@@ -11,7 +10,6 @@ from src.qubit.prompting.modules.chat import chat_memory_module
 from src.qubit.prompting.modules.reflection import reflection_memory_module
 from src.qubit.core.service import Service
 from src.qubit.memory.memory_manager import MemoryManager
-from src.utils.log_utils import get_logger
 import sqlite3
 from sqlite3 import Connection
 
@@ -19,7 +17,6 @@ class MemoryService(Service):
     SUBSCRIPTIONS = {"prompt_assembly": "handle_prompt_assembly"}
 
     def __init__(self, base_path: str = ".", dispatcher: PromptDispatcher= None):
-        self.logger = get_logger(__name__)
         super().__init__("MemoryService")
     
         self.base_path = Path(base_path)
@@ -60,20 +57,17 @@ class MemoryService(Service):
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_timestamp ON memory_index (collection, timestamp)")
             self.conn.commit()
         
-    async def start(self, app):
-        self.logger.info("MemoryService started")
-        self._running = True
-        self._worker_task = asyncio.create_task(self._worker())
-        await super().start(app)
+    async def _start(self, app) -> None:
+        await super()._start(app)
 
-    async def _worker(self):
+    async def _run(self) -> None:
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
                 continue
             
-            REFLECTIONS_THRESHOLD = 5
-            while self._running:
+            REFLECTIONS_THRESHOLD = 5 # refactor this at some point
+            while True:
                 await asyncio.sleep(60)
                 self.logger.info("MemoryService worker checking for reflections...")
                 recent_chats = self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
@@ -90,9 +84,8 @@ class MemoryService(Service):
                     self.logger.info(f"Marking {len(ids_to_update)} chat items as reflected")
                     self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
 
-    async def stop(self):
-        self.logger.info("MemoryService stopped")
-        await super().stop()
+    async def _stop(self) -> None:
+        await super()._stop()
 
     def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
         """
@@ -100,13 +93,13 @@ class MemoryService(Service):
         """
         self.memory_manager.add_conversation_item(role, content, user_id, metadata=metadata)
 
-    def get_recent_chat_history(self):
+    def get_recent_chat_history(self) -> List[Dict]:
         return self.memory_manager.get_recent_items("chat", limit=20)
 
-    def get_recent_reflections(self):
+    def get_recent_reflections(self) -> List[Dict]:
         return self.memory_manager.get_recent_items("reflections", limit=3)
         
-    async def handle_prompt_assembly(self, event: PromptAssemblyEvent):
+    async def handle_prompt_assembly(self, event: PromptAssemblyEvent) -> None:
         if not hasattr(event, "contributions"):
             event.contributions = []
     

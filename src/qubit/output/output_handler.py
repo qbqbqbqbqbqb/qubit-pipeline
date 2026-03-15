@@ -1,17 +1,17 @@
+#TODO: refactor class, too muych going on
+
 import asyncio
 from collections import deque
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
+from qubit.memory import memory_handler
 from src.qubit.output.obs_handler import OBSHandler
 from src.qubit.output.tts_handler import TTSHandler
-from src.utils.log_utils import get_logger
-from src.qubit.core.event_bus import event_bus
 from src.qubit.core.events import ResponseGeneratedEvent
 from src.qubit.output.output_sanitiser import DialogueSanitiser
 from src.qubit.core.service import Service
-
-logger = get_logger(__name__)
 
 class OutputHandler(Service):
     SUBSCRIPTIONS = {
@@ -29,84 +29,81 @@ class OutputHandler(Service):
         self.max_age = timedelta(seconds=max_age_seconds)
         self.enable_subtitles = enable_subtitles
 
-        self._running = True
+    async def _start(self, app) -> None:
+        await super()._start(app)
 
+    async def _stop(self) -> None:
+        await super()._stop()
 
-    async def start(self, app):
-        logger.info("Starting OutputHandlerService")
-        self._running = True
-
-        self._task = asyncio.create_task(self._process_queue())
-        await super().start(app)
-
-    async def stop(self):
-        logger.info("Stopping OutputHandlerService")
-        self._running = False
-        if self._task:
-            self._task.cancel()
-            await asyncio.gather(self._task, return_exceptions=True)
-
-    async def handle_response(self, event: ResponseGeneratedEvent):
-        prompt = event.data.get("prompt")
-        response = event.data.get("response")
-        source = event.source
+    async def handle_response(self, event: ResponseGeneratedEvent) -> None:
+        prompt, response, source = await self._get_event_attributes(event)
 
         if not response:
-            logger.warning(f"No response generated for {prompt}")
+            self.logger.warning(f"No response generated for {prompt}")
             return
 
         is_valid, filtered_response = self.dialogue_sanitiser.is_valid(response)
         if not is_valid:
-            logger.warning("[OutputHandlerService] Invalid response, skipping.")
+            self.logger.warning("[OutputHandlerService] Invalid response, skipping.")
             return
 
         response_clean = self.dialogue_sanitiser.strip_leading_punctuation(
             self.dialogue_sanitiser.remove_trailing_text(
             self.dialogue_sanitiser.remove_bot_name(filtered_response)))
 
-        event.response = response_clean
-        self.memory_handler.handle_event(event)
+        event = await self._set_event_attributes(event, prompt, source, response_clean)
+        await self._handle_memory_event(event)
         
-        if source == "twitch_chat_processed" and prompt:
+        await self._append_to_queue(source, prompt, response_clean)
+
+    async def _get_event_attributes(event) -> tuple:
+        return event.prompt, event.response, event.source
+    
+    async def _set_event_attributes(self, event, prompt, source, response_clean) -> Any:
+        event.prompt = prompt
+        event.source = source
+        event.response = response_clean
+        return event
+    
+    async def _handle_memory_event(self, event) -> None:
+        if self.memory_handler:
+            self.memory_handler.handle_event(event)
+
+    async def _append_to_queue(self, event) -> None:
+        if event.source == "twitch_chat_processed" and event.prompt:
             pair = {
-                "prompt": prompt,
-                "response": response_clean,
-                "source": source,
+                "prompt": event.prompt,
+                "response": event.response,
+                "source": event.source,
                 "timestamp": datetime.now(timezone.utc)
             }
             self.queue.append(pair)
         else:
             monologue = {
                 "prompt": None,
-                "response": response_clean,
-                "source": source,
+                "response": event.response,
+                "source": event.source,
                 "timestamp": datetime.now(timezone.utc)
             }
             self.queue.append(monologue)
 
-    async def _process_queue(self):
+    async def _run(self) -> None:
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
                 continue
             
-            logger.info("Output processor started")
-            while self._running:
+            self.logger.info("Output processor started")
+            while True:
                 try:
                     if not self.queue:
                         await asyncio.sleep(0.05)
                         continue
 
                     item = self.queue.popleft()
-                    logger.info(f"[OutputHandlerService] Processing item: {item}")
+                    self.logger.info(f"[OutputHandlerService] Processing item: {item}")
 
-                    timestamp = item.get("timestamp")
-                    if not timestamp:
-                        logger.warning("Item missing timestamp, skipping.")
-                        continue
-
-                    if datetime.now(timezone.utc) - timestamp > self.max_age:
-                        logger.info(f"Dropping stale output: {item}")
+                    if await self._check_if_timestamp_stale:
                         continue
 
                     for key in ("prompt", "response"):
@@ -117,13 +114,24 @@ class OutputHandler(Service):
                         await self._handle_text_output(text)
 
                 except asyncio.CancelledError:
-                    logger.info("Output processor cancelled")
+                    self.logger.info("Output processor cancelled")
                     break
                 except Exception as e:
-                    logger.exception(f"Error in output processor: {e}")
+                    self.logger.exception(f"Error in output processor: {e}")
                     await asyncio.sleep(0.1)
 
-    async def _handle_text_output(self, text: str):
+    async def _check_if_timestamp_stale(self, item: dict) -> bool:
+        timestamp = item.get("timestamp")
+        if not timestamp:
+            self.logger.warning("Item missing timestamp, skipping.")
+            return True
+
+        if datetime.now(timezone.utc) - timestamp > self.max_age:
+            self.logger.info(f"Dropping stale output: {item}")
+            return True
+        return False
+    
+    async def _handle_text_output(self, text: str) -> None:
         mouth_task = None
         try:
             if self.enable_subtitles and self.obs_handler:
@@ -136,7 +144,7 @@ class OutputHandler(Service):
                 )
 
             if self.tts_handler:
-                logger.info(f"Speaking: {text}")
+                self.logger.info(f"Speaking: {text}")
                 await self.tts_handler.speak(text)
 
         finally:
@@ -144,7 +152,7 @@ class OutputHandler(Service):
                 try:
                     await mouth_task
                 except Exception:
-                    logger.exception("Mouth animation failed")
+                    self.logger.exception("Mouth animation failed")
 
             if self.vtube_studio_handler:
                 self.vtube_studio_handler.speaking = False

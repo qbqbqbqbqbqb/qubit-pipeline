@@ -84,7 +84,7 @@ class TwitchEvents:
                 viewers=viewers,
                 timestamp = datetime.now(timezone.utc).isoformat()
             )
-            self.event_bus.publish(event)
+            await self.event_bus.publish(event)
 
         except Exception as e:
             self.logger.error(f"[_on_raid] Error handling raid event: {e}")
@@ -109,7 +109,7 @@ class TwitchEvents:
                 followed_at=followed_at,
                 timestamp = datetime.now(timezone.utc).isoformat()
             )
-            self.event_bus.publish(event)
+            await self.event_bus.publish(event)
 
         except Exception as e:
             self.logger.error(f"[_on_follow] Error handling follow event: {e}")

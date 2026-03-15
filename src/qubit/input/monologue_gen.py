@@ -1,15 +1,15 @@
 import asyncio
 from datetime import datetime, timezone
-
-
 from src.qubit.core.service import Service
-from src.qubit.core.event_bus import event_bus
+import random
 from src.qubit.core.events import MonologueEvent
-from src.utils.log_utils import get_logger
-
-logger = get_logger(__name__)
 
 class MonologueScheduler(Service):
+        
+    SUBSCRIPTIONS = {
+        "twitch_chat_processed": "self._notify_activity",
+    }
+        
     def __init__(self, dispatcher,  llm, inactivity_timeout=120):
         super().__init__("monologue scheduler")
         self.dispatcher = dispatcher
@@ -17,56 +17,38 @@ class MonologueScheduler(Service):
         self.inactivity_timeout = inactivity_timeout
         self.last_activity = datetime.now(timezone.utc)
 
-    async def start(self, app):
-        await super().start(app)
-        logger.info("Starting MonologueScheduler")
-        self.event_bus = app.event_bus
-        self._worker_task = asyncio.create_task(self._worker(app))
-        
+    async def _start(self, app) -> None:
+        await super()._start(app)
 
-    async def stop(self):
-        logger.info("Stopping MonologueScheduler")
-        if self._worker_task:
-            self._worker_task.cancel()
-            await asyncio.gather(self._worker_task, return_exceptions=True)
+    async def _stop(self) -> None:
+        await super()._stop()
 
-    async def _worker(self, app):
+    async def _run(self) -> None:
         while not self.app.state.shutdown.is_set(): 
-            logger.info("MonologueScheduler not sjutdowjn")
-            if not self.app.state.start.is_set():
-                logger.info("MonologueScheduler waiting for app to start")
+
+            monologue_enabled = self.app.state.features.get("monologue", True)
+
+            if not self.app.state.start.is_set() or not monologue_enabled:
                 await asyncio.sleep(1)
                 continue
 
-            logger.info("MonologueScheduler started")
-
-            app.event_bus.subscribe("twitch_chat_processed", self.notify_activity)
-
-            monologue_enabled = app.state.features.get("monologue", True)
-
-            while monologue_enabled: 
+            if monologue_enabled: 
                 elapsed = (datetime.now(timezone.utc) - self.last_activity).total_seconds()
                 if elapsed >= self.inactivity_timeout:
-                    logger.info("Inactivity timeout reached, generating monologue")
-                    await self.generate_monologue()
+                    self.logger.info("Inactivity timeout reached, generating monologue")
+                    await self._generate_monologue()
                     self.last_activity = datetime.now(timezone.utc)
                 await asyncio.sleep(5)
 
-    def notify_activity(self, event=None):
-        logger.info("Chat processed")
+
+    def _notify_activity(self)  -> None:
+        self.logger.info("Chat processed")
         self.last_activity = datetime.now(timezone.utc)
 
-    async def generate_monologue(self):
-        logger.info("Monologue generated")
-        import random
-        topics = [
-            "a funny story about AI",
-            "an interesting Twitch fact",
-            "a quirky joke",
-            "motivational advice",
-            "a short adventure tale"
-        ]
-        topic = random.choice(topics)
+    async def _generate_monologue(self)  -> None:
+        self.logger.info("Monologue generated")
+
+        topic = await self._get_topic_for_monologue()
         prompt = f"Monologue about {topic}, in character as Qubit."
     
         event = MonologueEvent(
@@ -76,6 +58,23 @@ class MonologueScheduler(Service):
             data={"user": "system", "topic": topic, "prompt": prompt},
             prompt=prompt
         )
+    
+        await self._publish_event_to_broker(event)
 
-        await event_bus.publish(event)
-        logger.info(f"Published {event}")
+    async def _get_topic_for_monologue(self) -> str:
+        topics = [
+                    "a funny story about AI",
+                    "an interesting Twitch fact",
+                    "a quirky joke",
+                    "motivational advice",
+                    "a short adventure tale"
+                ]
+        return random.choice(topics)
+    
+
+    async def _publish_event_to_broker(self, event) -> None:
+        if self.event_bus:
+            await self.event_bus.publish(event)
+            self.logger.info(f"Published {event}")
+    
+
