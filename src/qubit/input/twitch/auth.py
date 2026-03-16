@@ -1,25 +1,65 @@
-from src.utils.log_utils import get_logger
+"""
+Twitch authentication utilities.
+
+This module provides the ``TwitchAuthMixin`` which encapsulates authentication
+logic for Twitch API access. It supports both bot and streamer accounts and
+handles initial OAuth authentication as well as token refreshing.
+
+The mixin expects the consuming class to provide:
+
+- ``self.settings``: configuration object containing Twitch credentials
+  and stored OAuth tokens.
+- ``self.logger``: a configured ``logging.Logger`` instance.
+
+Responsibilities
+----------------
+- Authenticate bot and streamer Twitch accounts.
+- Reuse stored OAuth tokens when available.
+- Perform interactive OAuth authentication when tokens are missing.
+- Refresh expired access tokens using stored refresh tokens.
+- Persist updated credentials via the settings object.
+"""
+import asyncio
+import logging
+import aiohttp
 from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticator, refresh_access_token
 from config.config import BOT_SCOPES, STREAMER_SCOPES
 
-class TwitchAuth:
+class TwitchAuthMixin:
+    """
+    Mixin providing Twitch API authentication functionality.
 
-    def __init__(self):
-        self.logger = get_logger(__name__)
-        
-    async def _authenticate_bot_account(self):
+    This mixin handles authentication for both a bot account and a streamer
+    account using the Twitch OAuth flow. It manages token retrieval,
+    reuse of stored tokens, and refreshing expired tokens.
+
+    Expected attributes
+    -------------------
+    logger : logging.Logger
+        Logger used for authentication status and error reporting.
+
+    settings : object
+        Configuration object containing Twitch credentials and token storage.
+        Expected fields include client ID, client secret, redirect URI,
+        OAuth tokens, and refresh tokens.
+    """
+    logger: logging.Logger
+
+    async def _authenticate_bot_account(self) -> None:
         """
-        Authenticate the bot account with Twitch API.
+        Authenticate the bot Twitch account.
 
-        Creates a Twitch client for the bot, checks for existing tokens,
-        and performs interactive authentication if needed.
+        Creates a Twitch client and attempts to authenticate using stored
+        OAuth tokens. If tokens are missing, an interactive OAuth flow is
+        initiated to obtain new access and refresh tokens.
 
-        Returns:
-            None
+        The resulting tokens are stored in the settings object.
 
-        Raises:
-            Exception: If authentication fails.
+        Raises
+        ------
+        Exception
+            If authentication fails or the OAuth flow cannot complete.
         """
         self.twitch_bot = await Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
 
@@ -36,18 +76,21 @@ class TwitchAuth:
                 self.settings.bot_refresh_token
             )
 
-    async def _authenticate_streamer_account(self):
+
+    async def _authenticate_streamer_account(self) -> None:
         """
-        Authenticate the streamer account with Twitch API.
+        Authenticate the streamer Twitch account.
 
-        Creates a Twitch client for the streamer, checks for existing tokens,
-        and performs interactive authentication if needed.
+        Creates a Twitch client and attempts to authenticate using stored
+        OAuth tokens. If tokens are missing, an interactive OAuth flow is
+        initiated to obtain new access and refresh tokens.
 
-        Returns:
-            None
+        The resulting tokens are stored in the settings object.
 
-        Raises:
-            Exception: If authentication fails.
+        Raises
+        ------
+        Exception
+            If authentication fails or the OAuth flow cannot complete.
         """
         self.twitch_streamer = await Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
 
@@ -64,18 +107,35 @@ class TwitchAuth:
                 self.settings.streamer_refresh_token
             )
 
-    async def _refresh_tokens(self):
+
+    """     async def _authenticate_twitch_accounts(self: Any, client_attr: str, token_attr: str, refresh_token_attr: str, account_type: str, scopes: list) -> None:
+            self.twitch_account = await Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
+            setattr(self, client_attr, self.twitch_account)
+            
+            token = getattr(self.settings, token_attr)
+            refresh_token = getattr(self.settings, refresh_token_attr)
+
+            if not token or not refresh_token:
+                self.logger.info("[_authenticate_twitch_accounts] No %s found, authenticating interactively...", account_type)
+                auth = UserAuthenticator(self.twitch_account, scopes, url=self.settings.twitch_redirect_uri)
+                token, refresh_token = await auth.authenticate()
+                setattr(self.settings, token_attr, token)
+                setattr(self.settings, refresh_token_attr, refresh_token)
+            else:
+                await setattr(token, scopes, refresh_token)
+    """
+
+    async def _refresh_tokens(self) -> None:
         """
-        Refresh authentication tokens for bot and streamer accounts.
+        Refresh OAuth access tokens for bot and streamer accounts.
 
-        Uses refresh tokens to obtain new access tokens and updates settings.
-        Saves the updated tokens to persistent storage.
+        Uses stored refresh tokens to obtain new access tokens from Twitch.
+        Updated tokens are written back to the settings object and persisted.
 
-        Returns:
-            None
+        If a refresh token is missing for an account, that account is skipped.
 
-        Raises:
-            Exception: If token refresh fails.
+        Errors are logged but do not propagate unless the refresh process
+        fails unexpectedly.
         """
         try:
             self.logger.info("[_refresh_tokens] Refreshing tokens...")
@@ -101,5 +161,12 @@ class TwitchAuth:
                 self.logger.info("[_refresh_tokens] Streamer tokens refreshed")
 
             self.settings.save()
+
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            self.logger.error("[_refresh_tokens] Network error refreshing tokens: %s", e)
+
+        except ValueError as e:
+            self.logger.error("[_refresh_tokens] Invalid token response: %s", e)
+
         except Exception as e:
-            self.logger.error(f"[_refresh_tokens] Error refreshing tokens: {e}")
+            self.logger.error("[_refresh_tokens] Unexpected error refreshing tokens:%s", e)

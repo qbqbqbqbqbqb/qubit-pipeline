@@ -1,16 +1,17 @@
-import chromadb
+
+import threading
 from datetime import datetime, timedelta, timezone
 import uuid
 from typing import Dict, List, Tuple
-import re
-import asyncio
-import threading
+
+import chromadb
 
 from src.qubit.memory.reflections_generator import ReflectionGenerator
 from src.utils.log_utils import get_logger
 from src.qubit.processing.prompt_dispatcher import PromptDispatcher
-from config.config import MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION
 
+
+# TODO: refactor this
 class MemoryManager:
     def __init__(self, chroma_client: chromadb.Client, dispatcher: PromptDispatcher = None, reflections_generator: ReflectionGenerator = None, conn = None):
         self.logger = get_logger("MemoryManager")
@@ -28,7 +29,7 @@ class MemoryManager:
         """
         Add a chat message to the persistent conversation history.
         """
-        self.logger.info(f"adding message: {content} from {role} {user_id}")
+        self.logger.info("[add_conversation_item] adding message: %s from %s %s", content, role, user_id)
 
         coll = self.collections["chat"]
 
@@ -52,7 +53,7 @@ class MemoryManager:
                 "role": role,
                 "timestamp": timestamp,
                 "type": source,
-                "reflected": False  # Explicitly set
+                "reflected": False
             }
 
             with self.lock:
@@ -69,13 +70,13 @@ class MemoryManager:
                 self.conn.commit()
 
         except Exception as e:
-            self.logger.error(f"Error adding chat message: {e}")
+            self.logger.error("[add_conversation_item] Error adding chat message: %s", e)
 
     def add_reflection_item(self, content: str) -> None:
         """
         Add a reflection to the persistent reflections collection.
         """
-        self.logger.info(f"adding reflection item: {content}")
+        self.logger.info("[add_reflection_item] adding reflection item: %s", content)
         coll = self.collections["reflections"]
 
         try:
@@ -101,7 +102,7 @@ class MemoryManager:
                 self.conn.commit()
 
         except Exception as e:
-            self.logger.error(f"Error adding reflection item: {e}")
+            self.logger.error("[add_reflection_item] Error adding reflection item: %s", e)
 
     def get_recent_items(
         self,
@@ -156,11 +157,11 @@ class MemoryManager:
             return items[:limit]
 
         except Exception as e:
-            self.logger.error(f"Error retrieving from {collection_type}: {e}")
+            self.logger.error("[get_recent_items] Error retrieving from %s: %s", collection_type, e)
             return []
-        
+
     def update_items_metadata(self, item_ids: List[str], new_metadata: Dict) -> None:
-        coll = self.collections["chat"] 
+        coll = self.collections["chat"]
         try:
             with self.lock:
                 for item_id in item_ids:
@@ -169,17 +170,17 @@ class MemoryManager:
                         updated_meta = {**existing['metadatas'][0], **new_metadata}
                         coll.update(ids=[item_id], metadatas=[updated_meta])
         except Exception as e:
-            self.logger.error(f"Error updating metadata for items: {e}")
+            self.logger.error("[update_items_metadata] Error updating metadata for items: %s", e)
 
     async def generate_reflections(self) -> List[Tuple[str, str]]:
-        self.logger.info("Generating reflections")
-        self.logger.info(f"Reflections generator: {self.reflections_generator}")
+        self.logger.info("[generate_reflections] Generating reflections")
+        self.logger.info("[generate_reflections] Reflections generator: %s", self.reflections_generator)
         if self.reflections_generator is None:
             raise ValueError("Reflections generator not set")
         try:
             reflections = await self.reflections_generator.perform_reflection(self)
-            self.logger.info(f"Generated reflections: {reflections}")
+            self.logger.info("[generate_reflections] Generated reflections: %s", reflections)
             return reflections
         except Exception as e:
-            self.logger.error(f"Error generating reflections: {e}")
+            self.logger.error("[generate_reflections] Error generating reflections: %s", e)
             return []

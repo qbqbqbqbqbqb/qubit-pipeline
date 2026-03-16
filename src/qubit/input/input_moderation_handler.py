@@ -1,7 +1,7 @@
 # dont know whether to keep this as a service without a main loop
 # might be cleaner to leave as is?
-from src.qubit.core.service import Service
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
+from src.qubit.core.service import Service
 from src.qubit.core.events import (
     TwitchChatEvent,
     TwitchSubscriptionEvent,
@@ -12,7 +12,7 @@ from src.qubit.core.events import (
 from src.qubit.utils.filter_utils import contains_banned_words
 
 class ModerationHandler(Service):
-    
+
     """
     Sole responsibility: filter and sanitize Twitch events.
     Produces sanitized events for downstream consumers.
@@ -35,13 +35,16 @@ class ModerationHandler(Service):
 
     async def handle_event(self, event: Event) -> None:
         if isinstance(event, TwitchChatEvent):
-            self.logger.info("moderating twitch chat event")
+            self.logger.info("[handle_event] Moderating twitch chat event: %s", event)
             await self._moderate_chat(event)
         elif isinstance(event, TwitchSubscriptionEvent):
+            self.logger.info("[handle_event] Moderating twitch subscription event: %s", event)
             await self._moderate_subscription(event)
         elif isinstance(event, TwitchRaidEvent):
+            self.logger.info("[handle_event] Moderating Twitch Raid Event: %s", event)
             await self._moderate_raid(event)
         elif isinstance(event, TwitchFollowEvent):
+            self.logger.info("[handle_event] Moderating Twitch Follow Event: %s", event)
             await self._moderate_follow(event)
         else:
             self.logger.warning("[ModerationHandler] Unknown event type: %s", event.type)
@@ -62,7 +65,7 @@ class ModerationHandler(Service):
     async def _moderate_subscription(self, event: TwitchSubscriptionEvent) -> None:
         sanitised_user = self._sanitise(event.user, default="Someone")
         sanitised_msg =  self._sanitise(event.sub_message, default="")
-        
+
         sanitised_event = TwitchSubscriptionEvent(
             type="twitch_subscription_processed",
             data={**event.data, "user": sanitised_user, "sub_message": sanitised_msg},
@@ -82,6 +85,7 @@ class ModerationHandler(Service):
             type="twitch_raid_processed",
             data={**event.data, "user": sanitised_user},
             user=sanitised_user,
+            viewers=event.viewers,
             timestamp=event.timestamp
         )
         await self.event_bus.publish(sanitised_event)
@@ -93,6 +97,7 @@ class ModerationHandler(Service):
             type="twitch_follow_processed",
             data={**event.data, "user": sanitised_user},
             user=sanitised_user,
+            followed_at=event.followed_at,
             timestamp=event.timestamp
         )
         await self.event_bus.publish(sanitised_event)
@@ -102,4 +107,7 @@ class ModerationHandler(Service):
         Generic sanitizer for usernames or text.
         Returns `default` if `value` contains banned words, otherwise returns `value`.
         """
-        return default if contains_banned_words(value, BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST) else value
+        return default if contains_banned_words(
+        value,
+        BLACKLISTED_WORDS_LIST,
+        WHITELISTED_WORDS_LIST) else value

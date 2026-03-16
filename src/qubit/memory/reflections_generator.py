@@ -1,10 +1,7 @@
-import asyncio
-from datetime import datetime
 import re
 from typing import Dict, List, Tuple
 
 from src.qubit.processing.prompt_dispatcher import PromptDispatcher
-from config.config import MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION
 from src.utils.log_utils import get_logger
 
 """
@@ -58,11 +55,11 @@ A3: [Answer]
         to create up to 3 insightful question-answer pairs that capture key aspects
         of the conversation.
         """
-        self.logger.info("Starting reflection generation")
+        self.logger.info("[perform_reflection] Starting reflection generation")
         recent_messages = memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
 
         if len(recent_messages) < 10:
-            self.logger.info("Not enough messages for reflection generation")   
+            self.logger.info("[perform_reflection] Not enough messages for reflection generation")
             return []
 
         formatted_messages = []
@@ -82,20 +79,20 @@ A3: [Answer]
             {"role": "User", "content": self.reflection_prompt.format(recent_messages=messages_text)}
         ]
 
-        self.logger.info("Generated reflection messages")
+        self.logger.info("[perform_reflection] Generated reflection messages")
         try:
             if self.dispatcher is None:
-                raise ValueError("Dispatcher not set for reflection generation")
-            reflection_response = await self.dispatcher._generate_with_retries(
+                raise ValueError("[perform_reflection] Dispatcher not set for reflection generation")
+            reflection_response = await self.dispatcher.generate_with_retries(
                 prompt=reflection_messages
             )
-            self.logger.info(f"Reflection response: {reflection_response}")
+            self.logger.info("[perform_reflection] Reflection response: %s", reflection_response)
 
             qa_pairs = self._parse_qa_pairs(reflection_response)
             return qa_pairs
 
         except Exception as e:
-            self.logger.error(f"Error during reflection generation: {e}")
+            self.logger.error("[perform_reflection] Error during reflection generation: %s", e)
             return []
 
     def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:

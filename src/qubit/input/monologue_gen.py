@@ -29,7 +29,11 @@ class MonologueScheduler(Service):
         while not self.app.state.shutdown.is_set():
 
             monologue_enabled = self.app.state.features.get("monologue", True)
-            #self.logger.debug(f"MonologueScheduler loop - start: {self.app.state.start.is_set()}, monologue_enabled: {monologue_enabled}, last_activity: {self.last_activity}")
+            self.logger.debug("[_run] MonologueScheduler loop - start: %s, " \
+            "monologue_enabled: %s, last_activity: %s",
+                              self.app.state.start.is_set(),
+                              monologue_enabled,
+                              self.last_activity)
             if not self.app.state.start.is_set() or not monologue_enabled:
                 await asyncio.sleep(1)
                 continue
@@ -37,19 +41,18 @@ class MonologueScheduler(Service):
             if monologue_enabled:
                 elapsed = (datetime.now(timezone.utc) - self.last_activity).total_seconds()
                 if elapsed >= self.inactivity_timeout:
-                    self.logger.info("Inactivity timeout reached, generating monologue")
+                    self.logger.info("[_run] Inactivity timeout reached, generating monologue")
                     await self._generate_monologue()
                     self.last_activity = datetime.now(timezone.utc)
                 await asyncio.sleep(5)
 
 
     async def _notify_activity(self, _event)  -> None:
-        self.logger.info("Chat processed")
+        self.logger.info("[_notify_activity] Chat processed")
         self.last_activity = datetime.now(timezone.utc)
 
     async def _generate_monologue(self)  -> None:
-        self.logger.info("Monologue generated")
-
+        self.logger.info("[_generate_monologue] Monologue generated")
         topic = await self._get_topic_for_monologue()
         prompt = f"Monologue about {topic}, in character as Qubit."
 
@@ -77,4 +80,4 @@ class MonologueScheduler(Service):
     async def _publish_event_to_broker(self, event) -> None:
         if self.event_bus:
             await self.event_bus.publish(event)
-            self.logger.info("[_publish_event_to_broker]Published event: %s", event)
+            self.logger.info("[_publish_event_to_broker] Published event: %s", event)

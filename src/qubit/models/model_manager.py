@@ -1,7 +1,7 @@
+import os
 from dotenv import load_dotenv
 from src.qubit.models.hf_model_manager import HuggingFaceModelManager
 from src.qubit.models.model_registry import MODEL_REGISTRY
-import os
 
 
 class ModelManager:
@@ -22,11 +22,11 @@ class ModelManager:
                 print("LoRA config found:", adapter_file)
             else:
                 print("LoRA config missing! Cannot load LoRA.")
-            
-            load_dotenv() 
+
+            load_dotenv()
             model_key = os.getenv("ACTIVE_MODEL", "stheno")
             print("ACTIVE_MODEL:", os.getenv("ACTIVE_MODEL"))
-            
+
 
             config = MODEL_REGISTRY[model_key]
 

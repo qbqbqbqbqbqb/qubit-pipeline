@@ -1,19 +1,3 @@
-import re
-import inflect
-import pyaudio
-import asyncio
-import numpy as np
-import wave
-import io
-import json
-from pathlib import Path
-import os
-from dotenv import load_dotenv
-
-from piper import PiperVoice, SynthesisConfig
-from src.utils.log_utils import get_logger
-from config.config import TTS_SPEAKER_NAME, TTS_MODEL_NAME, ROOT
-
 """
 TTS Manager Module
 
@@ -21,6 +5,11 @@ This module provides functionality for managing Text-to-Speech (TTS) operations 
 It includes the TTSManager class which handles loading TTS models, configuring voices, and facilitating
 speech synthesis for various applications.
 """
+from piper import PiperVoice
+from src.utils.log_utils import get_logger
+from config.config import TTS_MODEL_NAME, ROOT
+
+
 
 class TTSManager:
     """
@@ -48,7 +37,6 @@ class TTSManager:
         """
         self.logger = get_logger("TTSManager")
 
-        this_file = Path(__file__).resolve()
         self.project_root = ROOT
         self.model_path = self.project_root / TTS_MODEL_NAME
         self.voice = None
@@ -68,9 +56,7 @@ class TTSManager:
         """
         try:
             self.voice = PiperVoice.load(self.model_path)
-            self.logger.info(f"Loaded TTS model from {self.model_path}")
+            self.logger.info("[TTSManager] Loaded TTS model from %s", self.model_path)
         except Exception as e:
-            self.logger.error(f"Failed to load TTS model: {e}")
+            self.logger.error("[TTSManager] Failed to load TTS model: %s", e)
             raise
-
-

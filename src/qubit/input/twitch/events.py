@@ -6,8 +6,8 @@ from twitchAPI.chat import Chat, ChatMessage, EventData
 from twitchAPI.object.eventsub import ChannelFollowEvent
 from twitchAPI.twitch import Twitch
 
-from src.qubit.core.events import TwitchChatEvent, TwitchFollowEvent, TwitchRaidEvent, TwitchSubscriptionEvent
-
+from src.qubit.core.events import (TwitchChatEvent,
+    TwitchFollowEvent, TwitchRaidEvent, TwitchSubscriptionEvent)
 
 class TwitchEventsMixin:
     """
@@ -16,7 +16,8 @@ class TwitchEventsMixin:
     Responsibilities:
         - Set up chat monitoring via the Twitch Chat API.
         - Register event handlers for subscriptions, raids, follows, and messages.
-        - Convert Twitch API events into internal event objects (TwitchChatEvent, TwitchFollowEvent, etc.)
+        - Convert Twitch API events into internal event objects 
+          (TwitchChatEvent, TwitchFollowEvent, etc.)
           and publish them to the application's event bus.
 
     Attributes:
@@ -51,17 +52,17 @@ class TwitchEventsMixin:
         if not subs_enabled:
             return
         try:
-            self.logger.debug(f"Sub System Message {event.system_message}")
-            self.logger.debug(f"Sub Plan Name {event.sub_plan_name}")
-            self.logger.debug(f"Sub Type {event.sub_type}")
-            self.logger.debug(f"Sub Message{event.sub_message}")
+            self.logger.debug("[_on_subscription] Sub System Message: %s", event.system_message)
+            self.logger.debug("[_on_subscription] Sub Plan Name: %s", event.sub_plan_name)
+            self.logger.debug("[_on_subscription] Sub Type: %s", event.sub_type)
+            self.logger.debug("[_on_subscription] Sub Message: %s", event.sub_message)
 
             user = "Someone" # was there an issue getting names for this before?
             tier = event.sub_plan_name
             sub_msg = event.sub_message
             sub_type = event.sub_type
 
-            self.logger.info(f"Subscription event: {event}")
+            self.logger.info("[_on_subscription] Subscription event: %s", event)
 
             event = TwitchSubscriptionEvent(
                 type="twitch_subscription",
@@ -86,7 +87,7 @@ class TwitchEventsMixin:
             viewers = event.get("viewers")
             message = f"{raider} is raiding with {viewers} viewers!"
 
-            self.logger.info(f"Raid event: {message}")
+            self.logger.info("[_on_raid] Raid event: %s", message)
 
             event = TwitchRaidEvent(
                 type="twitch_raid",
@@ -98,7 +99,7 @@ class TwitchEventsMixin:
             await self.event_bus.publish(event)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            self.logger.error(f"[_on_raid] Error handling raid event: {e}")
+            self.logger.error("[_on_raid] Error handling raid event: %s", e)
 
     async def _on_follow(self, event: ChannelFollowEvent):
         follow_enabled = self.app.state.features.get("follow", True)
@@ -111,7 +112,7 @@ class TwitchEventsMixin:
 
             message = f"{user} just followed the channel at {followed_at}!"
 
-            self.logger.info(f"Follow event: {message}")
+            self.logger.info("[_on_follow] Follow event: %s", message)
 
             event = TwitchFollowEvent(
                 type="twitch_follow",

@@ -1,18 +1,49 @@
-from typing import Any, Optional
+"""
+Memory event handling utilities.
 
+This module defines the ``MemoryHandler`` which routes processed events
+to the memory subsystem. It converts application events into normalized
+conversation records and forwards them to ``MemoryService`` for storage.
+
+The handler maps event types to specialized processing methods that
+extract relevant fields and attach metadata such as timestamps and
+event sources.
+
+Typical event sources include:
+
+- Processed Twitch chat messages
+- Viewer interactions (follows, subscriptions)
+- Generated AI responses
+- Internal monologue prompts
+"""
+from typing import Any
+
+from src.qubit.memory.memory_service import MemoryService
 from src.utils.log_utils import get_logger
 
 class MemoryHandler:
     """
-    Handle incoming events and normalize the role before forwarding
-    to the memory service.
+    Route application events to the memory service.
 
-    Usage:
-        handler = MemoryHandler(memory_service)
-        handler.handle_event(event)
+    The handler inspects incoming events, determines whether they should
+    be recorded in memory, and normalizes them into conversation entries
+    before forwarding them to ``MemoryService``.
+
+    Each supported event type is mapped to a handler method that extracts
+    relevant information and attaches metadata describing the event
+    source.
+
+    Attributes
+    ----------
+    logger : logging.Logger
+        Logger used for event processing and debugging.
+    memory_service : MemoryService
+        Service responsible for persisting conversation items.
+    routes : dict
+        Mapping of event types to handler methods.
     """
 
-    def __init__(self, memory_service: Any):
+    def __init__(self: Any, memory_service: MemoryService):
         self.logger = get_logger("MemoryHandler")
         self.memory_service = memory_service
 
@@ -25,7 +56,7 @@ class MemoryHandler:
         }
 
     def handle_event(self, event):
-        self.logger.info(f"Handling memory event {event}")
+        self.logger.info("[handle_event] Handling memory event %s", event)
         event_type = getattr(event, "type", None)
 
         handler = self.routes.get(event_type)
@@ -33,12 +64,12 @@ class MemoryHandler:
         if handler:
             handler(event)
         else:
-            self.logger.info(f"Can't convert {event} to memory")
+            self.logger.info("[handle_event] Can't convert %s to memory", event)
 
 
     def chat_memory(self, event):
         """Store viewer chat"""
-        self.logger.info("Handling chat memory event")
+        self.logger.info("[chat_memory] Handling chat memory event")
         self.memory_service.add_conversation_item(
             "User",
             event.text,
@@ -48,7 +79,7 @@ class MemoryHandler:
 
     def response_memory(self, event):
         """Store AI responses"""
-        self.logger.info("Handling response memory event")        
+        self.logger.info("[response_memory] Handling response memory event")
         self.memory_service.add_conversation_item(
             "Qubit",
             event.response,
@@ -57,7 +88,7 @@ class MemoryHandler:
 
     def event_memory(self, event):
         """Store notable viewer events"""
-        self.logger.info("Handling input event memory event")
+        self.logger.info("[event_memory] Handling input event memory event")
         text = f"{event.user} triggered {event.type}"
 
         self.memory_service.add_conversation_item(
@@ -69,7 +100,7 @@ class MemoryHandler:
 
     def monologue_memory(self, event):
         """AI thoughts"""
-        self.logger.info("Handling monologue memory event")
+        self.logger.info("[monologue_memory] Handling monologue memory event")
         self.memory_service.add_conversation_item(
             "Qubit",
             event.prompt,

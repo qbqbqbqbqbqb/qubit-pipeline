@@ -46,7 +46,10 @@ class MemoryService(Service):
         self.conn.row_factory = sqlite3.Row
 
         self.reflections_generator = ReflectionGenerator(dispatcher=self.dispatcher)
-        self.memory_manager = MemoryManager(self.chroma_client, dispatcher=self.dispatcher, conn=self.conn, reflections_generator=self.reflections_generator)
+        self.memory_manager = MemoryManager(self.chroma_client,
+                                            dispatcher=self.dispatcher,
+                                            conn=self.conn,
+                                            reflections_generator=self.reflections_generator)
         with self.memory_manager.lock:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS memory_index (
@@ -70,22 +73,22 @@ class MemoryService(Service):
                 await asyncio.sleep(1)
                 continue
 
-            REFLECTIONS_THRESHOLD = 5 # refactor this at some point
+            REFLECTIONS_THRESHOLD = 5 # TODO: refactor this at some point
             while True:
                 await asyncio.sleep(60)
-                self.logger.info("MemoryService worker checking for reflections...")
+                self.logger.info("[_run] MemoryService worker checking for reflections...")
                 recent_chats = self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
-                self.logger.info("Found %s recent chat items for reflection check", len(recent_chats))
+                self.logger.info("[_run] Found %s recent chat items for reflection check", len(recent_chats))
                 unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
-                self.logger.info("Found %s unreflected chat items", len(unreflected))
+                self.logger.info("[_run] Found %s unreflected chat items", len(unreflected))
                 if len(unreflected) >= REFLECTIONS_THRESHOLD:
-                    self.logger.info("creating reflections")
+                    self.logger.info("[_run] Creating reflections")
                     reflections = await self.memory_manager.generate_reflections()
-                    self.logger.info("Generated %s reflections", len(reflections))
+                    self.logger.info("[_run] Generated %s reflections", len(reflections))
                     for q, a in reflections:
                         self.memory_manager.add_reflection_item(f"Q: {q}\nA: {a}")
                     ids_to_update = [chat["id"] for chat in unreflected]
-                    self.logger.info("Marking %s chat items as reflected", len(ids_to_update))
+                    self.logger.info("[_run] Marking %s chat items as reflected", len(ids_to_update))
                     self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
 
     async def stop(self) -> None:

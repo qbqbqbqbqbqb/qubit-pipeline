@@ -38,10 +38,10 @@ class TwitchWebsocketSubMixin:
 
     async def _subscribe_to_follow_events(self):
         try:
-            self.logger.info("Subscribing to follow events...")
+            self.logger.info("[_subscribe_to_follow_events] Subscribing to follow events...")
 
             if not self.twitch_streamer or not self.eventsub:
-                self.logger.error("Twitch client not initialized before subscribing")
+                self.logger.error("[_subscribe_to_follow_events] Twitch client not initialized before subscribing")
                 return
 
             broadcaster_id = None
@@ -52,10 +52,10 @@ class TwitchWebsocketSubMixin:
                 break
 
             if not broadcaster_id:
-                self.logger.error("No users found for given login")
+                self.logger.error("[_subscribe_to_follow_events] No users found for given login")
                 return
 
-            self.logger.info(f"Got broadcaster_id: {broadcaster_id}")
+            self.logger.info("[_subscribe_to_follow_events] Got broadcaster_id: %s", broadcaster_id)
 
             sub_id = await self.eventsub.listen_channel_follow_v2(
                 broadcaster_user_id=broadcaster_id,
@@ -63,9 +63,9 @@ class TwitchWebsocketSubMixin:
                 callback=self._on_follow
             )
 
-            self.logger.info(f"Follow subscription succeeded, id: {sub_id}")
+            self.logger.info("[_subscribe_to_follow_events] Follow subscription succeeded, id: %s", sub_id)
 
         except (TwitchAPIException) as e:
-            self.logger.error(f"_subscribe_to_follow_events Twitch error: {e}")
+            self.logger.error("[_subscribe_to_follow_events] Twitch error: %s", e)
         except Exception as e:  # pylint: disable=broad-exception-caught
-            self.logger.error(f"_subscribe_to_follow_events unexpected error: {e}")
+            self.logger.error("[_subscribe_to_follow_events] unexpected error: %s", e)

@@ -3,10 +3,10 @@ from twitchAPI.eventsub.websocket import EventSubWebsocket
 
 from src.qubit.core.service import Service
 from src.qubit.input.twitch.events import TwitchEventsMixin
-from src.qubit.input.twitch.auth import TwitchAuth
+from src.qubit.input.twitch.auth import TwitchAuthMixin
 from src.qubit.input.twitch.subscriptions import TwitchWebsocketSubMixin
 
-class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubMixin):
+class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocketSubMixin):
     def __init__(self, settings):
         super().__init__("twitch")
         self.settings = settings
@@ -27,7 +27,7 @@ class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubM
         while not self.app.state.shutdown.is_set():
             twitch_enabled = self.app.state.features.get("twitch", True)
 
-            #self.logger.debug(f"TwitchListener loop - start: {self.app.state.start.is_set()}, twitch_enabled: {twitch_enabled}, connected: {self.connected}")
+            self.logger.debug("[_run] TwitchListener loop - start: {self.app.state.start.is_set()}, twitch_enabled: {twitch_enabled}, connected: {self.connected}")
             if not self.app.state.start.is_set() or not twitch_enabled:
                 await asyncio.sleep(1)
                 continue
@@ -37,7 +37,7 @@ class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubM
                     if not self.connected:
                         self.connected = await self._start_client()
                         if not self.connected:
-                            self.logger.error("Failed to connect. Retrying in 10s...")
+                            self.logger.error("[_run]Failed to connect. Retrying in 10s...")
                             await asyncio.sleep(10)
                             continue
 
@@ -49,21 +49,22 @@ class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubM
                     await asyncio.sleep(60 * 60)
 
                 except Exception as e:
-                    self.logger.error("Listener error: %s. Restarting...", e)
+                    self.logger.error("[_run] Listener error: %s. Restarting...", e)
                     await self.stop()
                     await asyncio.sleep(5)
 
 
     async def _start_client(self) -> bool:
-        self.logger.info("[start] Starting TwitchClient...")
+        self.logger.info("[_start_client] Starting TwitchClient...")
         try:
             await self._authenticate_bot_account()
             await self._authenticate_streamer_account()
             await self._setup_chat()
-            self.logger.info("[start] Connected to Twitch channel: %s", self.settings.twitch_channel)
+            self.logger.info("[_start_client] Connected to Twitch channel: %s",
+                             self.settings.twitch_channel)
             return True
         except Exception as e:
-            self.logger.error("[start] Failed to connect TwitchClient: %s", e)
+            self.logger.error("[_start_client] Failed to connect TwitchClient: %s", e)
             return False
 
 
@@ -77,7 +78,7 @@ class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubM
         Returns:
             None
         """
-        self.logger.info("[disconnect] Disconnecting TwitchClient...")
+        self.logger.info("[stop] Disconnecting TwitchClient...")
         if self.chat:
             self.chat.stop()
         if self.twitch_bot:
@@ -87,5 +88,5 @@ class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubM
         if self.eventsub:
             await self.eventsub.stop()
         self.connected = False
-        self.logger.info("[disconnect] Disconnected successfully.")
+        self.logger.info("[stop] Disconnected successfully.")
         await super().stop()

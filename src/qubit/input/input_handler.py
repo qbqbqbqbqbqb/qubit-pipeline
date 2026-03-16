@@ -12,7 +12,7 @@ class InputHandler(Service):
         "twitch_raid_processed": "handle_event",
         "twitch_follow_processed": "handle_event",
     }
-        
+
     def __init__(self, max_age_seconds=30, prompt_handler=None, memory_handler=None):
         super().__init__("input_handler")
         self.max_age = timedelta(seconds=max_age_seconds)
@@ -21,20 +21,20 @@ class InputHandler(Service):
         self.memory_handler = memory_handler
 
     async def start(self, app) -> None:
-        await super().start(app)    
+        await super().start(app)
 
     async def stop(self) -> None:
         await super().stop()
 
     async def handle_event(self, event) -> None:
-        self.logger.info("Handling event in InputHandlerService")
+        self.logger.info("[handle_event] Handling event in InputHandlerService")
         text = event.data.get("text", "").lower().strip()
 
         if await self._check_repeated_message(text):
             return
-        
+
         await self._add_message_to_tracker(text)
-        
+
         if await self._check_stale_message(event, text):
             return
 
@@ -47,10 +47,9 @@ class InputHandler(Service):
 
     async def _check_repeated_message(self, text) -> bool:
         if self.message_tracker.is_repeated(text):
-            self.logger.debug(f"Dropped repeated message: {text}")
+            self.logger.debug("[_check_repeated_message] Dropped repeated message: %s", text)
             return True
         return False
-    
 
     async def _add_message_to_tracker(self, text) -> None:
         if self.message_tracker:
@@ -62,10 +61,10 @@ class InputHandler(Service):
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
         if datetime.now(timezone.utc) - ts > self.max_age:
-            self.logger.debug(f"Dropping stale message: {text}") 
+            self.logger.debug("[_check_stale_message] Dropping stale message: %s", text)
             return True
         return False
-    
+
 
     async def _build_event_prompt(self, event) -> None:
         if self.prompt_handler and event.type in self.prompt_handler.builders:

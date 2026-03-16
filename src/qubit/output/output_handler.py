@@ -38,12 +38,12 @@ class OutputHandler(Service):
         prompt, response, source = await self._get_event_attributes(event)
 
         if not response:
-            self.logger.warning("No response generated for %s", prompt)
+            self.logger.warning("[handle_response] No response generated for %s", prompt)
             return
 
         is_valid, filtered_response = self.dialogue_sanitiser.is_valid(response)
         if not is_valid:
-            self.logger.warning("[OutputHandlerService] Invalid response, skipping.")
+            self.logger.warning("[handle_response] Invalid response, skipping.")
             return
 
         response_clean = self.dialogue_sanitiser.strip_leading_punctuation(
@@ -93,7 +93,7 @@ class OutputHandler(Service):
                 await asyncio.sleep(1)
                 continue
 
-            self.logger.info("Output processor started")
+            self.logger.info("[_run] Output processor started")
             while True:
                 try:
                     if not self.queue:
@@ -101,7 +101,7 @@ class OutputHandler(Service):
                         continue
 
                     item = self.queue.popleft()
-                    self.logger.info("[OutputHandlerService] Processing item: %s", item)
+                    self.logger.info("[_run] Processing item: %s", item)
 
                     if await self._check_if_timestamp_stale(item):
                         continue
@@ -114,22 +114,24 @@ class OutputHandler(Service):
                         await self._handle_text_output(text)
 
                 except asyncio.CancelledError:
-                    self.logger.info("Output processor cancelled")
+                    self.logger.info("[_run] Output processor cancelled")
                     break
                 except Exception as e:
-                    self.logger.exception("Error in output processor: %s", e)
+                    self.logger.exception("[_run] Error in output processor: %s", e)
                     await asyncio.sleep(0.1)
+
 
     async def _check_if_timestamp_stale(self, item: dict) -> bool:
         timestamp = item.get("timestamp")
         if not timestamp:
-            self.logger.warning("Item missing timestamp, skipping.")
+            self.logger.warning("[_check_if_timestamp_stale] Item missing timestamp, skipping.")
             return True
 
         if datetime.now(timezone.utc) - timestamp > self.max_age:
-            self.logger.info("Dropping stale output: %s", item)
+            self.logger.info("[_check_if_timestamp_stale] Dropping stale output: %s", item)
             return True
         return False
+
 
     async def _handle_text_output(self, text: str) -> None:
         mouth_task = None
@@ -144,7 +146,7 @@ class OutputHandler(Service):
                 )
 
             if self.tts_handler:
-                self.logger.info("Speaking: %s", text)
+                self.logger.info("[_handle_text_output] Speaking: %s", text)
                 await self.tts_handler.speak(text)
 
         finally:
@@ -152,7 +154,7 @@ class OutputHandler(Service):
                 try:
                     await mouth_task
                 except Exception:
-                    self.logger.exception("Mouth animation failed")
+                    self.logger.exception("[_handle_text_output] Mouth animation failed")
 
             if self.vtube_studio_handler:
                 self.vtube_studio_handler.speaking = False
