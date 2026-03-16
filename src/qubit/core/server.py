@@ -18,14 +18,14 @@ class WebSocketServerService(Service):
     #should i use super here?
     # pretty sure i dont as it needs to run first to trigger the other services
     # i probably shouldve written docs
-    async def _start(self, app) -> None:
+    async def start(self, app) -> None:
         self.app = app 
         self.event_bus = app.event_bus 
         self.server = await websockets.serve(self.webSocketHandler, self.host, self.port)
         self.logger.info(f"WebSocketServer started on {self.host}:{self.port}")
 
     # it might work for stop but not start/run? just trying to reduce redundancy
-    async def _stop(self) -> None:
+    async def stop(self) -> None:
         self.logger.info("Stopping WebSocketServer...")
         if self.server:
             self.server.close()

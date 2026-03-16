@@ -1,3 +1,4 @@
+#again, does this need to be a service?
 from datetime import datetime, timedelta, timezone
 from src.qubit.core.service import Service
 from src.qubit.core.event_bus import event_bus
@@ -17,14 +18,12 @@ class MonologueInputHandler(Service):
         self.prompt_handler = prompt_handler
         self.memory_handler = memory_handler
         
-    async def _start(self, app) -> None:
-        logger.info("Starting MonologueInputHandlerService")
-        self.event_bus = app.event_bus
-        await super()._start(app)
+    async def start(self, app) -> None:
+        await super().start(app)
 
 
-    async def _stop(self) -> None:
-        logger.info("Stopping MonologueInputHandlerService")
+    async def stop(self) -> None:
+        await super().stop()
 
     # TODO: consolidate redundant methods btwn input handlers here later
     async def handle_event(self, event) -> None:

@@ -7,7 +7,7 @@ from src.qubit.core.events import MonologueEvent
 class MonologueScheduler(Service):
         
     SUBSCRIPTIONS = {
-        "twitch_chat_processed": "self._notify_activity",
+        "twitch_chat_processed": "_notify_activity",
     }
         
     def __init__(self, dispatcher,  llm, inactivity_timeout=120):
@@ -17,17 +17,18 @@ class MonologueScheduler(Service):
         self.inactivity_timeout = inactivity_timeout
         self.last_activity = datetime.now(timezone.utc)
 
-    async def _start(self, app) -> None:
-        await super()._start(app)
+    async def start(self, app) -> None:
+        await super().start(app)
 
-    async def _stop(self) -> None:
-        await super()._stop()
+    async def stop(self) -> None:
+        await super().stop()
 
     async def _run(self) -> None:
+        await super()._run()
         while not self.app.state.shutdown.is_set(): 
 
             monologue_enabled = self.app.state.features.get("monologue", True)
-
+            #self.logger.debug(f"MonologueScheduler loop - start: {self.app.state.start.is_set()}, monologue_enabled: {monologue_enabled}, last_activity: {self.last_activity}")
             if not self.app.state.start.is_set() or not monologue_enabled:
                 await asyncio.sleep(1)
                 continue
@@ -41,7 +42,7 @@ class MonologueScheduler(Service):
                 await asyncio.sleep(5)
 
 
-    def _notify_activity(self)  -> None:
+    async def _notify_activity(self, _event)  -> None:
         self.logger.info("Chat processed")
         self.last_activity = datetime.now(timezone.utc)
 

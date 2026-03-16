@@ -57,10 +57,11 @@ class MemoryService(Service):
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_timestamp ON memory_index (collection, timestamp)")
             self.conn.commit()
         
-    async def _start(self, app) -> None:
-        await super()._start(app)
+    async def start(self, app) -> None:
+        await super().start(app)
 
     async def _run(self) -> None:
+        await super()._run()
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
@@ -84,8 +85,8 @@ class MemoryService(Service):
                     self.logger.info(f"Marking {len(ids_to_update)} chat items as reflected")
                     self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
 
-    async def _stop(self) -> None:
-        await super()._stop()
+    async def stop(self) -> None:
+        await super().stop()
 
     def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
         """

@@ -1,7 +1,6 @@
 import asyncio
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 
-from src.qubit.core import app
 from src.qubit.core.service import Service
 from src.qubit.input.twitch.events import TwitchEvents
 from src.qubit.input.twitch.auth import TwitchAuth
@@ -18,15 +17,17 @@ class TwitchListener(Service, TwitchAuth, TwitchEvents, TwitchWebsocketSub):
         self.connected = False
 
 
-    async def _start(self, app) -> None:
-        await super()._start(app)
+    async def start(self, app) -> None:
+        await super().start(app)
 
 
     # TODO: split this up, a lot happening
     async def _run(self) -> None:
+        await super()._run()
         while not self.app.state.shutdown.is_set():
-            twitch_enabled = app.state.features.get("twitch", True)
+            twitch_enabled = self.app.state.features.get("twitch", True)
 
+            #self.logger.debug(f"TwitchListener loop - start: {self.app.state.start.is_set()}, twitch_enabled: {twitch_enabled}, connected: {self.connected}")
             if not self.app.state.start.is_set() or not twitch_enabled:
                 await asyncio.sleep(1)
                 continue
@@ -49,7 +50,7 @@ class TwitchListener(Service, TwitchAuth, TwitchEvents, TwitchWebsocketSub):
 
                 except Exception as e:
                     self.logger.error(f"Listener error: {e}. Restarting...")
-                    await self._stop()
+                    await self.stop()
                     await asyncio.sleep(5)
 
 
@@ -66,7 +67,7 @@ class TwitchListener(Service, TwitchAuth, TwitchEvents, TwitchWebsocketSub):
             return False
 
 
-    async def _stop(self)  -> None:
+    async def stop(self)  -> None:
         """
         Disconnect from Twitch services.
 
@@ -87,4 +88,4 @@ class TwitchListener(Service, TwitchAuth, TwitchEvents, TwitchWebsocketSub):
             await self.eventsub.stop()
         self.connected = False
         self.logger.info("[disconnect] Disconnected successfully.")
-        await super()._stop
+        await super().stop()

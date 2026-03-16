@@ -10,8 +10,9 @@ class Service:
         self.name = name
         self.event_bus = None
         self.logger = get_logger(name)
+        self._worker_task = None
 
-    async def _start(self, app):
+    async def start(self, app):
         self.app = app
         self.event_bus = app.event_bus
 
@@ -23,7 +24,7 @@ class Service:
 
         self._register_subscriptions()
 
-        self.logger.info(f"{self.name} is running")
+        self.logger.info(f"{self.name} has registered subscriptions: {list(self.SUBSCRIPTIONS.keys())}")
 
         self._worker_task = asyncio.create_task(self._run())
 
@@ -31,13 +32,13 @@ class Service:
         await self.app.state.start.wait()
 
     async def _run(self):
-        pass
+         self.logger.info(f"{self.name} main loop is running")
 
-    async def _stop(self):
+    async def stop(self):
         self.logger.info(f"Stopping {self.name}")
-        if self._run:
-            self._run.cancel()
-            await asyncio.gather(self._run, return_exceptions=True)
+        if self._worker_task:
+            self._worker_task.cancel()
+            await asyncio.gather(self._worker_task, return_exceptions=True)
             
     def _register_subscriptions(self):
         for event_type, handler_name in self.SUBSCRIPTIONS.items():

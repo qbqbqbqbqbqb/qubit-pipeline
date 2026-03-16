@@ -35,7 +35,6 @@ class TwitchRaidEvent(TwitchEvent):
 @dataclass
 class TwitchFollowEvent(TwitchEvent):
     user: str
-    followed_at: str
 
 @dataclass
 class YoutubeEvent(Event):

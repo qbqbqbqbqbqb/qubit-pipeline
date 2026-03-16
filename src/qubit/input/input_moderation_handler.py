@@ -27,11 +27,11 @@ class ModerationHandler(Service):
     def __init__(self):
         super().__init__("input moderation handler")
 
-    async def _start(self, app) -> None:
-        await super()._start(app)
+    async def start(self, app) -> None:
+        await super().start(app)
 
-    async def _stop(self) -> None:
-        await super()._stop(())
+    async def stop(self) -> None:
+        await super().stop()
 
     async def handle_event(self, event: Event) -> None:
         if isinstance(event, TwitchChatEvent):

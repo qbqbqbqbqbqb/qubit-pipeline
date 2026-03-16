@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
-from qubit.memory import memory_handler
 from src.qubit.output.obs_handler import OBSHandler
 from src.qubit.output.tts_handler import TTSHandler
 from src.qubit.core.events import ResponseGeneratedEvent
@@ -29,11 +28,11 @@ class OutputHandler(Service):
         self.max_age = timedelta(seconds=max_age_seconds)
         self.enable_subtitles = enable_subtitles
 
-    async def _start(self, app) -> None:
-        await super()._start(app)
+    async def start(self, app) -> None:
+        await super().start(app)
 
-    async def _stop(self) -> None:
-        await super()._stop()
+    async def stop(self) -> None:
+        await super().stop()
 
     async def handle_response(self, event: ResponseGeneratedEvent) -> None:
         prompt, response, source = await self._get_event_attributes(event)
@@ -54,9 +53,9 @@ class OutputHandler(Service):
         event = await self._set_event_attributes(event, prompt, source, response_clean)
         await self._handle_memory_event(event)
         
-        await self._append_to_queue(source, prompt, response_clean)
+        await self._append_to_queue(event)
 
-    async def _get_event_attributes(event) -> tuple:
+    async def _get_event_attributes(self, event) -> tuple:
         return event.prompt, event.response, event.source
     
     async def _set_event_attributes(self, event, prompt, source, response_clean) -> Any:
@@ -88,6 +87,7 @@ class OutputHandler(Service):
             self.queue.append(monologue)
 
     async def _run(self) -> None:
+        await super()._run()
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
@@ -103,7 +103,7 @@ class OutputHandler(Service):
                     item = self.queue.popleft()
                     self.logger.info(f"[OutputHandlerService] Processing item: {item}")
 
-                    if await self._check_if_timestamp_stale:
+                    if await self._check_if_timestamp_stale(item):
                         continue
 
                     for key in ("prompt", "response"):

@@ -26,10 +26,11 @@ class PromptDispatcher(Service):
         self.system_interaction = "high"
         self.max_age = timedelta(seconds=max_age_seconds)
 
-    async def _start(self, app):
-        await super()._start(app)
+    async def start(self, app):
+        await super().start(app)
 
     async def _run(self) -> None:
+        await super()._run()
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
@@ -52,17 +53,14 @@ class PromptDispatcher(Service):
                 finally:
                     self.queue.task_done()
 
-    async def _stop(self) -> None:
-        self.logger.info("Stopping PromptDispatcher")
-        if self._worker_task:
-            self._worker_task.cancel()
-            await asyncio.gather(self._worker_task, return_exceptions=True)
+    async def stop(self) -> None:
         while not self.queue.empty():
             try:
                 self.queue.get_nowait()
             except asyncio.queues.QueueEmpty:
                 break
-
+        await super().stop()
+        
     async def enqueue(self, event: ResponsePromptEvent):
         event_type = getattr(event, "type", "unknown")
         user = event.data.get("user", "unknown")
