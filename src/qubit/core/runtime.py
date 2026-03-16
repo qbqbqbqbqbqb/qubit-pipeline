@@ -33,4 +33,3 @@ async def run_app(app):
         task.cancel()
 
     await asyncio.gather(*tasks, return_exceptions=True)
-    

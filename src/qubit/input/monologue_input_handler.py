@@ -37,7 +37,7 @@ class MonologueInputHandler(Service):
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
         if datetime.now(timezone.utc) - ts > self.max_age:
-            self.logger.debug(f"Dropping stale monologue: {text}") 
+            self.logger.debug("Dropping stale monologue: %s", text)
             return True
         return False
 
@@ -53,4 +53,3 @@ class MonologueInputHandler(Service):
     async def _handle_memory_event(self, event) -> None:
         if self.memory_handler:
             self.memory_handler.handle_event(event)
-            

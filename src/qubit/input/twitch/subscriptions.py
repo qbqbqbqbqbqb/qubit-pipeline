@@ -69,4 +69,3 @@ class TwitchWebsocketSubMixin:
             self.logger.error(f"_subscribe_to_follow_events Twitch error: {e}")
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"_subscribe_to_follow_events unexpected error: {e}")
-            

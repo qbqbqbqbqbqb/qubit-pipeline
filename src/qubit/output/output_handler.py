@@ -38,7 +38,7 @@ class OutputHandler(Service):
         prompt, response, source = await self._get_event_attributes(event)
 
         if not response:
-            self.logger.warning(f"No response generated for {prompt}")
+            self.logger.warning("No response generated for %s", prompt)
             return
 
         is_valid, filtered_response = self.dialogue_sanitiser.is_valid(response)
@@ -101,7 +101,7 @@ class OutputHandler(Service):
                         continue
 
                     item = self.queue.popleft()
-                    self.logger.info(f"[OutputHandlerService] Processing item: {item}")
+                    self.logger.info("[OutputHandlerService] Processing item: %s", item)
 
                     if await self._check_if_timestamp_stale(item):
                         continue
@@ -117,7 +117,7 @@ class OutputHandler(Service):
                     self.logger.info("Output processor cancelled")
                     break
                 except Exception as e:
-                    self.logger.exception(f"Error in output processor: {e}")
+                    self.logger.exception("Error in output processor: %s", e)
                     await asyncio.sleep(0.1)
 
     async def _check_if_timestamp_stale(self, item: dict) -> bool:
@@ -127,7 +127,7 @@ class OutputHandler(Service):
             return True
 
         if datetime.now(timezone.utc) - timestamp > self.max_age:
-            self.logger.info(f"Dropping stale output: {item}")
+            self.logger.info("Dropping stale output: %s", item)
             return True
         return False
 
@@ -144,7 +144,7 @@ class OutputHandler(Service):
                 )
 
             if self.tts_handler:
-                self.logger.info(f"Speaking: {text}")
+                self.logger.info("Speaking: %s", text)
                 await self.tts_handler.speak(text)
 
         finally:

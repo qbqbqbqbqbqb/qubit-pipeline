@@ -75,17 +75,17 @@ class MemoryService(Service):
                 await asyncio.sleep(60)
                 self.logger.info("MemoryService worker checking for reflections...")
                 recent_chats = self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
-                self.logger.info(f"Found {len(recent_chats)} recent chat items for reflection check")
+                self.logger.info("Found %s recent chat items for reflection check", len(recent_chats))
                 unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
-                self.logger.info(f"Found {len(unreflected)} unreflected chat items")
+                self.logger.info("Found %s unreflected chat items", len(unreflected))
                 if len(unreflected) >= REFLECTIONS_THRESHOLD:
                     self.logger.info("creating reflections")
                     reflections = await self.memory_manager.generate_reflections()
-                    self.logger.info(f"Generated {len(reflections)} reflections")
+                    self.logger.info("Generated %s reflections", len(reflections))
                     for q, a in reflections:
                         self.memory_manager.add_reflection_item(f"Q: {q}\nA: {a}")
                     ids_to_update = [chat["id"] for chat in unreflected]
-                    self.logger.info(f"Marking {len(ids_to_update)} chat items as reflected")
+                    self.logger.info("Marking %s chat items as reflected", len(ids_to_update))
                     self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
 
     async def stop(self) -> None:

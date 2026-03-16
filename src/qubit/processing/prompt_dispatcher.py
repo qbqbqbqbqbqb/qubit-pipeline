@@ -40,16 +40,16 @@ class PromptDispatcher(Service):
                 event: ResponsePromptEvent = await self.queue.get()
                 try:
                     if self._is_stale(event):
-                        self.logger.info(f"Dropping stale prompt for {event.data.get('user')}: {event.prompt}")
+                        self.logger.info("Dropping stale prompt for %s: %s", event.data.get('user'), event.prompt)
                         continue
 
                     response = await self._generate_response(event)
 
-                    self.logger.info(f"Response generated. Publishing {response}")
-                    await self._publish_response(event, response, self.event_bus)
+                    self.logger.info("Response generated. Publishing %s", response)
+                    await self._publish_response(event, response)
 
                 except Exception as e:
-                    self.logger.error(f"[LLM Worker] Error: {e}")
+                    self.logger.error("[LLM Worker] Error: %s", e)
                 finally:
                     self.queue.task_done()
 
@@ -65,7 +65,7 @@ class PromptDispatcher(Service):
         event_type = getattr(event, "type", "unknown")
         user = event.data.get("user", "unknown")
         prompt = getattr(event, "prompt", "")
-        self.logger.info(f"[PromptDispatcher] enqueue called for {user} (type={event_type}): {prompt}")
+        self.logger.info("[enqueue] enqueue called for %s (type=%s): %s", user, event_type, prompt)
         if not hasattr(event, "timestamp") or not event.timestamp:
             event.timestamp = datetime.utcnow()
         await self.queue.put(event)
@@ -86,21 +86,20 @@ class PromptDispatcher(Service):
         """
 
         for attempt in range(1, max_attempts + 1):
-            self.logger.info(f"[Attempt {attempt}] prompt: {prompt}")
+            self.logger.info("[Attempt %s] prompt: %s", attempt, prompt)
             try:
-                self.logger.info(f"[LLM] Generating response")
+                self.logger.info("[_generate_with_retries] Generating response")
                 response = await self.llm.generate_response(prompt)
                 if response and response.strip():
-                    self.logger.info(f"[Attempt {attempt}] response: {response}")
+                    self.logger.info("[Attempt %s] response: %s", attempt, response)
                     return response
-                else:
-                    self.logger.warning(f"[Attempt {attempt}] Empty response, retrying...")
+                self.logger.warning("[Attempt %s] Empty response, retrying...", attempt)
             except Exception as e:
-                self.logger.error(f"[Attempt {attempt}] LLM generation error: {e}")
+                self.logger.error("[Attempt %s] LLM generation error: %s", attempt, e)
 
             await asyncio.sleep(1)
 
-        self.logger.error(f"All {max_attempts} attempts failed for prompt: {prompt}")
+        self.logger.error("[_generate_with_retries] All %s attempts failed for prompt: %s", max_attempts, prompt)
         return "Sorry, I couldn't generate a response right now."
 
     def _is_stale(self, event: Any) -> bool:
@@ -118,7 +117,7 @@ class PromptDispatcher(Service):
     async def _generate_response(self, event: ResponsePromptEvent) -> str:
         user = event.data.get("user")
         prompt_text = event.prompt
-        self.logger.info(f"[LLM] Generating response for {user}")
+        self.logger.info("[LLM] Generating response for %s", user)
 
         assembler = PromptAssembler()
         assembler.add(core_system_module())
@@ -143,13 +142,13 @@ class PromptDispatcher(Service):
 
         assembler.add(input_module(prompt_text))
         for inj in assembly_event.contributions:
-            self.logger.info(f"Injection ({inj.priority}): {inj.content[:80]}")
+            self.logger.info("[_generate_response] Injection (%s): %s", inj.priority, inj.content[:80])
 
         final_prompt = assembler.build()
         return await self._generate_with_retries(final_prompt, max_attempts=3)
 
 
-    async def _publish_response(self, event: ResponsePromptEvent, response: str, event_bus: Any) -> None:
+    async def _publish_response(self, event: ResponsePromptEvent, response: str) -> None:
         user = event.data.get("user")
         generated_event = ResponseGeneratedEvent(
             type="response_generated",
@@ -165,5 +164,4 @@ class PromptDispatcher(Service):
             response=response
         )
         await self.event_bus.publish(generated_event)
-        self.logger.info(f"Published {generated_event}")
-        
+        self.logger.info("[_publish_response] Published %s", generated_event)

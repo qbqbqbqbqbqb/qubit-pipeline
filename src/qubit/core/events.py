@@ -28,7 +28,7 @@ class TwitchSubscriptionEvent(TwitchEvent):
 
 @dataclass
 class TwitchRaidEvent(TwitchEvent):
-    user: str 
+    user: str
     viewers: int
 
 @dataclass
@@ -81,7 +81,7 @@ class ResponseGeneratedEvent(Event):
 
 @dataclass
 class PromptAssemblyEvent(Event):
-    assembler: PromptAssembler  
+    assembler: PromptAssembler
     user: str
     prompt_text: str
-    contributions: List[PromptInjection] = field(default_factory=list) 
+    contributions: List[PromptInjection] = field(default_factory=list)

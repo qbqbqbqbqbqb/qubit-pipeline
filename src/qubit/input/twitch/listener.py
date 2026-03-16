@@ -49,7 +49,7 @@ class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubM
                     await asyncio.sleep(60 * 60)
 
                 except Exception as e:
-                    self.logger.error(f"Listener error: {e}. Restarting...")
+                    self.logger.error("Listener error: %s. Restarting...", e)
                     await self.stop()
                     await asyncio.sleep(5)
 
@@ -60,10 +60,10 @@ class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubM
             await self._authenticate_bot_account()
             await self._authenticate_streamer_account()
             await self._setup_chat()
-            self.logger.info(f"[start] Connected to Twitch channel: {self.settings.twitch_channel}")
+            self.logger.info("[start] Connected to Twitch channel: %s", self.settings.twitch_channel)
             return True
         except Exception as e:
-            self.logger.error(f"[start] Failed to connect TwitchClient: {e}")
+            self.logger.error("[start] Failed to connect TwitchClient: %s", e)
             return False
 
 

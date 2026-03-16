@@ -77,4 +77,4 @@ class MonologueScheduler(Service):
     async def _publish_event_to_broker(self, event) -> None:
         if self.event_bus:
             await self.event_bus.publish(event)
-            self.logger.info(f"Published {event}")
+            self.logger.info("[_publish_event_to_broker]Published event: %s", event)

@@ -44,7 +44,7 @@ class ModerationHandler(Service):
         elif isinstance(event, TwitchFollowEvent):
             await self._moderate_follow(event)
         else:
-            self.logger.warning(f"[ModerationHandler] Unknown event type: {type(event)}")
+            self.logger.warning("[ModerationHandler] Unknown event type: %s", event.type)
 
     async def _moderate_chat(self, event: TwitchChatEvent) -> None:
         sanitised_user = self._sanitise(event.user, default="Someone")
