@@ -2,11 +2,11 @@ import asyncio
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 
 from src.qubit.core.service import Service
-from src.qubit.input.twitch.events import TwitchEvents
+from src.qubit.input.twitch.events import TwitchEventsMixin
 from src.qubit.input.twitch.auth import TwitchAuth
 from src.qubit.input.twitch.subscriptions import TwitchWebsocketSubMixin
 
-class TwitchListener(Service, TwitchAuth, TwitchEvents, TwitchWebsocketSubMixin):
+class TwitchListener(Service, TwitchAuth, TwitchEventsMixin, TwitchWebsocketSubMixin):
     def __init__(self, settings):
         super().__init__("twitch")
         self.settings = settings

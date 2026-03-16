@@ -52,18 +52,18 @@ class OutputHandler(Service):
 
         event = await self._set_event_attributes(event, prompt, source, response_clean)
         await self._handle_memory_event(event)
-        
+
         await self._append_to_queue(event)
 
     async def _get_event_attributes(self, event) -> tuple:
         return event.prompt, event.response, event.source
-    
+
     async def _set_event_attributes(self, event, prompt, source, response_clean) -> Any:
         event.prompt = prompt
         event.source = source
         event.response = response_clean
         return event
-    
+
     async def _handle_memory_event(self, event) -> None:
         if self.memory_handler:
             self.memory_handler.handle_event(event)
@@ -92,7 +92,7 @@ class OutputHandler(Service):
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
                 continue
-            
+
             self.logger.info("Output processor started")
             while True:
                 try:
@@ -130,7 +130,7 @@ class OutputHandler(Service):
             self.logger.info(f"Dropping stale output: {item}")
             return True
         return False
-    
+
     async def _handle_text_output(self, text: str) -> None:
         mouth_task = None
         try:

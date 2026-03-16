@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import List, Optional, Dict, Any
 
 from src.qubit.prompting.injections import PromptInjection
@@ -35,6 +34,7 @@ class TwitchRaidEvent(TwitchEvent):
 @dataclass
 class TwitchFollowEvent(TwitchEvent):
     user: str
+    followed_at: str
 
 @dataclass
 class YoutubeEvent(Event):

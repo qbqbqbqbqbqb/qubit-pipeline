@@ -1,22 +1,33 @@
 from datetime import datetime, timezone
+import logging
 
-from twitchAPI.twitch import Twitch
-from twitchAPI.oauth import UserAuthenticator, refresh_access_token
-from config.config import BOT_SCOPES, STREAMER_SCOPES
-from twitchAPI.twitch import Twitch
-from twitchAPI.type import AuthScope, ChatEvent
+from twitchAPI.type import ChatEvent
 from twitchAPI.chat import Chat, ChatMessage, EventData
-from twitchAPI.oauth import UserAuthenticator, refresh_access_token
-from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.object.eventsub import ChannelFollowEvent
-from src.utils.log_utils import get_logger
+from twitchAPI.twitch import Twitch
+
 from src.qubit.core.events import TwitchChatEvent, TwitchFollowEvent, TwitchRaidEvent, TwitchSubscriptionEvent
 
 
-class TwitchEvents:
+class TwitchEventsMixin:
+    """
+    Mixin providing Twitch chat and EventSub event handling for a Twitch bot.
 
-    def __init__(self):
-        self.logger = get_logger(__name__)
+    Responsibilities:
+        - Set up chat monitoring via the Twitch Chat API.
+        - Register event handlers for subscriptions, raids, follows, and messages.
+        - Convert Twitch API events into internal event objects (TwitchChatEvent, TwitchFollowEvent, etc.)
+          and publish them to the application's event bus.
+
+    Attributes:
+        logger (logging.Logger): Logger for debug and info messages.
+        twitch_bot (Twitch): Authenticated Twitch bot client.
+        app (Any): Application instance containing state and event bus.
+    """
+    logger: logging.Logger
+    twitch_bot: Twitch
+    app: any
+
 
     async def _setup_chat(self):
         """
@@ -42,15 +53,15 @@ class TwitchEvents:
         try:
             self.logger.debug(f"Sub System Message {event.system_message}")
             self.logger.debug(f"Sub Plan Name {event.sub_plan_name}")
-            self.logger.debug(f"Sub Type {event.sub_type}")           
-            self.logger.debug(f"Sub Message{event.sub_message}")       
+            self.logger.debug(f"Sub Type {event.sub_type}")
+            self.logger.debug(f"Sub Message{event.sub_message}")
 
             user = "Someone" # was there an issue getting names for this before?
             tier = event.sub_plan_name
             sub_msg = event.sub_message
             sub_type = event.sub_type
-            
-            self.logger.info(f"Subscription event")
+
+            self.logger.info(f"Subscription event: {event}")
 
             event = TwitchSubscriptionEvent(
                 type="twitch_subscription",
@@ -63,7 +74,7 @@ class TwitchEvents:
             )
             await self.event_bus.publish(event)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"[_on_subscription] Error handling subscription event: {e}")
 
     async def _on_raid(self, event: EventData):
@@ -86,7 +97,7 @@ class TwitchEvents:
             )
             await self.event_bus.publish(event)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"[_on_raid] Error handling raid event: {e}")
 
     async def _on_follow(self, event: ChannelFollowEvent):
@@ -104,37 +115,37 @@ class TwitchEvents:
 
             event = TwitchFollowEvent(
                 type="twitch_follow",
-                data={"user": user, "followed_at": followed_at},
+                data={"user": user, "followed_at": followed_at, "broadcaster": broadcaster},
                 user=user,
                 followed_at=followed_at,
                 timestamp = datetime.now(timezone.utc).isoformat()
             )
             await self.event_bus.publish(event)
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"[_on_follow] Error handling follow event: {e}")
 
     async def _on_ready(self, event: EventData):
-            """
-            Event handler called when the chat bot is ready.
+        """
+        Event handler called when the chat bot is ready.
 
-            Joins the specified Twitch channel upon readiness.
+        Joins the specified Twitch channel upon readiness.
 
-            Args:
-                event: EventData containing chat event information.
+        Args:
+            event: EventData containing chat event information.
 
-            Returns:
-                None
+        Returns:
+            None
 
-            Raises:
-                Exception: If joining the channel fails.
-            """
-            try:
-                self.logger.info("[_on_ready] Bot ready, joining channel...")
-                await event.chat.join_room(self.settings.twitch_channel)
-                self.logger.info(f"[_on_ready] Joined channel: {self.settings.twitch_channel}")
-            except Exception as e:
-                self.logger.error(f"[_on_ready] Failed to join channel: {e}")
+        Raises:
+            Exception: If joining the channel fails.
+        """
+        try:
+            self.logger.info("[_on_ready] Bot ready, joining channel...")
+            await event.chat.join_room(self.settings.twitch_channel)
+            self.logger.info(f"[_on_ready] Joined channel: {self.settings.twitch_channel}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.logger.error(f"[_on_ready] Failed to join channel: {e}")
 
     async def _on_message(self, msg: ChatMessage):
         """
@@ -171,6 +182,5 @@ class TwitchEvents:
             await self.event_bus.publish(event)
             self.logger.info("[_on_message] Chat message published to broker")
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"[_on_message] Error handling message: {e}")
-

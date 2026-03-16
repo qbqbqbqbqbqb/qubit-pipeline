@@ -1,15 +1,16 @@
 import asyncio
-from datetime import datetime, timezone
-from src.qubit.core.service import Service
 import random
+from datetime import datetime, timezone
+
+from src.qubit.core.service import Service
 from src.qubit.core.events import MonologueEvent
 
 class MonologueScheduler(Service):
-        
+
     SUBSCRIPTIONS = {
         "twitch_chat_processed": "_notify_activity",
     }
-        
+
     def __init__(self, dispatcher,  llm, inactivity_timeout=120):
         super().__init__("monologue scheduler")
         self.dispatcher = dispatcher
@@ -25,7 +26,7 @@ class MonologueScheduler(Service):
 
     async def _run(self) -> None:
         await super()._run()
-        while not self.app.state.shutdown.is_set(): 
+        while not self.app.state.shutdown.is_set():
 
             monologue_enabled = self.app.state.features.get("monologue", True)
             #self.logger.debug(f"MonologueScheduler loop - start: {self.app.state.start.is_set()}, monologue_enabled: {monologue_enabled}, last_activity: {self.last_activity}")
@@ -33,7 +34,7 @@ class MonologueScheduler(Service):
                 await asyncio.sleep(1)
                 continue
 
-            if monologue_enabled: 
+            if monologue_enabled:
                 elapsed = (datetime.now(timezone.utc) - self.last_activity).total_seconds()
                 if elapsed >= self.inactivity_timeout:
                     self.logger.info("Inactivity timeout reached, generating monologue")
@@ -51,7 +52,7 @@ class MonologueScheduler(Service):
 
         topic = await self._get_topic_for_monologue()
         prompt = f"Monologue about {topic}, in character as Qubit."
-    
+
         event = MonologueEvent(
             type="monologue_prompt",
             user="system",
@@ -59,7 +60,7 @@ class MonologueScheduler(Service):
             data={"user": "system", "topic": topic, "prompt": prompt},
             prompt=prompt
         )
-    
+
         await self._publish_event_to_broker(event)
 
     async def _get_topic_for_monologue(self) -> str:
@@ -71,11 +72,9 @@ class MonologueScheduler(Service):
                     "a short adventure tale"
                 ]
         return random.choice(topics)
-    
+
 
     async def _publish_event_to_broker(self, event) -> None:
         if self.event_bus:
             await self.event_bus.publish(event)
             self.logger.info(f"Published {event}")
-    
-

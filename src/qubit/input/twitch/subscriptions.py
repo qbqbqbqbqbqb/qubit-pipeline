@@ -1,14 +1,39 @@
-from twitchAPI.eventsub.websocket import EventSubWebsocket
-from twitchAPI.twitch import Twitch  # for twitch_streamer
 import logging
+from twitchAPI.eventsub.websocket import EventSubWebsocket
+from twitchAPI.twitch import Twitch
+from twitchAPI.twitch import TwitchAPIException
+
 from config.env_config import Settings
 
 class TwitchWebsocketSubMixin:
+    """
+    Mixin providing Twitch EventSub WebSocket subscription functionality.
+
+    Designed to be used with a class that initializes Twitch clients, this mixin
+    handles subscribing to channel follow events via Twitch's EventSub WebSocket API.
+
+    Attributes:
+        logger (logging.Logger): Logger instance for reporting subscription status and errors.
+        twitch_streamer (Twitch): Authenticated Twitch client representing the streamer.
+        eventsub (EventSubWebsocket): EventSub WebSocket client used to listen to Twitch events.
+        settings (Settings): Pydantic settings instance containing Twitch channel configuration.
+        _on_follow (Callable[[object], None]): Callback function to invoke when a follow event occurs.
+
+    Methods:
+        _subscribe_to_follow_events(): Asynchronously subscribes to follow events for the configured Twitch channel.
+            Logs subscription success or errors.
+    
+    Notes:
+        - The class expects that `twitch_streamer` and `eventsub` are properly initialized
+          before calling `_subscribe_to_follow_events()`.
+        - Intended to be used as a mixin in combination with a service class managing
+          Twitch authentication and event loops.
+    """
 
     logger: logging.Logger
     twitch_streamer: Twitch
     eventsub: EventSubWebsocket
-    settings: Settings   
+    settings: Settings
     _on_follow: callable
 
     async def _subscribe_to_follow_events(self):
@@ -40,5 +65,8 @@ class TwitchWebsocketSubMixin:
 
             self.logger.info(f"Follow subscription succeeded, id: {sub_id}")
 
-        except Exception as e:
-            self.logger.error(f"_subscribe_to_follow_events error: {e}")
+        except (TwitchAPIException) as e:
+            self.logger.error(f"_subscribe_to_follow_events Twitch error: {e}")
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            self.logger.error(f"_subscribe_to_follow_events unexpected error: {e}")
+            

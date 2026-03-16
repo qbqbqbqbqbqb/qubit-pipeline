@@ -8,6 +8,7 @@ class Service:
 
     def __init__(self, name):
         self.name = name
+        self.app = None
         self.event_bus = None
         self.logger = get_logger(name)
         self._worker_task = None
@@ -32,7 +33,7 @@ class Service:
         await self.app.state.start.wait()
 
     async def _run(self):
-         self.logger.info(f"{self.name} main loop is running")
+        self.logger.info(f"{self.name} main loop is running")
 
     async def stop(self):
         self.logger.info(f"Stopping {self.name}")

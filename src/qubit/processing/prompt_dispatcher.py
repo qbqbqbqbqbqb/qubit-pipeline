@@ -16,7 +16,7 @@ class PromptDispatcher(Service):
     SUBSCRIPTIONS = {
         "response_prompt": "enqueue",
     }
-        
+
     def __init__(self, llm_client = AsyncHuggingFaceLLM, max_age_seconds=30):
         super().__init__("prompt_dispatcher")
         self.llm = llm_client
@@ -35,7 +35,7 @@ class PromptDispatcher(Service):
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
                 continue
-    
+
             while True:
                 event: ResponsePromptEvent = await self.queue.get()
                 try:
@@ -60,7 +60,7 @@ class PromptDispatcher(Service):
             except asyncio.queues.QueueEmpty:
                 break
         await super().stop()
-        
+
     async def enqueue(self, event: ResponsePromptEvent):
         event_type = getattr(event, "type", "unknown")
         user = event.data.get("user", "unknown")
@@ -79,7 +79,7 @@ class PromptDispatcher(Service):
         if interaction_level:
             self.system_interaction = interaction_level
 
-    
+
     async def _generate_with_retries(self, prompt, max_attempts=3) -> Any:
         """
         Attempt to generate a response up to `max_attempts` times.
@@ -97,7 +97,7 @@ class PromptDispatcher(Service):
                     self.logger.warning(f"[Attempt {attempt}] Empty response, retrying...")
             except Exception as e:
                 self.logger.error(f"[Attempt {attempt}] LLM generation error: {e}")
-            
+
             await asyncio.sleep(1)
 
         self.logger.error(f"All {max_attempts} attempts failed for prompt: {prompt}")
@@ -122,7 +122,7 @@ class PromptDispatcher(Service):
 
         assembler = PromptAssembler()
         assembler.add(core_system_module())
-        assembler.add(personality_module(            
+        assembler.add(personality_module(
             mood=self.system_mood,
             tone=self.system_tone,
             interaction_level=self.system_interaction))
@@ -144,7 +144,7 @@ class PromptDispatcher(Service):
         assembler.add(input_module(prompt_text))
         for inj in assembly_event.contributions:
             self.logger.info(f"Injection ({inj.priority}): {inj.content[:80]}")
-                    
+
         final_prompt = assembler.build()
         return await self._generate_with_retries(final_prompt, max_attempts=3)
 
@@ -166,3 +166,4 @@ class PromptDispatcher(Service):
         )
         await self.event_bus.publish(generated_event)
         self.logger.info(f"Published {generated_event}")
+        
