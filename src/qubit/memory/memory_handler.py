@@ -18,7 +18,6 @@ Typical event sources include:
 """
 from typing import Any
 
-from src.qubit.memory.memory_service import MemoryService
 from src.utils.log_utils import get_logger
 
 class MemoryHandler:
@@ -43,7 +42,8 @@ class MemoryHandler:
         Mapping of event types to handler methods.
     """
 
-    def __init__(self: Any, memory_service: MemoryService):
+    def __init__(self: Any, memory_service: Any): # circular import if i instantiate type,
+                                                  #TODO: find out if theres a better way to organise RAG to solve this
         self.logger = get_logger("MemoryHandler")
         self.memory_service = memory_service
 

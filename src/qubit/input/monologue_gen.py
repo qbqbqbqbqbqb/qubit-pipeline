@@ -12,7 +12,7 @@ class MonologueScheduler(Service):
     }
 
     def __init__(self, dispatcher,  llm, inactivity_timeout=120):
-        super().__init__("monologue scheduler")
+        super().__init__("MonologueScheduler")
         self.dispatcher = dispatcher
         self.llm = llm
         self.inactivity_timeout = inactivity_timeout
@@ -29,11 +29,11 @@ class MonologueScheduler(Service):
         while not self.app.state.shutdown.is_set():
 
             monologue_enabled = self.app.state.features.get("monologue", True)
-            self.logger.debug("[_run] MonologueScheduler loop - start: %s, " \
+            """self.logger.debug("[_run] MonologueScheduler loop - start: %s, " \
             "monologue_enabled: %s, last_activity: %s",
                               self.app.state.start.is_set(),
                               monologue_enabled,
-                              self.last_activity)
+                              self.last_activity)"""
             if not self.app.state.start.is_set() or not monologue_enabled:
                 await asyncio.sleep(1)
                 continue

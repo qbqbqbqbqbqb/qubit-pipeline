@@ -1,9 +1,3 @@
-import re
-from typing import Dict, List, Tuple
-
-from src.qubit.processing.prompt_dispatcher import PromptDispatcher
-from src.utils.log_utils import get_logger
-
 """
 Module for generating reflections from chat history.
 
@@ -15,6 +9,11 @@ understanding.
 Classes:
     ReflectionGenerator: Handles the generation and parsing of reflection-based memories.
 """
+import re
+from typing import Any, List, Tuple
+
+from src.qubit.processing.prompt_dispatcher import PromptDispatcher
+from src.utils.log_utils import get_logger
 
 class ReflectionGenerator:
     """
@@ -23,7 +22,7 @@ class ReflectionGenerator:
     This class interfaces with the chat history manager and response generator to create
     memories in the form of Q&A pairs that highlight important insights from conversations.
     """
-    def __init__(self, dispatcher: PromptDispatcher = None, reflection_threshold: int = 20):
+    def __init__(self: Any, dispatcher: PromptDispatcher = None, reflection_threshold: int = 20):
         """
         Initialize the ReflectionGenerator.
         """
@@ -47,7 +46,8 @@ Q3: [Question]
 A3: [Answer]
 """
 
-    async def perform_reflection(self, memory_manager) -> List[Tuple[str, str]]:
+    async def perform_reflection(self: Any, memory_manager: Any) -> List[Tuple[str, str]]: # circular import if i instantiate type, 
+                                                                                          #TODO: find out if theres a better way to organise RAG to solve this
         """
         Perform reflection on recent messages to generate Q&A memories.
 
@@ -95,7 +95,7 @@ A3: [Answer]
             self.logger.error("[perform_reflection] Error during reflection generation: %s", e)
             return []
 
-    def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:
+    def _parse_qa_pairs(self: Any, response: str) -> List[Tuple[str, str]]:
         """
         Parse question-answer pairs from the LLM's reflection response.
 

@@ -22,3 +22,6 @@ TODO - edit
 
 TODO - maybe
 - add ending stream input?
+
+TODO - bugs
+- chat history from past session is still present on restarting when timestamps should be invalid
