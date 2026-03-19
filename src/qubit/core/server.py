@@ -131,12 +131,6 @@ class WebSocketServerService(Service):
                 elif action == 'start':
                     self.logger.info("[webSocketHandler] Start command from frontend")
                     self.app.state.start.set()
-                    event = Event(
-                            type="bot_started",
-                            timestamp=datetime.now(timezone.utc).isoformat(),
-                            data={"status": "active"},
-                        )
-                    await self.event_bus.publish(event)
                     await self.broadcast_states()
         except Exception as e:
             self.logger.error(e)

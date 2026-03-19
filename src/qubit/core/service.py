@@ -18,11 +18,11 @@ class Service:
 
         self.logger.info("[start] Starting %s — waiting for START command", self.name)
 
+        self._register_subscriptions()
+
         await self._wait_for_start()
 
         self.logger.info("[start] %s started on frontend click", self.name)
-
-        self._register_subscriptions()
 
         self.logger.info("[_register_subscriptions] %s has registered subscriptions: %s", self.name, list(self.SUBSCRIPTIONS.keys()))
 

@@ -72,7 +72,7 @@ class ModerationHandler(Service):
             user=sanitised_user,
             tier=event.tier,
             sub_type=event.sub_type,
-            sub_message=event.sub_message,
+            sub_message=sanitised_msg,
             timestamp=event.timestamp
         )
 

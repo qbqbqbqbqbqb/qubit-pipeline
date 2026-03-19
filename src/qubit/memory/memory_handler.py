@@ -52,6 +52,7 @@ class MemoryHandler:
             "twitch_subscription_processed": self.event_memory,
             "twitch_follow_processed": self.event_memory,
             "monologue_prompt": self.monologue_memory,
+            "start_message": self.monologue_memory,
             "response_generated": self.response_memory,
         }
 
@@ -102,7 +103,7 @@ class MemoryHandler:
         """AI thoughts"""
         self.logger.info("[monologue_memory] Handling monologue memory event")
         self.memory_service.add_conversation_item(
-            "Qubit",
+            "System",
             event.prompt,
             metadata={"source": "monologue", "timestamp": getattr(event, "timestamp", None)}
         )
