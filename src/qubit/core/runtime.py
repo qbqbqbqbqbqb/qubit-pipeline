@@ -1,6 +1,7 @@
 import asyncio
+from datetime import datetime, timezone
 import signal
-
+from src.qubit.core.events import Event
 from src.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
@@ -17,6 +18,13 @@ async def run_app(app):
     await app.state.start.wait()
 
     logger.info(" Bot started")
+
+    event = Event(
+            type="bot_started",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            data={"status": "active"},
+        )
+    await app.event_bus.publish(event)
 
     def shutdown():
         app.state.shutdown.set()

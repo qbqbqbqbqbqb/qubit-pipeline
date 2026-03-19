@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 from src.qubit.core.service import Service
 from src.qubit.utils.message_tracker import MessageTracker
 
-class MonologueInputHandler(Service):
+class AutonomousInputHandler(Service):
     """
     Service responsible for handling incoming monologue-style prompt events.
 
@@ -60,11 +60,12 @@ class MonologueInputHandler(Service):
 
     SUBSCRIPTIONS = {
         "monologue_prompt": "handle_event",
+        "start_message": "handle_event",
     }
 
     def __init__(self, max_age_seconds=30, prompt_handler=None, memory_handler=None):
         """
-        Initialize the MonologueInputHandler service.
+        Initialize the AutonomousInputHandler service.
 
         Parameters
         ----------

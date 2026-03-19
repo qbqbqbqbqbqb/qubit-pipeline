@@ -85,3 +85,8 @@ class PromptAssemblyEvent(Event):
     user: str
     prompt_text: str
     contributions: List[PromptInjection] = field(default_factory=list)
+
+@dataclass
+class MiscInputEvent(Event):
+    user: str
+    prompt: Optional[str] = None

@@ -14,7 +14,8 @@ class LLMPromptHandler:
             "twitch_raid_processed": self._build_raid_prompt,
             "twitch_follow_processed": self._build_follow_prompt,
             "twitch_subscription_processed": self._build_subscription_prompt,
-            "monologue_prompt": self._build_monologue_prompt
+            "monologue_prompt": self._build_monologue_prompt,
+            "start_message": self._build_monologue_prompt
         }
         
     async def handle_event(self, event):

@@ -1,7 +1,8 @@
 
+from src.qubit.input.misc_events_listener import MiscEventsListener
 from src.qubit.memory.memory_handler import MemoryHandler
 from src.qubit.input.monologue_gen import MonologueScheduler
-from src.qubit.input.monologue_input_handler import MonologueInputHandler
+from src.qubit.input.monologue_input_handler import AutonomousInputHandler
 from src.qubit.input.input_handler import InputHandler
 from src.qubit.input.input_moderation_handler import ModerationHandler
 from src.qubit.processing.prompt_builder import LLMPromptHandler
@@ -44,13 +45,14 @@ async def create_app():
     input_handler = InputHandler(max_age_seconds=30, prompt_handler=llm_handler, memory_handler=memory_handler)
     moderation_handler = ModerationHandler()
     monologue_scheduler = MonologueScheduler(dispatcher=dispatcher, llm=llm_handler, inactivity_timeout=120)
-    monologue_input_handler = MonologueInputHandler(max_age_seconds=30, prompt_handler=llm_handler, memory_handler=memory_handler)
+    monologue_input_handler = AutonomousInputHandler(max_age_seconds=30, prompt_handler=llm_handler, memory_handler=memory_handler)
 
     twitch = TwitchListener(settings=settings)
+    misc_event = MiscEventsListener()
     output_handler = OutputHandler(TTSHandler(), OBSHandler(settings=settings),  memory_handler=memory_handler)
 
 
-
+    app.add_service(misc_event)
     app.add_service(input_handler)
     app.add_service(moderation_handler)
     app.add_service(monologue_scheduler)
