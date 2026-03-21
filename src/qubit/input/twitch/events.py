@@ -173,9 +173,11 @@ class TwitchEventsMixin:
 
             self.logger.debug(f"[_on_message] Message from {user}: {message}")
 
+            source = "twitch"
+            
             event = TwitchChatEvent(
                 type="twitch_chat",
-                data={"user": user, "text": message},
+                data={"user": user, "text": message, "source": source},
                 user=user,
                 text=message,
                 timestamp = datetime.now(timezone.utc).isoformat()
