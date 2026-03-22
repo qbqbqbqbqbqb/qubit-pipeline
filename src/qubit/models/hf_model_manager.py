@@ -1,3 +1,12 @@
+"""Hugging Face model manager implementation.
+
+This module provides HuggingFaceModelManager, a concrete implementation
+of BaseModelManager for loading and interacting with Hugging Face
+causal language models. It supports quantisation, LoRA adapters, and
+customisable text generation settings.
+"""
+
+from typing import Any, Union, List, Dict, Optional
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
@@ -5,22 +14,42 @@ from peft import PeftModel
 from src.qubit.models.base_model_manager import BaseModelManager
 from src.qubit.models.model_config import ModelConfig
 
-
-
 class HuggingFaceModelManager(BaseModelManager):
+    """Model manager for Hugging Face causal language models.
 
-    def __init__(self, config: ModelConfig):
+    This class handles loading, configuring, and generating text from
+    Hugging Face models. It supports optional quantisation (4-bit),
+    LoRA adapters, and flexible prompt formatting.
+
+    Attributes:
+        config (ModelConfig): Configuration for model loading and generation.
+    """
+
+    def __init__(self: Any, config: ModelConfig) -> None:
+        """Initialise the model manager and load the model.
+
+        Args:
+            config (ModelConfig): Model configuration settings.
+        """
         self.config = config
         self._load()
 
-    def _load(self):
+    def _load(self: Any) -> None:
+        """Load the tokenizer and model based on the configuration.
+
+        This includes:
+        - Initialising the tokenizer
+        - Applying quantisation settings if enabled
+        - Loading the model with device mapping
+        - Attaching LoRA adapters if provided
+        """
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.config.model_name,
             trust_remote_code=self.config.trust_remote_code
         )
         self._tokenizer.pad_token = self._tokenizer.eos_token
 
-        quant_config = None
+        quant_config = Optional[BitsAndBytesConfig] = None
         if self.config.load_in_4bit:
             quant_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -46,14 +75,35 @@ class HuggingFaceModelManager(BaseModelManager):
         self._model.eval()
 
     @property
-    def model(self):
+    def model(self: Any) -> AutoModelForCausalLM:
+        """Return the loaded Hugging Face model.
+
+        Returns:
+            Any: The underlying model instance.
+        """
         return self._model
 
     @property
-    def tokenizer(self):
+    def tokenizer(self: Any) -> AutoTokenizer:
+        """Return the tokenizer associated with the model.
+
+        Returns:
+            Any: Tokenizer used for encoding and decoding text.
+        """
         return self._tokenizer
 
-    def _build_generation_config(self, max_new_tokens):
+    def _build_generation_config(self: Any, max_new_tokens: int) -> Dict[str, Any]:
+        """Construct generation parameters for model inference.
+
+        This method merges the configured GenerationConfig with runtime
+        parameters such as max_new_tokens and resolves EOS token IDs.
+
+        Args:
+            max_new_tokens (int): Maximum number of tokens to generate.
+
+        Returns:
+            dict: Dictionary of generation parameters for model.generate().
+        """
         gen = self.config.generation_config
 
         eos_token_id = self.tokenizer.eos_token_id
@@ -85,7 +135,16 @@ class HuggingFaceModelManager(BaseModelManager):
 
         return config
 
-    def format_chat_prompt(self,messages):
+    def format_chat_prompt(self: Any, messages: List[Dict[str, str]]) -> str:
+        """Format a list of chat messages into a plain text prompt.
+
+        Args:
+            messages (list[dict]): List of message dictionaries with
+                'role' and 'content' keys.
+
+        Returns:
+            str: Formatted prompt string.
+        """
         parts = []
         for m in messages:
             role = m["role"]
@@ -93,8 +152,19 @@ class HuggingFaceModelManager(BaseModelManager):
             parts.append(f"{role}: {content}")
         return "\n".join(parts)
 
-    def generate_dialogue(self, prompt: str, max_new_tokens: int):
+    def generate_dialogue(self: Any, prompt: str, max_new_tokens: int) -> str:
+        """Generate a response from the model.
 
+        This method handles prompt formatting, tokenisation, and model
+        inference, then decodes the generated tokens into text.
+
+        Args:
+            prompt (str | list): Input prompt or structured messages.
+            max_new_tokens (int): Maximum number of tokens to generate.
+
+        Returns:
+            str: Generated response text.
+        """
         if isinstance(prompt, list):
             prompt = self.format_chat_prompt(prompt)
 
@@ -115,14 +185,30 @@ class HuggingFaceModelManager(BaseModelManager):
             skip_special_tokens=True
         ).strip()
 
-    def unload(self):
+    def unload(self: Any) -> None:
+        """Unload the model and free GPU memory.
+
+        This method deletes the model instance and clears CUDA cache
+        to release GPU resources.
+        """
         del self._model
         torch.cuda.empty_cache()
 
-    def prepare_prompt(self, prompt):
+    def prepare_prompt(self: Any, prompt: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
+        """Prepare and normalise a prompt for model input.
+
+        This method applies system prompts, chat templates, or fallback
+        formatting depending on the input type and configuration.
+
+        Args:
+            prompt (str | list | dict): Input prompt in various formats.
+
+        Returns:
+            str: Prepared prompt string ready for tokenisation.
+        """
         if self.config.system_model_specific_prompt and isinstance(prompt, str):
             prompt = f"{self.config.system_model_specific_prompt}\n{prompt}"
-    
+
         if isinstance(prompt, list) and self.config.use_chat_template:
             return self.tokenizer.apply_chat_template(
                 prompt,

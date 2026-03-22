@@ -1,4 +1,5 @@
 import asyncio
+from typing import Any
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 
 from src.qubit.core.service import Service
@@ -22,7 +23,7 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
 
 
     # TODO: split this up, a lot happening
-    async def _run(self) -> None:
+    async def _run(self: Any) -> None:
         await super()._run()
         while not self.app.state.shutdown.is_set():
             twitch_enabled = self.app.state.features.get("twitch", True)
@@ -54,7 +55,7 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
                     await asyncio.sleep(5)
 
 
-    async def _start_client(self) -> bool:
+    async def _start_client(self: Any) -> bool:
         self.logger.info("[_start_client] Starting TwitchClient...")
         try:
             await self._authenticate_bot_account()
@@ -68,7 +69,7 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
             return False
 
 
-    async def stop(self)  -> None:
+    async def stop(self: Any)  -> None:
         """
         Disconnect from Twitch services.
 

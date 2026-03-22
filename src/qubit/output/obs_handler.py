@@ -1,20 +1,21 @@
-import asyncio
-import base64
-import hashlib
-import json
-import websocket
-
-from config.config import TTS_SUBTITLE_NAME
-
-# === Setup colorlog logger ===
-from src.utils.log_utils import get_logger
-logger = get_logger("OBS_Websocket_Controller")
 """
 Module for managing OBS WebSocket connections and subtitle operations.
 
 This module provides the OBSManager class to handle authentication and communication
 with OBS Studio via WebSocket, including updating subtitle text sources.
 """
+
+import asyncio
+import base64
+import hashlib
+import json
+from typing import Any
+import websocket
+
+from config.config import TTS_SUBTITLE_NAME
+
+from src.utils.log_utils import get_logger
+logger = get_logger("OBS_Websocket_Controller")
 
 
 class OBSHandler:
@@ -25,7 +26,7 @@ class OBSHandler:
     and provides methods to update text sources for subtitles.
     """
 
-    def __init__(self, settings):
+    def __init__(self: Any, settings: Any) -> None:
         """
         Initialize the OBSManager with settings.
 
@@ -40,7 +41,7 @@ class OBSHandler:
         self.obs_port = self.settings.obs_port
         self.url = f"ws://{self.obs_host}:{self.obs_port}"
 
-    def _build_auth_string(self, salt, challenge):
+    def _build_auth_string(self: Any, salt: str, challenge: str) -> str:
         """
         Build the authentication string for OBS WebSocket.
         Args:
@@ -58,10 +59,10 @@ class OBSHandler:
             ).decode('utf-8')
             return auth
         except Exception as e:
-            logger.error(f"Error building auth string: {e}")
+            logger.error("Error building auth string: %s", e)
             raise
 
-    def connect_to_obs(self):
+    def connect_to_obs(self: Any) -> websocket.WebSocket:
         """
         Establish a WebSocket connection to OBS and authenticate.
         Returns:
@@ -91,14 +92,14 @@ class OBSHandler:
                     raise Exception("Empty response after auth payload")
             return ws
         except Exception as e:
-            logger.error(f"Error connecting to OBS: {e}")
+            logger.error("Error connecting to OBS: %s", e)
             raise
 
     async def update_subtitle_text_and_style(
-        self,
-        source_name=TTS_SUBTITLE_NAME, new_text: str = "Default", font_face="Arial", font_size=50,
-        width=1920, height=400, valign="center", word_wrap=True
-    ):
+        self: Any,
+        source_name:str=TTS_SUBTITLE_NAME, new_text: str = "Default", font_face:str="Arial", font_size:int=50,
+        width:int=1920, height:int=400, valign:str="center", word_wrap:bool=True
+    ) -> None:
         """
         Update subtitle text source in OBS with wrapping, font size, vertical alignment, and custom extents.
         
@@ -140,11 +141,11 @@ class OBSHandler:
             }
             ws.send(json.dumps(payload))
             response = ws.recv()
-            logger.info(f"Subtitle text and style updated: {response}")
+            logger.info("Subtitle text and style updated: %s", response)
         except Exception as e:
-            logger.error(f"Failed to update subtitle text and style: {e}")
+            logger.error("Failed to update subtitle text and style: %s", e)
         finally:
             try:
                 ws.close()
-            except:
-                pass
+            except Exception as e:
+                logger.error("Error closing WebSocket connection: %s", e)

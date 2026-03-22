@@ -1,3 +1,11 @@
+"""Model manager singleton.
+
+This module provides the ModelManager class, which is responsible for
+initialising and managing a single instance of a HuggingFaceModelManager.
+It loads configuration from environment variables and ensures that only
+one model instance is created during runtime.
+"""
+
 import os
 from dotenv import load_dotenv
 from src.qubit.models.hf_model_manager import HuggingFaceModelManager
@@ -5,9 +13,26 @@ from src.qubit.models.model_registry import MODEL_REGISTRY
 
 
 class ModelManager:
+    """Singleton wrapper for managing a Hugging Face model instance.
+
+    This class ensures that only one instance of HuggingFaceModelManager
+    is created. It handles environment configuration, model selection,
+    and optional LoRA adapter validation during initialisation.
+    """
     _instance = None
 
     def __new__(cls):
+        """Create or return the singleton instance.
+
+        This method initialises the model on first access by:
+        - Validating the LoRA adapter path
+        - Loading environment variables
+        - Selecting the active model configuration
+        - Instantiating the HuggingFaceModelManager
+
+        Returns:
+            ModelManager: The singleton instance wrapping the model manager.
+        """
         if cls._instance is None:
 
             lora_path = "training_data/training/qubit-lora-final"
@@ -43,4 +68,9 @@ class ModelManager:
 
     @classmethod
     def get_instance(cls):
+        """Get the singleton model manager instance.
+
+        Returns:
+            ModelManager: The singleton instance of the model manager.
+        """
         return cls()

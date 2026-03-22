@@ -1,5 +1,32 @@
+"""Twitch event handling mixin for chat and EventSub integration.
+
+This module provides TwitchEventsMixin, a mixin class designed to add
+Twitch chat and EventSub event handling capabilities to a Twitch bot
+application. It manages the following responsibilities:
+
+- Monitors Twitch chat messages using the Twitch Chat API.
+- Registers handlers for chat messages, subscriptions, raids, and follows.
+- Converts Twitch API events into internal event objects:
+  TwitchChatEvent, TwitchFollowEvent, TwitchRaidEvent, TwitchSubscriptionEvent.
+- Publishes these internal events to the application's event bus for
+  downstream processing.
+- Logs detailed debug and info messages for each event type.
+
+The mixin is intended to be combined with a bot or application class
+that provides access to an authenticated Twitch client (`twitch_bot`),
+application state, and an event bus.
+
+Classes:
+    TwitchEventsMixin: Adds Twitch chat and EventSub event handling to a bot.
+
+Usage example:
+    class MyTwitchBot(TwitchEventsMixin, SomeBotBaseClass):
+        async def start(self):
+            await self._setup_chat()
+"""
 from datetime import datetime, timezone
 import logging
+from typing import Any
 
 from twitchAPI.type import ChatEvent
 from twitchAPI.chat import Chat, ChatMessage, EventData
@@ -30,7 +57,7 @@ class TwitchEventsMixin:
     app: any
 
 
-    async def _setup_chat(self):
+    async def _setup_chat(self: Any) -> None:
         """
         Set up chat monitoring for the Twitch channel.
 
@@ -47,7 +74,7 @@ class TwitchEventsMixin:
         self.chat.register_event(ChatEvent.RAID, self._on_raid)
         self.chat.start()
 
-    async def _on_subscription(self, event: EventData):
+    async def _on_subscription(self: Any, event: EventData) -> None:
         subs_enabled = self.app.state.features.get("subs", True)
         if not subs_enabled:
             return
@@ -78,7 +105,7 @@ class TwitchEventsMixin:
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"[_on_subscription] Error handling subscription event: {e}")
 
-    async def _on_raid(self, event: EventData):
+    async def _on_raid(self: Any, event: EventData) -> None:
         raid_enabled = self.app.state.features.get("raid", True)
         if not raid_enabled:
             return
@@ -101,7 +128,7 @@ class TwitchEventsMixin:
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error("[_on_raid] Error handling raid event: %s", e)
 
-    async def _on_follow(self, event: ChannelFollowEvent):
+    async def _on_follow(self: Any, event: ChannelFollowEvent) -> None:
         follow_enabled = self.app.state.features.get("follow", True)
         if not follow_enabled:
             return
@@ -126,7 +153,7 @@ class TwitchEventsMixin:
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"[_on_follow] Error handling follow event: {e}")
 
-    async def _on_ready(self, event: EventData):
+    async def _on_ready(self: Any, event: EventData) -> None:
         """
         Event handler called when the chat bot is ready.
 
@@ -148,7 +175,7 @@ class TwitchEventsMixin:
         except Exception as e:  # pylint: disable=broad-exception-caught
             self.logger.error(f"[_on_ready] Failed to join channel: {e}")
 
-    async def _on_message(self, msg: ChatMessage):
+    async def _on_message(self: Any, msg: ChatMessage) -> None:
         """
         Event handler for incoming chat messages.
 
@@ -174,7 +201,7 @@ class TwitchEventsMixin:
             self.logger.debug(f"[_on_message] Message from {user}: {message}")
 
             source = "twitch"
-            
+
             event = TwitchChatEvent(
                 type="twitch_chat",
                 data={"user": user, "text": message, "source": source},

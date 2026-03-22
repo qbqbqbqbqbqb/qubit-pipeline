@@ -1,12 +1,19 @@
+"""Data structures for prompt injection handling."""
 
 from dataclasses import dataclass
 
-"""
-Represents a prompt injection that can be added to the prompt before sending to the LLM.
-The priority field can be used to control the order of injections (higher priority first).
-"""
-
 @dataclass
 class PromptInjection:
+    """
+    Represent a prompt injection segment for LLM input construction.
+
+    Each injection contains content and an associated priority that
+    determines its position in the final assembled prompt. Higher
+    priority injections appear earlier in the prompt.
+
+    Attributes:
+        content (str): The text content of the injection.
+        priority (int): Ordering priority (higher values come first).
+    """
     content: str
     priority: int = 0

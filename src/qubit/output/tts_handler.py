@@ -1,7 +1,28 @@
+"""Asynchronous text-to-speech (TTS) handler using Piper engine.
+
+This module provides TTSHandler, an asynchronous wrapper for text-to-speech
+synthesis that can be integrated with queue-based output systems such as
+OutputHandler. It uses the Piper TTS engine (via TTSManager) to generate
+audio from text, optionally integrates with VTube lip-sync modules, and
+supports non-blocking playback using asyncio and PyAudio.
+
+Main features:
+- Async speech synthesis for integration with event loops.
+- WAV byte generation and decoding into numpy arrays for playback.
+- Threaded playback to prevent blocking the main asyncio loop.
+- Support for multiple speakers using a JSON-based speaker ID map.
+- Optional text normalization via `normalise_text_for_tts`.
+
+Classes:
+    TTSHandler: Handles asynchronous TTS generation, decoding, and playback.
+"""
 import asyncio
 import io
+from typing import Any
 import wave
+import json
 import numpy as np
+from piper import SynthesisConfig
 import pyaudio
 from config.config import TTS_SPEAKER_NAME
 from src.qubit.utils.tts_utils import normalise_text_for_tts
@@ -13,7 +34,7 @@ class TTSHandler:
     Can be used with OutputHandler's queue system.
     """
 
-    def __init__(self, tts_manager=TTSManager()):
+    def __init__(self: Any, tts_manager=TTSManager()):
         """
         Args:
             tts_manager: Your TTSManager or Piper TTS engine instance
@@ -22,7 +43,7 @@ class TTSHandler:
         self.tts_manager = tts_manager
         self._speaking_lock = asyncio.Lock()
 
-    async def speak(self, text: str):
+    async def speak(self: Any, text: str) -> None:
         """
         Speak the given text asynchronously.
         Handles VTube lip-sync if available.
@@ -39,7 +60,7 @@ class TTSHandler:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self._play_audio, sample_rate, audio_np)
 
-    def _generate_wav_bytes(self, text: str) -> bytes:
+    def _generate_wav_bytes(self: Any, text: str) -> bytes:
         """
         Synthesize WAV bytes from text using TTS engine.
         """
@@ -50,7 +71,7 @@ class TTSHandler:
                 self.tts_manager.voice.synthesize_wav(text, wav_file, syn_config=syn_config)
             return wav_io.getvalue()
 
-    def _decode_wav_bytes(self, wav_data: bytes) -> tuple[int, np.ndarray]:
+    def _decode_wav_bytes(self: Any, wav_data: bytes) -> tuple[int, np.ndarray]:
         """
         Decode WAV bytes into sample rate and numpy array for playback.
         """
@@ -61,7 +82,7 @@ class TTSHandler:
                 audio_np = np.frombuffer(audio_data, dtype=np.int16)
         return sample_rate, audio_np
 
-    def _play_audio(self, sample_rate: int, audio_np: np.ndarray):
+    def _play_audio(self: Any, sample_rate: int, audio_np: np.ndarray) -> None:
         """
         Play the audio using PyAudio.
         """
@@ -78,21 +99,20 @@ class TTSHandler:
         stream.close()
         pa.terminate()
 
-    def _get_speaker_id(self) -> int:
+    def _get_speaker_id(self: Any) -> int:
         """
         Retrieve speaker ID from TTS manager's model config.
         """
         json_path = self.tts_manager.model_path.with_suffix(".onnx.json")
-        import json
+
         with open(json_path, "r", encoding="utf-8") as f:
             config = json.load(f)
         return config["speaker_id_map"][TTS_SPEAKER_NAME]
 
-    def _build_synthesis_config(self, speaker_id: int):
+    def _build_synthesis_config(self: Any, speaker_id: int) -> SynthesisConfig:
         """
         Build the synthesis configuration for Piper.
         """
-        from piper import SynthesisConfig
         return SynthesisConfig(
             speaker_id=speaker_id,
             length_scale=0.9,

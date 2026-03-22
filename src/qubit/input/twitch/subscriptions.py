@@ -1,4 +1,21 @@
+"""Twitch EventSub WebSocket subscription mixin.
+
+This module provides TwitchWebsocketSubMixin, a mixin class to enable
+EventSub WebSocket subscriptions for a Twitch bot. It is designed to
+subscribe to channel follow events for a configured Twitch channel and
+invoke a callback when such events occur.
+
+Intended usage:
+- Combine with a service class that initializes Twitch clients (`twitch_streamer`)
+  and EventSub WebSocket (`eventsub`).
+- The mixin manages asynchronous subscription and logging.
+
+Classes:
+    TwitchWebsocketSubMixin: Mixin adding Twitch EventSub follow subscription support.
+"""
+
 import logging
+from typing import Any
 from twitchAPI.eventsub.websocket import EventSubWebsocket
 from twitchAPI.twitch import Twitch
 from twitchAPI.twitch import TwitchAPIException
@@ -36,7 +53,7 @@ class TwitchWebsocketSubMixin:
     settings: Settings
     _on_follow: callable
 
-    async def _subscribe_to_follow_events(self):
+    async def _subscribe_to_follow_events(self: Any) -> None:
         try:
             self.logger.info("[_subscribe_to_follow_events] Subscribing to follow events...")
 
