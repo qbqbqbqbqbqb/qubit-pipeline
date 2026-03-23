@@ -22,19 +22,10 @@ class FrontendTriggeredMonologueBehavior(Behavior):
             f"[FrontendMonologue] TRIGGERED by frontend command '{command}' → {topic}"
         )
 
-        event = MonologueEvent(
-            type="monologue_prompt",
-            user="system",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            data={
-                "user": "system",
-                "topic": topic,
-                "prompt": prompt,
-            },
-            prompt=prompt,
-        )
-
-        return event
+        return {
+            "type": "monologue",
+            "topic": topic,
+        }
 
     def _get_topic_for_command(self, command: str) -> str:
         mapping = {

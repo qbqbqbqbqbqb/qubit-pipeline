@@ -38,18 +38,10 @@ class IdleMonologueBehavior(Behavior):
 
         self.logger.info(f"[IdleMonologue] TRIGGERED ({reason}) → {topic}")
 
-        return MonologueEvent(
-            type="monologue_prompt",
-            user="system",
-            timestamp=now.isoformat(),
-            data={
-                "user": "system",
-                "topic": topic,
-                "reason": reason,
-                "prompt": prompt,
-            },
-            prompt=prompt,
-        )
+        return {
+            "type": "monologue",
+            "topic": topic,
+        }
 
     def _get_topic(self) -> str:
         topics = [

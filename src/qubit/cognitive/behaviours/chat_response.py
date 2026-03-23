@@ -32,14 +32,9 @@ class ChatResponseBehavior(Behavior):
         if not best:
             return None
 
-        return TwitchChatEvent(
-            type="twitch_chat_chosen",
-            user=best.user if hasattr(best, "user") else "unknown",
-            timestamp=now.isoformat(),
-            data={
-                "message": best,
-                "reason": "chat_response"
-            },
-            prompt=best.content if hasattr(best, "content") else str(best),
-        )
+        return {
+            "type": "response",
+            "best_message": best,
+            "reason": "chat_response"
+        }
     
