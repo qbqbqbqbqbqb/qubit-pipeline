@@ -27,7 +27,8 @@ class InputHandler(Service):
         await super().stop()
 
     async def handle_event(self, event) -> None:
-        self.logger.info("[handle_event] Handling event in InputHandlerService")
+        self.logger.info("[handle_event] Handling event in InputHandlerService (Cognitive-controlled mode)")
+
         text = event.data.get("text", "").lower().strip()
 
         if await self._check_repeated_message(text):
@@ -38,11 +39,7 @@ class InputHandler(Service):
         if await self._check_stale_message(event, text):
             return
 
-        built_input = await self._build_event_prompt(event)
-
         await self._handle_memory_event(event)
-
-        await self._queue_built_event(built_input)
 
 
     async def _check_repeated_message(self, text) -> bool:

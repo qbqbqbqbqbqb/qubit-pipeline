@@ -5,6 +5,7 @@ from src.qubit.core.events import MonologueEvent, ResponsePromptEvent
 from src.qubit.cognitive.behaviours.idle_monologue import IdleMonologueBehavior
 from src.qubit.cognitive.behaviours.chat_response import ChatResponseBehavior
 from src.qubit.cognitive.activity_tracker import ActivityTracker
+from src.utils.log_utils import get_logger
 
 
 class DecisionEngine:
@@ -26,12 +27,9 @@ class DecisionEngine:
             event_bus: The central event bus used to publish final decisions
         """
         self.tracker = tracker
+        self.logger = get_logger("DecisionEngine")
         self.event_bus = event_bus
-
-        # Behaviors are ordered by priority (monologue first, then responses)
         self.behaviors = [IdleMonologueBehavior(), ChatResponseBehavior()]
-
-        # Timestamps for cooldown enforcement
         self.last_autonomous_speech_time = datetime.now(timezone.utc)
         self.last_user_input_response_time = datetime.now(timezone.utc)
 
@@ -43,12 +41,15 @@ class DecisionEngine:
         Builds context → asks behaviors for decisions → executes the first one.
         """
         context = self._build_context()
+        self.logger.info(f"[DecisionEngine] Cycle | activity={context['activity_score']:.2f} | "
+                        f"pending={len(getattr(self.tracker.queue, 'messages', []))} | "
+                        f"last_mono={(datetime.now(timezone.utc) - self.last_autonomous_speech_time).total_seconds():.0f}s")
 
         for behavior in self.behaviors:
             decision = await behavior.tick(context)
             if decision:
                 await self._execute_decision(decision)
-                break  # Only one action per tick
+                break
 
     def _build_context(self) -> dict:
         """
@@ -59,10 +60,11 @@ class DecisionEngine:
         """
         return {
             "activity_score": self.tracker.activity_score,
-            "queue": self.tracker.queue,                    # ← changed
+            "queue": self.tracker.queue,
             "features": getattr(self.tracker, "features", {}),
             "last_autonomous_speech_time": self.last_autonomous_speech_time,
             "last_user_input_response_time": self.last_user_input_response_time,
+            "frontend_command": self.tracker.cognitive.get_current_frontend_command() if hasattr(self.tracker, "cognitive") else None
         }
 
     async def _execute_decision(self, decision: dict) -> None:
@@ -104,16 +106,4 @@ class DecisionEngine:
             await self.event_bus.publish(event)
             self.last_user_input_response_time = now
 
-            # Clean up using the new queue
-            self.tracker.queue.remove(best)   # ← fixed
-
-    async def trigger_initial_monologue(self) -> None:
-        """
-        Special one-time monologue on bot start (welcome message).
-        Called from CognitiveService._on_bot_start().
-        """
-        await self._execute_decision({
-            "type": "monologue",
-            "topic": "welcome to the stream",
-            "reason": "bot_start"
-        })
+            self.tracker.queue.remove(best)

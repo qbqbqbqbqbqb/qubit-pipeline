@@ -1,6 +1,6 @@
 
+from src.qubit.input.frontend_command_handler import FrontendCommandHandler
 from src.qubit.cognitive.cognitive_service import CognitiveService
-from src.qubit.input.misc_events_listener import MiscEventsListener
 from src.qubit.memory.memory_handler import MemoryHandler
 from src.qubit.input.monologue_input_handler import AutonomousInputHandler
 from src.qubit.input.input_handler import InputHandler
@@ -48,11 +48,10 @@ async def create_app():
     monologue_input_handler = AutonomousInputHandler(max_age_seconds=30, prompt_handler=llm_handler, memory_handler=memory_handler)
 
     twitch = TwitchListener(settings=settings)
-    misc_event = MiscEventsListener()
     output_handler = OutputHandler(TTSHandler(), OBSHandler(settings=settings),  memory_handler=memory_handler)
 
-
-    app.add_service(misc_event)
+    frontend_handler = FrontendCommandHandler()
+    app.add_service(frontend_handler)
     app.add_service(input_handler)
     app.add_service(moderation_handler)
     app.add_service(cognitive)
