@@ -49,7 +49,7 @@ class HuggingFaceModelManager(BaseModelManager):
         )
         self._tokenizer.pad_token = self._tokenizer.eos_token
 
-        quant_config = Optional[BitsAndBytesConfig] = None
+        quant_config = None
         if self.config.load_in_4bit:
             quant_config = BitsAndBytesConfig(
                 load_in_4bit=True,
