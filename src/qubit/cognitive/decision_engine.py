@@ -1,6 +1,7 @@
 import random
 from datetime import datetime, timezone
 
+from src.qubit.cognitive.behaviours.frontend_monologue import FrontendTriggeredMonologueBehavior
 from src.qubit.core.events import MonologueEvent, ResponsePromptEvent
 from src.qubit.cognitive.behaviours.idle_monologue import IdleMonologueBehavior
 from src.qubit.cognitive.behaviours.chat_response import ChatResponseBehavior
@@ -29,7 +30,7 @@ class DecisionEngine:
         self.tracker = tracker
         self.logger = get_logger("DecisionEngine")
         self.event_bus = event_bus
-        self.behaviors = [IdleMonologueBehavior(), ChatResponseBehavior()]
+        self.behaviors = [IdleMonologueBehavior(), ChatResponseBehavior(), FrontendTriggeredMonologueBehavior()]
         self.last_autonomous_speech_time = datetime.now(timezone.utc)
         self.last_user_input_response_time = datetime.now(timezone.utc)
 

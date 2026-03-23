@@ -1,6 +1,6 @@
 from src.qubit.core.service import Service
 from datetime import datetime, timezone
-
+from src.qubit.core.events import Event
 
 class FrontendCommandHandler(Service):
 
@@ -24,15 +24,15 @@ class FrontendCommandHandler(Service):
         if not command:
             return
 
-        standardised_event = {
-            "type": "frontend_command",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "data": {
+        standardised_event = Event(
+            type="frontend_command",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            data={
                 "command": command,
                 "source": "frontend",
                 "raw_event": event.data
             }
-        }
+        )
 
         self.logger.info(f"[FrontendCommandHandler] Received frontend command → {command}")
         await self.event_bus.publish(standardised_event)

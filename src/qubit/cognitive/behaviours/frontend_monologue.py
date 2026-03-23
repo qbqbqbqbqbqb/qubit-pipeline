@@ -1,8 +1,8 @@
 from src.qubit.cognitive.behaviours.base import Behavior
-import random
+from src.qubit.core.events import MonologueEvent
 from datetime import datetime, timezone
+from src.utils.log_utils import get_logger
 
-from src.qubit.utils.log_utils import get_logger
 
 class FrontendTriggeredMonologueBehavior(Behavior):
     def __init__(self):
@@ -10,19 +10,31 @@ class FrontendTriggeredMonologueBehavior(Behavior):
         self.cooldown_seconds = 10
         self.logger = get_logger("FrontendTriggeredMonologueBehavior")
 
-    async def tick(self, context: dict) -> dict | None:
+    async def tick(self, context: dict):
         command = context.get("frontend_command")
         if not command:
             return None
 
         topic = self._get_topic_for_command(command)
-        self.logger.info(f"[FrontendMonologue] TRIGGERED by frontend command '{command}' → {topic}")
+        prompt = f"Talk about {topic}."
 
-        return {
-            "type": "monologue",
-            "topic": topic,
-            "reason": f"frontend_{command}"
-        }
+        self.logger.info(
+            f"[FrontendMonologue] TRIGGERED by frontend command '{command}' → {topic}"
+        )
+
+        event = MonologueEvent(
+            type="monologue_prompt",
+            user="system",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            data={
+                "user": "system",
+                "topic": topic,
+                "prompt": prompt,
+            },
+            prompt=prompt,
+        )
+
+        return event
 
     def _get_topic_for_command(self, command: str) -> str:
         mapping = {

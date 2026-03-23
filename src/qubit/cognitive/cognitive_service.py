@@ -11,7 +11,6 @@ class CognitiveService(Service):
         "user_event_follow": "_handle_input",
         "user_event_subscription": "_handle_input",
         "user_event_raid": "_handle_input",
-        "bot_started": "_on_bot_start",
         "frontend_command": "_handle_frontend_command",
     }
 

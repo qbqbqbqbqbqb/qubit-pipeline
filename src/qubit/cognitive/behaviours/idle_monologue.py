@@ -24,17 +24,37 @@ class IdleMonologueBehavior(Behavior):
         # LOW ACTIVITY (your main rule)
         if context["activity_score"] < 3.0 and time_since_last > self.cooldown_seconds:
             topic = self._get_topic()
-            self.logger.info(f"[IdleMonologue] TRIGGERED (low activity) → {topic}")
-            return {"type": "monologue", "topic": topic, "reason": "low_activity"}
+            return self._build_event(topic, "low_activity", now)
 
         # RANDOM CHANCE (even when busy)
         if random.random() < 0.18:   # 18% per cycle for testing
             topic = self._get_topic()
-            self.logger.info(f"[IdleMonologue] TRIGGERED (random chance) → {topic}")
-            return {"type": "monologue", "topic": topic, "reason": "random_chance"}
+            return self._build_event(topic, "low_activity", now)
 
         return None
+    
+    def _build_event(self, topic: str, reason: str, now: datetime):
+        prompt = f"Talk about {topic}."
+
+        self.logger.info(f"[IdleMonologue] TRIGGERED ({reason}) → {topic}")
+
+        return MonologueEvent(
+            type="monologue_prompt",
+            user="system",
+            timestamp=now.isoformat(),
+            data={
+                "user": "system",
+                "topic": topic,
+                "reason": reason,
+                "prompt": prompt,
+            },
+            prompt=prompt,
+        )
 
     def _get_topic(self) -> str:
-        topics = ["a funny story about AI", "an interesting Twitch fact", "a quirky joke"]
+        topics = [
+            "a funny story about AI",
+            "an interesting Twitch fact",
+            "a quirky joke",
+        ]
         return random.choice(topics)
