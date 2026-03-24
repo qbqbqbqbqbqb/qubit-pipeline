@@ -66,6 +66,9 @@ class HuggingFaceModelManager(BaseModelManager):
             trust_remote_code=self.config.trust_remote_code
         )
 
+        if self._tokenizer.pad_token is not None and len(self._tokenizer) > self._model.config.vocab_size:
+            self._model.resize_token_embeddings(len(self._tokenizer))
+
         if self.config.lora_path:
             self._model = PeftModel.from_pretrained(
                 self._model,
@@ -175,8 +178,13 @@ class HuggingFaceModelManager(BaseModelManager):
             max_length=self.config.max_context_length
         ).to(self.model.device)
 
+        vocab_size = self.tokenizer.vocab_size
+        if torch.any(inputs.input_ids >= vocab_size) or torch.any(inputs.input_ids < 0):
+            raise ValueError(f"Input tokens out of range: vocab_size={vocab_size}, max_input_id={inputs.input_ids.max()}")
+
         outputs = self.model.generate(
-            **inputs,
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs.get("attention_mask"),
             **self._build_generation_config(max_new_tokens)
         )
 
