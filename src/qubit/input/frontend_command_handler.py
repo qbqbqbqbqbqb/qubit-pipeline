@@ -1,25 +1,25 @@
-from src.qubit.core.service import Service
 from datetime import datetime, timezone
+from src.qubit.core.event_processor import EventProcessor
 from src.qubit.core.events import Event
 
-class FrontendCommandHandler(Service):
+class FrontendCommandHandler(EventProcessor):
+    """
+    Thin adapter that normalizes frontend/WebSocket commands 
+    into the standard 'frontend_command' event type used by CognitiveService.
+    """
 
-    def __init__(self):
-        super().__init__("FrontendCommandHandler")
-    
     SUBSCRIPTIONS = {
-        "bot_started": "_handle_raw_command",
+        "bot_started": "handle_event",
     }
 
-    async def start(self, app):
-        await super().start(app)
-        self.logger.info("[FrontendCommandHandler] Ready — forwarding frontend commands to Cognitive")
+    def __init__(self):
+        super().__init__("frontend command handler")
 
-    async def _handle_raw_command(self, event):
-        """Normalise the startup (and any future) frontend command."""
+    async def handle_event(self, event) -> None:
+        """Normalise the frontend commands."""
         raw_command = event.data.get("command", event.type).lower().strip()
 
-        command = "start" if raw_command in ("bot_started", "start") else raw_command
+        command = "start" if raw_command in ("bot_started", "start", "bot_start") else raw_command
 
         if not command:
             return

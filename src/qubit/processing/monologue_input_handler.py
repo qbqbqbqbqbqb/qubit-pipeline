@@ -26,12 +26,13 @@ This handler mirrors the behavior of other input handlers (such as chat input
 handlers). Some logic may be consolidated into shared base classes in the
 future to reduce duplication.
 """
-#again, does this need to be a service?
+
 from datetime import datetime, timedelta, timezone
-from src.qubit.core.service import Service
+from src.qubit.core.event_processor import EventProcessor
 from src.qubit.utils.message_tracker import MessageTracker
 
-class AutonomousInputHandler(Service):
+
+class AutonomousInputHandler(EventProcessor):
     """
     Service responsible for handling incoming monologue-style prompt events.
 
@@ -63,7 +64,7 @@ class AutonomousInputHandler(Service):
         "start_message": "handle_event",
     }
 
-    def __init__(self, max_age_seconds=30, prompt_handler=None, memory_handler=None):
+    def __init__(self, max_age_seconds: int = 30, prompt_handler=None, memory_handler=None):
         """
         Initialize the AutonomousInputHandler service.
 
@@ -79,36 +80,11 @@ class AutonomousInputHandler(Service):
             Component responsible for handling memory-related updates triggered
             by incoming events.
         """
-        super().__init__(" monologue input handler")
+        super().__init__("monologue handler")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
         self.prompt_handler = prompt_handler
         self.memory_handler = memory_handler
-
-    async def start(self, app) -> None:
-        """
-        Start the service.
-
-        This method initializes the service within the application lifecycle.
-        It delegates initialization to the base ``Service`` implementation.
-
-        Parameters
-        ----------
-        app : Any
-            The application instance managing service lifecycles.
-        """
-        await super().start(app)
-
-
-    async def stop(self) -> None:
-        """
-        Stop the service.
-
-        Called during application shutdown to perform any cleanup required
-        by the service. Delegates shutdown logic to the base ``Service``.
-        """
-        await super().stop()
-
 
     # TODO: consolidate redundant methods btwn input handlers here later
     async def handle_event(self, event) -> None:
@@ -129,14 +105,13 @@ class AutonomousInputHandler(Service):
         """
         text = event.data.get("text", "").lower().strip()
 
-        await self._check_stale_message(event, text)
+        if await self._check_stale_message(event, text):
+            return
 
         await self._handle_memory_event(event)
-
         await self._enqueue_event_prompt(event)
 
-
-    async def _check_stale_message(self, event, text) -> bool:
+    async def _check_stale_message(self, event, text: str) -> bool:
         """
         Determine whether an incoming event is too old to process.
 
@@ -158,45 +133,26 @@ class AutonomousInputHandler(Service):
         ts = getattr(event, "timestamp", datetime.now(timezone.utc))
         if isinstance(ts, str):
             ts = datetime.fromisoformat(ts)
+
         if datetime.now(timezone.utc) - ts > self.max_age:
             self.logger.debug("[_check_stale_message] Dropping stale monologue: %s", text)
             return True
         return False
 
-
-    # i forgot why i made this different to chat handling
-    # TODO: check if logic can be merged
     async def _enqueue_event_prompt(self, event) -> None:
         """
-        Build and enqueue a prompt event derived from the input event.
-
-        If a prompt handler is configured and a builder exists for the event
-        type, the builder is used to construct a prompt event which is then
-        added to the prompt dispatcher's queue.
-
-        Parameters
-        ----------
-        event : Event
-            The incoming event used to generate the prompt event.
+        Convert event into a prompt and enqueue it for the dispatcher.
         """
         if self.prompt_handler and event.type in self.prompt_handler.builders:
             builder = self.prompt_handler.builders[event.type]
             prompt_event = builder(event)
             await self.prompt_handler.dispatcher.enqueue(prompt_event)
-
+        else:
+            self.logger.warning("[MonologueHandler] No prompt builder found for event type: %s", event.type)
 
     async def _handle_memory_event(self, event) -> None:
         """
-        Forward the event to the memory handler.
-
-        This allows external memory systems (e.g., conversation history,
-        embeddings, or knowledge stores) to update state based on the
-        incoming event.
-
-        Parameters
-        ----------
-        event : Event
-            The event to pass to the memory subsystem.
+        Forward event to memory system if configured.
         """
         if self.memory_handler:
             self.memory_handler.handle_event(event)

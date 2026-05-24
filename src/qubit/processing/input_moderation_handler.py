@@ -1,22 +1,21 @@
-# dont know whether to keep this as a service without a main loop
-# might be cleaner to leave as is?
+from src.qubit.core.event_processor import EventProcessor
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
-from src.qubit.core.service import Service
 from src.qubit.core.events import (
-    TwitchChatEvent,
+    TwitchChatEvent, 
     TwitchSubscriptionEvent,
-    TwitchRaidEvent,
-    TwitchFollowEvent,
+    TwitchRaidEvent, 
+    TwitchFollowEvent, 
     Event
 )
 from src.qubit.utils.filter_utils import contains_banned_words
 
-class ModerationHandler(Service):
 
+class ModerationHandler(EventProcessor):
     """
-    Sole responsibility: filter and sanitize Twitch events.
-    Produces sanitized events for downstream consumers.
+    Sole responsibility: Filter and sanitise raw Twitch events.
+    Produces clean *_processed events for downstream consumers.
     """
+
     SUBSCRIPTIONS = {
         "twitch_chat": "handle_event",
         "twitch_subscription": "handle_event",
@@ -25,13 +24,7 @@ class ModerationHandler(Service):
     }
 
     def __init__(self):
-        super().__init__("input moderation handler")
-
-    async def start(self, app) -> None:
-        await super().start(app)
-
-    async def stop(self) -> None:
-        await super().stop()
+        super().__init__("moderation handler")
 
     async def handle_event(self, event: Event) -> None:
         if isinstance(event, TwitchChatEvent):
@@ -41,17 +34,17 @@ class ModerationHandler(Service):
             self.logger.info("[handle_event] Moderating twitch subscription event: %s", event)
             await self._moderate_subscription(event)
         elif isinstance(event, TwitchRaidEvent):
-            self.logger.info("[handle_event] Moderating Twitch Raid Event: %s", event)
+            self.logger.info("[handle_event] Moderating twitch raid event: %s", event)
             await self._moderate_raid(event)
         elif isinstance(event, TwitchFollowEvent):
-            self.logger.info("[handle_event] Moderating Twitch Follow Event: %s", event)
+            self.logger.info("[handle_event] Moderating twitch follow event: %s", event)
             await self._moderate_follow(event)
         else:
             self.logger.warning("[ModerationHandler] Unknown event type: %s", event.type)
 
     async def _moderate_chat(self, event: TwitchChatEvent) -> None:
         sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg =  self._sanitise(event.text, default="")
+        sanitised_msg = self._sanitise(event.text, default="")
 
         sanitised_event = TwitchChatEvent(
             type="twitch_chat_processed",
@@ -64,7 +57,7 @@ class ModerationHandler(Service):
 
     async def _moderate_subscription(self, event: TwitchSubscriptionEvent) -> None:
         sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg =  self._sanitise(event.sub_message, default="")
+        sanitised_msg = self._sanitise(event.sub_message, default="")
 
         sanitised_event = TwitchSubscriptionEvent(
             type="twitch_subscription_processed",
@@ -75,7 +68,6 @@ class ModerationHandler(Service):
             sub_message=sanitised_msg,
             timestamp=event.timestamp
         )
-
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_raid(self, event: TwitchRaidEvent) -> None:
@@ -108,6 +100,7 @@ class ModerationHandler(Service):
         Returns `default` if `value` contains banned words, otherwise returns `value`.
         """
         return default if contains_banned_words(
-        value,
-        BLACKLISTED_WORDS_LIST,
-        WHITELISTED_WORDS_LIST) else value
+            value,
+             BLACKLISTED_WORDS_LIST, 
+             WHITELISTED_WORDS_LIST
+        ) else value

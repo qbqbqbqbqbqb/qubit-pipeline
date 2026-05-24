@@ -1,10 +1,14 @@
-#same thing here as in input moderation
-# does this still need to be a service when i removed the main loop?
 from datetime import datetime, timedelta, timezone
-from src.qubit.core.service import Service
+from src.qubit.core.event_processor import EventProcessor
 from src.qubit.utils.message_tracker import MessageTracker
 
-class InputHandler(Service):
+
+class InputHandler(EventProcessor):
+    """
+    Processes cleaned Twitch events (after moderation).
+    Only handles filtering, deduplication, staleness checks, and memory.
+    CognitiveService decides whether to respond.
+    """
 
     SUBSCRIPTIONS = {
         "twitch_chat_processed": "handle_event",
@@ -14,20 +18,14 @@ class InputHandler(Service):
     }
 
     def __init__(self, max_age_seconds=30, prompt_handler=None, memory_handler=None):
-        super().__init__("input_handler")
+        super().__init__("input handler")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
         self.prompt_handler = prompt_handler
         self.memory_handler = memory_handler
 
-    async def start(self, app) -> None:
-        await super().start(app)
-
-    async def stop(self) -> None:
-        await super().stop()
-
     async def handle_event(self, event) -> None:
-        self.logger.info("[handle_event] Handling event in InputHandlerService (Cognitive-controlled mode)")
+        self.logger.info("[handle_event] Handling event in InputHandler (Cognitive-controlled mode)")
 
         text = event.data.get("text", "").lower().strip()
 
@@ -41,7 +39,6 @@ class InputHandler(Service):
 
         await self._handle_memory_event(event)
 
-
     async def _check_repeated_message(self, text) -> bool:
         if self.message_tracker.is_repeated(text):
             self.logger.debug("[_check_repeated_message] Dropped repeated message: %s", text)
@@ -52,7 +49,6 @@ class InputHandler(Service):
         if self.message_tracker:
             self.message_tracker.add_message(text)
 
-
     async def _check_stale_message(self, event, text) -> bool:
         ts = getattr(event, "timestamp", datetime.now(timezone.utc))
         if isinstance(ts, str):
@@ -62,16 +58,13 @@ class InputHandler(Service):
             return True
         return False
 
-
     async def _build_event_prompt(self, event) -> None:
         if self.prompt_handler and event.type in self.prompt_handler.builders:
             return await self.prompt_handler.handle_event(event)
 
-
     async def _handle_memory_event(self, event) -> None:
         if self.memory_handler:
             self.memory_handler.handle_event(event)
-
 
     async def _queue_built_event(self, built_input) -> None:
         if self.prompt_handler:

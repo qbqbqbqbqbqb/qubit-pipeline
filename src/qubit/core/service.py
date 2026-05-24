@@ -1,6 +1,5 @@
 import asyncio
 from src.utils.log_utils import get_logger
-
 class Service:
 
     SUBSCRIPTIONS = {}
@@ -43,4 +42,8 @@ class Service:
     def _register_subscriptions(self):
         for event_type, handler_name in self.SUBSCRIPTIONS.items():
             handler = getattr(self, handler_name)
-            self.event_bus.subscribe(event_type, handler)
+            if handler:
+                self.event_bus.subscribe(event_type, handler)
+                self.logger.info(f"[{self.name}] Registered subscription: {event_type}")
+            else:
+                self.logger.warning(f"[{self.name}] Handler {handler_name} not found")
