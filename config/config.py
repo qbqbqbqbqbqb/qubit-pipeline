@@ -1,8 +1,14 @@
 """
-Configuration module for qubit
+Configuration module for qubit.
 
-This module defines constants, authentication scopes, token limits, TTS settings,
-and loads external configuration files such as instructions, word lists, and dictionaries.
+Organised into:
+- Twitch authentication scopes
+- Generation limits
+- TTS configuration
+- Project data files (with usage notes)
+- Text normalisation rules
+- Bot identity & runtime constants
+- Core system prompt
 """
 
 from twitchAPI.type import AuthScope
