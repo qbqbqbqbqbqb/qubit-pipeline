@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 
 # Directory-level heavy mocking (mock_heavy_stack) + precise local patches below.
-from src.qubit.memory.memory_service import MemoryService
+from src.qubit.memory.service import MemoryService
 
 
 @pytest.mark.asyncio

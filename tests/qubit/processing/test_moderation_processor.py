@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, AsyncMock
 # The config mocking that was previously done here is now largely covered
 # by the broader strategy in conftest.py and AGENTS.md.
 
-from src.qubit.processing.moderation_processor import ModerationProcessor
+from src.qubit.processing.moderation import ModerationProcessor
 from src.qubit.core.events import TwitchChatEvent, TwitchFollowEvent
 
 

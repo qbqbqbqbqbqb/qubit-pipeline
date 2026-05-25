@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 from datetime import datetime, timezone, timedelta
 
-from src.qubit.processing.conversation_processor import ConversationProcessor
+from src.qubit.processing.conversation import ConversationProcessor
 from src.qubit.core.events import Event
 
 

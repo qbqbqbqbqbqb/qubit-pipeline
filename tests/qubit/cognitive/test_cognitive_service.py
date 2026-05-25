@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
-from src.qubit.cognitive.cognitive_orchestrator import CognitiveOrchestrator
+from src.qubit.cognitive.orchestrator import CognitiveOrchestrator
 from src.qubit.cognitive.decision_engine import DecisionEngine
 from src.qubit.core.events import Event
 

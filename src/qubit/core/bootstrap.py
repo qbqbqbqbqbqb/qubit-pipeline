@@ -21,25 +21,25 @@ from src.qubit.input.twitch.listener import TwitchListener
 from src.qubit.input.frontend_command_processor import FrontendCommandProcessor
 
 # --- Output (coordinator + leaves) ---
-from src.qubit.output.output_coordinator import OutputCoordinator
+from src.qubit.output.coordinator import OutputCoordinator
 from src.qubit.output.tts_handler import TTSHandler
 from src.qubit.output.obs_handler import OBSHandler
 
 # --- Processing (pure EventProcessors: transform / filter / normalise) ---
-from src.qubit.processing.moderation_processor import ModerationProcessor
-from src.qubit.processing.conversation_processor import ConversationProcessor
-from src.qubit.processing.autonomous_prompt_processor import AutonomousPromptProcessor
+from src.qubit.processing.moderation import ModerationProcessor
+from src.qubit.processing.conversation import ConversationProcessor
+from src.qubit.processing.autonomous import AutonomousPromptProcessor
 
 # --- Generation (the single owner of intent → full prompt → LLM → response_generated) ---
-from src.qubit.generation.prompt_request_builder import PromptRequestBuilder
-from src.qubit.generation.generation_coordinator import GenerationCoordinator
+from src.qubit.generation.prompt_builder import PromptRequestBuilder
+from src.qubit.generation.coordinator import GenerationCoordinator
 
 # --- Memory (storage + RAG provider + background reflections) ---
-from src.qubit.memory.memory_service import MemoryService
-from src.qubit.memory.memory_writer import MemoryWriter
+from src.qubit.memory.service import MemoryService
+from src.qubit.memory.writer import MemoryWriter
 
 # --- Cognitive / Decision layer (the only place that decides "what to do") ---
-from src.qubit.cognitive.cognitive_orchestrator import CognitiveOrchestrator
+from src.qubit.cognitive.orchestrator import CognitiveOrchestrator
 
 # --- Models (single source of truth for LLM usage) ---
 from src.qubit.models.llm_service import LLMService

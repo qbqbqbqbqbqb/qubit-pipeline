@@ -22,7 +22,7 @@ The prompt-building step still goes through the transitional PromptRequestBuilde
 from datetime import timedelta
 
 from src.qubit.core.event_processor import EventProcessor
-from src.qubit.processing._input_common import is_stale, forward_to_memory
+from src.qubit.processing.common import is_stale, forward_to_memory
 
 
 class AutonomousPromptProcessor(EventProcessor):

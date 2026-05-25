@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone, timedelta
 
-from src.qubit.output.output_coordinator import OutputCoordinator
+from src.qubit.output.coordinator import OutputCoordinator
 from src.qubit.core.events import ResponseGeneratedEvent
 
 # Output layer tests (TTS, OBS, audio) are heavy — use shared mocking strategy.

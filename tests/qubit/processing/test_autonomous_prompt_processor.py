@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 from datetime import datetime, timezone, timedelta
 
-from src.qubit.processing.autonomous_prompt_processor import AutonomousPromptProcessor
+from src.qubit.processing.autonomous import AutonomousPromptProcessor
 from src.qubit.core.events import Event
 
 

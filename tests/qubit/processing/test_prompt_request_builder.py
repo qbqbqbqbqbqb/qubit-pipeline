@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
-from src.qubit.generation.prompt_request_builder import PromptRequestBuilder
+from src.qubit.generation.prompt_builder import PromptRequestBuilder
 from src.qubit.core.events import ResponsePromptEvent, Event, TwitchChatEvent
 
 

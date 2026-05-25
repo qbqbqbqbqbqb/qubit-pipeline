@@ -7,7 +7,7 @@ sys.modules['torch'] = MagicMock()
 sys.modules['transformers'] = MagicMock()
 sys.modules['peft'] = MagicMock()
 
-from src.qubit.generation.generation_coordinator import GenerationCoordinator
+from src.qubit.generation.coordinator import GenerationCoordinator
 from src.qubit.core.events import ResponsePromptEvent, ResponseGeneratedEvent
 
 
