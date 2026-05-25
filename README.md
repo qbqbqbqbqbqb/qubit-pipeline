@@ -51,7 +51,6 @@ python -X faulthandler -m src.qubit.main
 
 TODO - add
 - add speech to text
-- add kick input
 - add youtube input
 - add audio file input
 - add vtubestudio output

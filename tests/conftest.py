@@ -86,6 +86,7 @@ def mock_heavy_stack(mocker):
         "src.qubit.models._executor._HuggingFaceExecutor",
         "src.qubit.memory.memory_service.chromadb",
         "src.qubit.input.twitch.listener.TwitchListener",
+        "src.qubit.input.kick.listener.KickListener",
         "src.qubit.output.handlers.tts.TTSHandler",
         "src.qubit.output.handlers.obs.OBSHandler",
     ]

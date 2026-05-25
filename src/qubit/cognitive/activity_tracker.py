@@ -82,6 +82,7 @@ class ActivityTracker:
         type_map = {
             "stt_processed": "user_input_stt",
             "twitch_chat_processed": "user_input_chat_message",
+            "kick_chat_processed": "user_input_chat_message",
             "user_event_follow": "user_event_follow",
             "user_event_subscription": "user_event_subscription",
             "user_event_raid": "user_event_raid",

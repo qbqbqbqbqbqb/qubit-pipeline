@@ -47,6 +47,7 @@ class CognitiveOrchestrator(Service):
 
     SUBSCRIPTIONS = {
         "twitch_chat_processed": "_handle_input",
+        "kick_chat_processed": "_handle_input",
         "stt_processed": "_handle_input",
         "user_event_follow": "_handle_input",
         "user_event_subscription": "_handle_input",

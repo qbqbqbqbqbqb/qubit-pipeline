@@ -155,7 +155,7 @@ class OutputCoordinator(Service):
         Args:
             event (ResponseGeneratedEvent): Event to append.
         """
-        if event.source == "twitch_chat_processed" and event.prompt:
+        if event.source in ("twitch_chat_processed", "kick_chat_processed") and event.prompt:
             pair = {
                 "prompt": event.prompt,
                 "response": event.response,

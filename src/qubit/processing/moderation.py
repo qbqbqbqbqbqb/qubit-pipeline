@@ -24,6 +24,10 @@ from src.qubit.core.events import (
     TwitchSubscriptionEvent,
     TwitchRaidEvent, 
     TwitchFollowEvent, 
+    KickChatEvent,
+    KickSubscriptionEvent,
+    KickRaidEvent,
+    KickFollowEvent,
     Event
 )
 from src.qubit.utils.filter_utils import contains_banned_words
@@ -45,6 +49,10 @@ class ModerationProcessor(EventProcessor):
         "twitch_subscription": "handle_event",
         "twitch_raid": "handle_event",
         "twitch_follow": "handle_event",
+        "kick_chat": "handle_event",
+        "kick_subscription": "handle_event",
+        "kick_raid": "handle_event",
+        "kick_follow": "handle_event",
     }
 
     def __init__(self):
@@ -69,6 +77,18 @@ class ModerationProcessor(EventProcessor):
         elif isinstance(event, TwitchFollowEvent):
             self.logger.info("[handle_event] Moderating twitch follow event: %s", event)
             await self._moderate_follow(event)
+        elif isinstance(event, KickChatEvent):
+            self.logger.info("[handle_event] Moderating kick chat event: %s", event)
+            await self._moderate_kick_chat(event)
+        elif isinstance(event, KickSubscriptionEvent):
+            self.logger.info("[handle_event] Moderating kick subscription event: %s", event)
+            await self._moderate_kick_subscription(event)
+        elif isinstance(event, KickRaidEvent):
+            self.logger.info("[handle_event] Moderating kick raid event: %s", event)
+            await self._moderate_kick_raid(event)
+        elif isinstance(event, KickFollowEvent):
+            self.logger.info("[handle_event] Moderating kick follow event: %s", event)
+            await self._moderate_kick_follow(event)
         else:
             self.logger.warning("[ModerationProcessor] Unknown event type: %s", event.type)
 
@@ -121,6 +141,59 @@ class ModerationProcessor(EventProcessor):
 
         sanitised_event = TwitchFollowEvent(
             type="twitch_follow_processed",
+            data={**event.data, "user": sanitised_user},
+            user=sanitised_user,
+            followed_at=event.followed_at,
+            timestamp=event.timestamp
+        )
+        await self.event_bus.publish(sanitised_event)
+
+    async def _moderate_kick_chat(self, event: KickChatEvent) -> None:
+        """Sanitise kick chat (username + text)."""
+        sanitised_user = self._sanitise(event.user, default="Someone")
+        sanitised_msg = self._sanitise(event.text, default="")
+
+        sanitised_event = KickChatEvent(
+            type="kick_chat_processed",
+            data={**event.data, "user": sanitised_user, "text": sanitised_msg},
+            user=sanitised_user,
+            text=sanitised_msg,
+            timestamp=event.timestamp
+        )
+        await self.event_bus.publish(sanitised_event)
+
+    async def _moderate_kick_subscription(self, event: KickSubscriptionEvent) -> None:
+        sanitised_user = self._sanitise(event.user, default="Someone")
+        sanitised_msg = self._sanitise(event.sub_message, default="")
+
+        sanitised_event = KickSubscriptionEvent(
+            type="kick_subscription_processed",
+            data={**event.data, "user": sanitised_user, "sub_message": sanitised_msg},
+            user=sanitised_user,
+            tier=event.tier,
+            sub_type=event.sub_type,
+            sub_message=sanitised_msg,
+            timestamp=event.timestamp
+        )
+        await self.event_bus.publish(sanitised_event)
+
+    async def _moderate_kick_raid(self, event: KickRaidEvent) -> None:
+        sanitised_user = self._sanitise(event.user, default="Someone")
+
+        sanitised_event = KickRaidEvent(
+            type="kick_raid_processed",
+            data={**event.data, "user": sanitised_user},
+            user=sanitised_user,
+            viewers=event.viewers,
+            timestamp=event.timestamp
+        )
+        await self.event_bus.publish(sanitised_event)
+
+    async def _moderate_kick_follow(self, event: KickFollowEvent) -> None:
+        sanitised_user = self._sanitise(event.user, default="Someone")
+
+        sanitised_event = KickFollowEvent(
+            type="kick_follow_processed",
             data={**event.data, "user": sanitised_user},
             user=sanitised_user,
             followed_at=event.followed_at,

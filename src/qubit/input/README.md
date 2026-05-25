@@ -5,6 +5,7 @@ Contains listeners that produce raw external events.
 ## Current Sources
 
 - `twitch/listener.py` — Twitch chat + events (via EventSub + IRC)
+- `kick/listener.py` — Kick chat + events (pure HTTP + public Pusher WS, no extra library)
 - STT listener (when enabled)
 - Frontend command source
 

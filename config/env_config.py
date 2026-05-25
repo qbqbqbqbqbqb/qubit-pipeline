@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     Pydantic settings class for environment configuration.
 
     Loads settings from a .env file and provides a method to save updated tokens back to the file.
-    Includes Twitch API credentials, OBS connection details, and authentication tokens.
+    Includes Twitch and Kick API credentials, OBS connection details, and authentication tokens.
     """
     # ===================== MODEL SELECTION =====================
     active_model: str = "stheno"
@@ -38,6 +38,18 @@ class Settings(BaseSettings):
     twitch_streamer_name: str
     twitch_bot_name: str
     token_endpoint: str
+    # ===================== KICK (pure HTTP) =====================
+    kick_client_id: str = ""
+    kick_client_secret: str = ""
+    kick_bot_oauth_token: str = ""
+    kick_bot_refresh_token: str = ""
+    kick_streamer_oauth_token: str = ""
+    kick_streamer_refresh_token: str = ""
+    kick_channel: str = ""
+    kick_chatroom_id: int | None = None   # optional manual override
+    kick_redirect_uri: str = ""
+    kick_streamer_name: str = ""
+    kick_bot_name: str = ""
     obs_host: str
     obs_port: str
     obs_password: str
@@ -66,7 +78,11 @@ class Settings(BaseSettings):
         new_env["BOT_REFRESH_TOKEN"] = self.bot_refresh_token
         new_env["STREAMER_OAUTH_TOKEN"] = self.streamer_oauth_token
         new_env["STREAMER_REFRESH_TOKEN"] = self.streamer_refresh_token
- 
+        new_env["KICK_BOT_OAUTH_TOKEN"] = self.kick_bot_oauth_token
+        new_env["KICK_BOT_REFRESH_TOKEN"] = self.kick_bot_refresh_token
+        new_env["KICK_STREAMER_OAUTH_TOKEN"] = self.kick_streamer_oauth_token
+        new_env["KICK_STREAMER_REFRESH_TOKEN"] = self.kick_streamer_refresh_token
+
         new_lines = [f"{k}={v}" for k, v in new_env.items()]
         env_path.write_text("\n".join(new_lines))
 

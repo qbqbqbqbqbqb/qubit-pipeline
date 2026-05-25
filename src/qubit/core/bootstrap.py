@@ -18,6 +18,7 @@ from src.qubit.core.server import WebSocketServerService
 
 # --- Input sources (produce raw events) ---
 from src.qubit.input.twitch.listener import TwitchListener
+from src.qubit.input.kick.listener import KickListener
 from src.qubit.input.frontend_command_processor import FrontendCommandProcessor
 
 # --- Output (coordinator + leaves) ---
@@ -121,6 +122,7 @@ async def create_app():
     # Long-running connections / listeners. They only publish raw events.
     # =====================================================================
     twitch = TwitchListener(settings=settings)
+    kick = KickListener(settings=settings)
 
     # =====================================================================
     # LAYER: Output (coordinator + implementation leaves)
@@ -151,6 +153,7 @@ async def create_app():
 
     app.add_service(cognitive)  # still assigned to variable 'cognitive' for now (internal name)
     app.add_service(twitch)
+    app.add_service(kick)
     app.add_service(output_coordinator)
 
     return app
