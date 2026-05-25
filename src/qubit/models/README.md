@@ -2,117 +2,146 @@
 
 This package is responsible for all LLM interactions in Qubit.
 
-It has been refactored (2026-05) into a clean, swappable system that makes it easy to:
+It is designed around a clean separation that makes it trivial to:
+- Use completely different models (or the same model with different settings) for different tasks
+- Give every model its own prompt "ritual" without polluting the rest of the codebase
+- Add or swap fine-tunes with almost zero changes elsewhere
 
-- Use different models for different tasks (e.g. main chat vs memory reflections)
-- Give each model its own prompt "ritual" (chat templates, role markers, system prompt style, etc.)
-- Add or swap fine-tunes without touching cognitive, memory, or personality code
+## Guiding Principle (Three Layers)
+
+1. **Semantic / Content Layer** — *What* should the model think about or say?  
+   (This is handled by `PromptAssembler`, personality modules, memory injections, reflection prompts, cognitive behaviours, etc.)
+
+2. **Orchestration / Selection Layer** — *Which* model/profile should handle this task?  
+   (`LLMService` + named profiles like `"main"`, `"reflection"`, `"monologue"`, etc.)
+
+3. **Model-Specific Formatting + Execution Layer** — *How* do we turn the semantic payload into the exact text + generation parameters this particular fine-tune expects?  
+   (This lives entirely inside `PromptFormatter` implementations.)
+
+All the weird, model-specific incantations stay isolated in layer 3.
 
 ## Core Concepts
 
-| Concept           | What it is                                                                 | Why it exists |
-|-------------------|----------------------------------------------------------------------------|---------------|
-| `LLMService`      | The main thing you call from the rest of the app                           | Central place to ask for generation by *logical role* ("main", "reflection", etc.) |
-| `LLMProfile`      | A named bundle: `ModelConfig` + `PromptFormatter` + generation defaults    | One "flavour" of using an LLM (main personality, analytical reflections, monologue, etc.) |
-| `PromptFormatter` | The piece that turns messages/text into the exact string a specific model likes | This is how we support wildly different fine-tunes without polluting the rest of the codebase |
-| `ModelConfig`     | Loading settings (HF repo, 4-bit, LoRA path, etc.) + some legacy fields    | Still used under the hood for model loading |
+| Concept              | What it is                                                                 | Why it matters |
+|----------------------|----------------------------------------------------------------------------|----------------|
+| `LLMService`         | The central orchestrator you call from the rest of the app                 | Single entry point for all generation |
+| `LLMProfile`         | A named unit: `ModelConfig` + `PromptFormatter` + generation defaults      | "main", "reflection", etc. — the logical roles |
+| `PromptFormatter`    | Turns messages or assembled text into the exact string the model was trained on | The key to easy fine-tune swapping |
+| `ModelConfig`        | Loading details (repo, quant, LoRA, etc.)                                  | What gets loaded |
+| `GenerationOverrides`| Per-call sampling tweaks (temperature, max tokens, etc.)                   | Fine control without changing the profile |
 
-## How to Generate Text (Recommended Way)
+## How Generation Works End-to-End
+
+The high-level semantic layer (`PromptAssembler` + modules) produces either:
+- A flat string (current main chat path via priority injections), or
+- A list of `{"role": ..., "content": ...}` messages (reflections, future cognitive work)
+
+This payload is passed to:
+
+```python
+await llm_service.generate(
+    profile="main",           # or "reflection", etc.
+    input=...,                # string or list of messages
+    overrides=...
+)
+```
+
+The chosen `LLMProfile`'s `PromptFormatter` then transforms it into the exact format the model expects before tokenization and generation.
+
+This is why you can point `"main"` at a Llama-3 chat model (using `chat_template` formatter) and `"reflection"` at an older Pygmalion-style model (using `role_mapped` or `reflection` formatter) with no changes to the prompting or memory code.
+
+## How to Generate Text
 
 ```python
 from src.qubit.models.llm_service import LLMService
 from src.qubit.models.model_registry import LLM_PROFILES
 
-service = LLMService()
-for profile in LLM_PROFILES.values():
-    service.register_profile(profile)
+llm = LLMService()
+for p in LLM_PROFILES.values():
+    llm.register_profile(p)
 
-# Main chat personality
-response = await service.generate(
-    profile="main",
-    input="Hello! How are you today?",
-    max_new_tokens=120
-)
+# Normal chat response
+reply = await llm.generate(profile="main", input=final_assembled_prompt, max_new_tokens=120)
 
-# Reflections / internal reasoning (can use completely different model + settings)
-qa = await service.generate(
+# Reflection / internal reasoning (can be a completely different model)
+qa = await llm.generate(
     profile="reflection",
-    input=[{"role": "system", "content": "You are an analytical AI..."}, ...],
-    max_new_tokens=300,
-    overrides={"temperature": 0.2}
+    input=reflection_messages,
+    overrides={"temperature": 0.25, "max_new_tokens": 400}
 )
 ```
 
-The service handles:
-- Choosing the right model + prompt formatter for the profile
-- Merging profile defaults with per-call overrides
-- Async execution (runs blocking generation off the event loop)
+The service handles formatting, merging of defaults + overrides, and async execution.
 
 ## Current Default Profiles
 
-- `"main"` — the personality that talks to chat / does live responses (currently Stheno with chat template)
-- `"reflection"` — used by the memory system to generate Q&A memories (currently same model but with analytical framing + lower temperature)
+- `"main"` — live personality responses (chat, monologues, etc.)
+- `"reflection"` — analytical memory reflection generation
 
-Both can point at the **same underlying weights** without loading the model twice (deduplication is automatic).
+You can add as many more as you like (`"monologue"`, `"critique"`, `"planner"`, ...).
 
 ## Adding or Switching a Model
 
-1. Add the model to `MODEL_REGISTRY` in `model_registry.py` (or just reference it directly).
-2. Create (or reuse) an `LLMProfile` in `LLM_PROFILES`:
+1. Define the model in `MODEL_REGISTRY` (in `model_registry.py`) if it doesn't exist.
+2. Create an `LLMProfile` and add it to `LLM_PROFILES`:
 
 ```python
-"my-cool-model": LLMProfile(
-    key="my-cool-model",
+from src.qubit.models.llm_profile import LLMProfile
+from src.qubit.models.model_config import ModelConfig, GenerationConfig
+from src.qubit.models.prompt_formatters import get_formatter
+
+LLM_PROFILES["my-new-finetune"] = LLMProfile(
+    key="my-new-finetune",
     config=ModelConfig(
-        model_name="username/my-finetune-7b",
+        model_name="username/my-cool-7b",
         load_in_4bit=True,
         lora_path=...,
-        system_model_specific_prompt="You are Qubit, a chaotic VTuber...",
     ),
-    formatter=get_formatter("pygmalion"),   # or "chat_template", "reflection", "raw", etc.
-    generation_defaults=GenerationConfig(temperature=0.95, ...),
-),
+    formatter=get_formatter("chat_template"),   # or "pygmalion", "reflection", "raw", custom...
+    generation_defaults=GenerationConfig(temperature=0.92, top_p=0.95),
+)
 ```
 
-3. Assign it to a logical role if you want:
+3. Use it:
 
 ```python
-LLM_PROFILES["main"] = LLM_PROFILES["my-cool-model"]
+LLM_PROFILES["main"] = LLM_PROFILES["my-new-finetune"]   # switch main personality
 # or
-LLM_PROFILES["reflection"] = LLMProfile(...)  # completely different model
+LLM_PROFILES["reflection"] = LLMProfile(...)             # different model for reflections
 ```
-
-That's it. No other files need to change.
 
 ## Choosing a PromptFormatter
 
-| Formatter          | Best for                              | Notes |
-|--------------------|---------------------------------------|-------|
-| `"chat_template"`  | Modern models with proper HF templates (Llama-3, Mistral, Qwen, etc.) | Preferred when available |
-| `"pygmalion"` / `"role_mapped"` | Older Pygmalion-style, Mytho, etc. | Handles capitalised roles + system prompt prepending |
-| `"reflection"`     | Internal reasoning tasks              | Adds analytical system instructions |
-| `"raw"`            | Plain text, quick tests               | Safe default / migration fallback |
+| Name                | Best for                                      | Notes |
+|---------------------|-----------------------------------------------|-------|
+| `chat_template`     | Modern HF models with proper chat templates   | Preferred when available (Llama-3, Mistral, etc.) |
+| `pygmalion` / `role_mapped` | Older Pygmalion-style, MythoMax, etc.     | Handles capitalised roles + explicit system prompts |
+| `reflection`        | Analytical / internal reasoning tasks         | Adds stricter system framing |
+| `raw`               | Plain text or quick experiments               | Pass-through |
 
-You can also write your own small formatter class and register it.
+You can register custom formatters easily.
 
 ## Single-LLM vs Multi-LLM
 
-**You do not have to run multiple models.**
+You never have to run more than one model.
 
-- If you only define/use the `"main"` profile, the system behaves almost exactly like the old single-model setup.
-- Even if you keep both `"main"` and `"reflection"` pointing at the same weights, the model is only loaded **once** thanks to automatic deduplication in `LLMService`.
-- Want completely separate models later? Just change the `config=` for the `"reflection"` profile (or add a third profile). The memory system already supports it.
+- Using only the `"main"` profile is perfectly valid.
+- Even if `"main"` and `"reflection"` point at the same weights, `LLMService` automatically deduplicates and loads the model only once.
+- Want a genuinely different (stronger, smaller, differently tuned) model for reflections? Just point the `"reflection"` profile at a different `ModelConfig`. The rest of the system doesn't care.
 
-## Architecture Notes
+## Future Directions
 
-The legacy single-model singleton approach (`ModelManager` / `AsyncHuggingFaceLLM`) has been fully removed.
+- Support for additional backends (vLLM, llama.cpp, OpenAI-compatible APIs, etc.) behind the same `LLMService` interface.
+- Dynamic profile loading / hot-swapping.
+- Richer `GenerationRequest` objects (tool schemas, images, etc.).
+- Per-profile observability and routing logic.
 
-Everything now flows through `LLMService` + named `LLMProfile`s. This is the canonical, forward-only design.
+## Where to Look in the Code
 
-## Further Reading
+- `model_registry.py` — current profile definitions
+- `llm_service.py` — the orchestrator
+- `llm_profile.py` — `LLMProfile` + `GenerationOverrides`
+- `prompt_formatters/` — all the actual formatting logic
+- `hf_model_manager.py` — the current concrete loader + generator (used by the service)
 
-- `ARCHITECTURE.md` — full design rationale, the three-layer model, migration plan, and future backend support.
-- `model_registry.py` — where all profiles are actually defined.
-- `prompt_formatters/` — the concrete implementations.
-
-If you're just trying to make Qubit sound good with a new fine-tune, you almost certainly only need to touch `model_registry.py` and pick (or write) a formatter.
+This is the complete, forward-only design. No legacy singletons remain.
