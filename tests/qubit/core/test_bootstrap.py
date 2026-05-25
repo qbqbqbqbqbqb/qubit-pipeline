@@ -1,3 +1,11 @@
+"""
+Example of a well-structured integration-style test for a complex wiring factory.
+
+Follows the guidelines in tests/AGENTS.md:
+- Uses the shared mock_heavy_stack + a specific local fixture
+- Lazy / mocked construction to avoid real ML / external dependencies
+- Clear assertions on the resulting object graph
+"""
 import pytest
 from src.qubit.core.bootstrap import create_app
 from src.qubit.core.app import App
@@ -6,8 +14,12 @@ from src.qubit.core.event_bus import event_bus as real_event_bus
 
 
 @pytest.fixture
-def mock_bootstrap_heavy(mocker):
-    """Patch *all* constructors called by create_app so the test is fast, side-effect-free, and never needs the real ML stack at runtime."""
+def mock_bootstrap_heavy(mocker, mock_heavy_stack):
+    """Specific wiring mocks on top of the broad mock_heavy_stack.
+    
+    The shared fixture handles the heavy scientific / external packages.
+    This fixture focuses on the exact constructors used inside create_app().
+    """
     mocker.patch("src.qubit.core.bootstrap.ModelManager")
     mocker.patch("src.qubit.core.bootstrap.AsyncHuggingFaceLLM")
     mocker.patch("src.qubit.core.bootstrap.PromptDispatcher")
@@ -24,7 +36,7 @@ def mock_bootstrap_heavy(mocker):
     mock_ws = mocker.patch("src.qubit.core.bootstrap.WebSocketServerService")
     mock_ws.return_value.name = "websocket_server"
 
-    # The four EventProcessor-style handlers (we assert the *calls* to register, not real side-effects on the bus)
+    # EventProcessor handlers — we verify registration calls were made
     mocker.patch("src.qubit.core.bootstrap.ModerationHandler")
     mocker.patch("src.qubit.core.bootstrap.InputHandler")
     mocker.patch("src.qubit.core.bootstrap.AutonomousInputHandler")
@@ -47,10 +59,12 @@ async def test_create_app_returns_properly_wired_app(mock_bootstrap_heavy):
     assert any("websocket" in n.lower() for n in service_names)
     assert any("memory" in n.lower() for n in service_names)
     assert len(app.services) >= 6
+    # Also verify that the real global event bus was attached (not a mock)
+    assert app.event_bus is real_event_bus
 
 
 @pytest.mark.asyncio
-async def test_create_app_registers_event_subscriptions(mock_bootstrap_heavy):
+async def test_create_app_registers_event_subscriptions(mock_bootstrap_heavy, mock_heavy_stack):
     """
     Verify that the EventProcessor-style handlers are instantiated and have register_subscriptions called.
     """

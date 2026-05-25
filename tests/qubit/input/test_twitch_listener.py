@@ -1,7 +1,7 @@
 import pytest
+from unittest.mock import MagicMock, patch, AsyncMock
 
-# This test requires the full Twitch + aiohttp stack
-pytest.importorskip("twitchAPI", reason="TwitchListener tests require twitchAPI and dependencies")
+# twitchAPI pre-mocked in conftest for collection.
 
 from unittest.mock import MagicMock, AsyncMock, patch
 from src.qubit.input.twitch.listener import TwitchListener

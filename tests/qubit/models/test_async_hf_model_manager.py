@@ -1,7 +1,7 @@
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 
-torch = pytest.importorskip("torch", reason="AsyncHuggingFaceLLM requires torch + transformers")
+# Heavy deps pre-mocked at conftest collection time. No importorskip.
 
 
 @pytest.fixture

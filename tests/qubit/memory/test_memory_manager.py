@@ -1,8 +1,8 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-pytest.importorskip("chromadb", reason="MemoryManager tests require chromadb")
-
+# This directory is marked heavy + usefixtures("mock_heavy_stack") in conftest.py.
+# Local fixtures below provide precise injection for MemoryManager.
 from src.qubit.memory.memory_manager import MemoryManager
 
 

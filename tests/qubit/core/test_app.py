@@ -2,7 +2,7 @@ import pytest
 from src.qubit.core.app import App
 
 
-def test_app_is_minimal_container():
+def test_app_is_minimal_container(mock_heavy_stack):
     app = App()
     assert app.services == []
     assert app.state is None
@@ -10,7 +10,7 @@ def test_app_is_minimal_container():
     assert app.server is None
 
 
-def test_app_add_service():
+def test_app_add_service(mock_heavy_stack):
     app = App()
     svc = object()
     app.add_service(svc)
@@ -18,7 +18,7 @@ def test_app_add_service():
     assert len(app.services) == 1
 
 
-def test_app_add_multiple_services():
+def test_app_add_multiple_services(mock_heavy_stack):
     app = App()
     s1, s2 = object(), object()
     app.add_service(s1)

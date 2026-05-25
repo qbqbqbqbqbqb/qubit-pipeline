@@ -1,6 +1,6 @@
 import pytest
 
-pytest.importorskip("twitchAPI", reason="filter_utils imports config which pulls twitchAPI")
+# twitchAPI + config pre-mocked in conftest.
 
 from src.qubit.utils.filter_utils import contains_banned_words, filter_banned_words
 

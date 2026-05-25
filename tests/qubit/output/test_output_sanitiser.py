@@ -38,6 +38,30 @@ def test_remove_bot_name(sanitiser):
 def test_remove_bot_name_variants(sanitiser):
     assert sanitiser.remove_bot_name("assistant: hi") == "hi"
     assert sanitiser.remove_bot_name("user: yo") == "yo"
+
+
+def test_fuzz_style_various_inputs(sanitiser, mock_heavy_stack):
+    """Fuzz-style test: feed many varied (including nasty) inputs to sanitiser."""
+    import random
+
+    candidates = [
+        "",
+        "   ",
+        "normal message",
+        "badword offensive content",
+        "Qubit: hello there",
+        "A very long response with lots of words and punctuation!!!",
+        "assistant: This is a test",
+        "Mixed CASE and 123 numbers",
+        "???",
+    ]
+
+    for _ in range(30):
+        text = random.choice(candidates)
+        is_valid, filtered = sanitiser.is_valid(text)
+        # Should never crash and should always return strings
+        assert isinstance(is_valid, bool)
+        assert isinstance(filtered, str)
     assert sanitiser.remove_bot_name("QUBIT: upper") == "upper"
 
 

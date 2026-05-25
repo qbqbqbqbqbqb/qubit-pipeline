@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 
 
 @pytest.mark.asyncio
-async def test_subscribe_and_publish(event_bus, sample_event):
+async def test_subscribe_and_publish(event_bus, sample_event, mock_heavy_stack):
     received = []
 
     async def handler(event):
@@ -19,7 +19,7 @@ async def test_subscribe_and_publish(event_bus, sample_event):
 
 
 @pytest.mark.asyncio
-async def test_multiple_subscribers(event_bus):
+async def test_multiple_subscribers(event_bus, mock_heavy_stack):
     calls = []
 
     async def async_handler(e):
@@ -39,13 +39,13 @@ async def test_multiple_subscribers(event_bus):
 
 
 @pytest.mark.asyncio
-async def test_publish_no_subscribers_does_not_crash(event_bus):
+async def test_publish_no_subscribers_does_not_crash(event_bus, mock_heavy_stack):
     event = Event(type="unknown", timestamp="now", data={})
     await event_bus.publish(event)  # Should not raise
 
 
 @pytest.mark.asyncio
-async def test_handler_error_is_caught_and_logged(event_bus, mocker):
+async def test_handler_error_is_caught_and_logged(event_bus, mocker, mock_heavy_stack):
     error_logger = mocker.patch("src.qubit.core.event_bus.logger.error")
 
     def bad_handler(e):

@@ -7,7 +7,7 @@ from src.qubit.core.event_bus import EventBus
 
 
 @pytest.mark.asyncio
-async def test_run_app_starts_services_and_waits_for_start():
+async def test_run_app_starts_services_and_waits_for_start(mock_heavy_stack):
     app = MagicMock()
     app.services = []
     app.state = RuntimeState()
@@ -28,7 +28,7 @@ async def test_run_app_starts_services_and_waits_for_start():
 
 
 @pytest.mark.asyncio
-async def test_run_app_with_real_service_mocks():
+async def test_run_app_with_real_service_mocks(mock_heavy_stack):
     svc = MagicMock()
     svc.start = AsyncMock()
     svc.stop = AsyncMock()

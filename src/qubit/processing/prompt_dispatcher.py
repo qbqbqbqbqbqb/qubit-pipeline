@@ -67,7 +67,7 @@ class PromptDispatcher(Service):
         prompt = getattr(event, "prompt", "")
         self.logger.info("[enqueue] enqueue called for %s (type=%s): %s", user, event_type, prompt)
         if not hasattr(event, "timestamp") or not event.timestamp:
-            event.timestamp = datetime.utcnow()
+            event.timestamp = datetime.now(timezone.utc)
         await self.queue.put(event)
 
     def update_system_personality(self, mood=None, tone=None, interaction_level=None) -> None:

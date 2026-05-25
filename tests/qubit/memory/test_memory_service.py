@@ -1,8 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 
-pytest.importorskip("chromadb", reason="MemoryService requires chromadb + torch")
-
+# Directory-level heavy mocking (mock_heavy_stack) + precise local patches below.
 from src.qubit.memory.memory_service import MemoryService
 
 

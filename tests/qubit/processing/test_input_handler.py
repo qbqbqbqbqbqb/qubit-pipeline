@@ -21,7 +21,7 @@ def input_handler():
 
 
 @pytest.mark.asyncio
-async def test_input_handler_drops_stale_messages(input_handler):
+async def test_input_handler_drops_stale_messages(input_handler, mock_heavy_stack):
     old_time = (datetime.now(timezone.utc) - timedelta(seconds=60)).isoformat()
     event = Event(
         type="twitch_chat_processed",
@@ -35,7 +35,7 @@ async def test_input_handler_drops_stale_messages(input_handler):
 
 
 @pytest.mark.asyncio
-async def test_input_handler_processes_fresh_message(input_handler):
+async def test_input_handler_processes_fresh_message(input_handler, mock_heavy_stack):
     recent_time = datetime.now(timezone.utc).isoformat()
     event = Event(
         type="twitch_chat_processed",

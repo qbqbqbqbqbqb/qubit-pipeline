@@ -1,17 +1,11 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-pytest.importorskip("torch", reason="ModelManager requires torch + dotenv + HF")
-
-try:
-    import dotenv
-except ImportError:
-    pytest.skip("python-dotenv not installed", allow_module_level=True)
-
-from src.qubit.models.model_manager import ModelManager
-
 
 def test_model_manager_is_singleton():
+    # Lazy import so collection of this test file never requires torch etc.
+    from src.qubit.models.model_manager import ModelManager
+
     with patch("src.qubit.models.model_manager.HuggingFaceModelManager") as mock_hf:
         mock_hf.return_value = MagicMock()
 

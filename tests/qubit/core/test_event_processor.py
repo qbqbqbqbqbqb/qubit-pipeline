@@ -3,6 +3,9 @@ from unittest.mock import MagicMock
 from src.qubit.core.event_processor import EventProcessor
 from src.qubit.core.events import Event
 
+# This test is mostly pure, but we include the shared fixture for consistency
+# with the rest of the core suite (see tests/AGENTS.md).
+
 
 class ConcreteProcessor(EventProcessor):
     SUBSCRIPTIONS = {
@@ -23,7 +26,7 @@ def test_event_processor_is_abstract():
 
 
 @pytest.mark.asyncio
-async def test_register_subscriptions_attaches_to_bus():
+async def test_register_subscriptions_attaches_to_bus(mock_heavy_stack):
     proc = ConcreteProcessor()
     bus = MagicMock()
 

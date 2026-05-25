@@ -2,6 +2,9 @@ import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from src.qubit.core.server import WebSocketServerService
 
+# WebSocket tests benefit from heavy mocking (network-related concerns)
+# even though they don't load ML models.
+
 
 def test_websocket_server_service_instantiation():
     srv = WebSocketServerService(host="127.0.0.1", port=0)  # port 0 for test
@@ -12,7 +15,7 @@ def test_websocket_server_service_instantiation():
 
 
 @pytest.mark.asyncio
-async def test_start_creates_server_and_stop_closes_it():
+async def test_start_creates_server_and_stop_closes_it(mock_heavy_stack):
     srv = WebSocketServerService(host="127.0.0.1", port=0)
     mock_app = type("App", (), {"event_bus": MagicMock(), "state": MagicMock()})()
 

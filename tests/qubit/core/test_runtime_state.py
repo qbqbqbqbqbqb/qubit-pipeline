@@ -3,7 +3,7 @@ import pytest
 from src.qubit.core.runtime_state import RuntimeState
 
 
-def test_runtime_state_initialization():
+def test_runtime_state_initialization(mock_heavy_stack):
     state = RuntimeState()
     assert isinstance(state.shutdown, asyncio.Event)
     assert isinstance(state.start, asyncio.Event)

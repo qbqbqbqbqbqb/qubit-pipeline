@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 
-inflect = pytest.importorskip("inflect", reason="tts_utils requires inflect")
+# inflect pre-mocked in conftest when not present.
 
 
 class TestTTSUtils:

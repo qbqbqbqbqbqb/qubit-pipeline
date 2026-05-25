@@ -1,17 +1,16 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-pytest.importorskip("torch", reason="HuggingFaceModelManager requires torch + transformers")
-
-from src.qubit.models.hf_model_manager import HuggingFaceModelManager
-
 
 def test_hf_model_manager_instantiation_requires_config():
-    with patch("src.qubit.models.hf_model_manager.AutoModelForCausalLM") as mock_model, \
-         patch("src.qubit.models.hf_model_manager.AutoTokenizer") as mock_tokenizer:
-        mock_model.from_pretrained.return_value = MagicMock()
-        mock_tokenizer.from_pretrained.return_value = MagicMock()
+    # Lazy import — collection succeeds even without torch/transformers.
+    from src.qubit.models.hf_model_manager import HuggingFaceModelManager
+    from src.qubit.models.model_config import ModelConfig
 
-        # This will still try to load unless we mock more aggressively
-        # For now we just check it doesn't explode on import
-        assert HuggingFaceModelManager is not None
+    with patch("src.qubit.models.hf_model_manager.HuggingFaceModelManager._load") as mock_load:
+        cfg = ModelConfig(model_name="test-model")
+        mgr = HuggingFaceModelManager(config=cfg)
+
+        assert mgr is not None
+        assert mgr.config.model_name == "test-model"
+        mock_load.assert_called_once()  # proves we avoided real model loading

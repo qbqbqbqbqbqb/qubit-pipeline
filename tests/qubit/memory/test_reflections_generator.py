@@ -1,15 +1,14 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-pytest.importorskip("torch", reason="ReflectionGenerator pulls heavy model stack")
-
+# This directory uses the shared mock_heavy_stack via pytestmark in conftest.py
 from src.qubit.memory.reflections_generator import ReflectionGenerator
 
 
 class TestReflectionGeneratorParsing:
     @pytest.fixture
     def generator(self):
-        # No dispatcher needed for parsing tests
+        # The autouse fixture already mocks the LLM; just construct
         return ReflectionGenerator(dispatcher=None)
 
     def test_parse_qa_pairs_standard_format(self, generator):

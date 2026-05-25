@@ -5,7 +5,7 @@ from src.qubit.core.events import Event
 
 
 @pytest.mark.asyncio
-async def test_frontend_command_handler_normalizes_bot_started():
+async def test_frontend_command_handler_normalizes_bot_started(mock_heavy_stack):
     handler = FrontendCommandHandler()
     handler.event_bus = AsyncMock()
     handler.logger = MagicMock()  # EventProcessor sets it via super

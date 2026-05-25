@@ -24,7 +24,8 @@ class DummyService(Service):
 
 
 @pytest.mark.asyncio
-async def test_service_start_registers_subscriptions_and_sets_refs(mock_app):
+async def test_service_start_registers_subscriptions_and_sets_refs(mock_app, mock_heavy_stack):
+    """Demonstrates proper testing of the Service base class with heavy deps mocked."""
     service = DummyService()
     # mock_app from conftest already has event_bus + state
 
@@ -39,7 +40,7 @@ async def test_service_start_registers_subscriptions_and_sets_refs(mock_app):
 
 
 @pytest.mark.asyncio
-async def test_service_stop_cancels_worker(mock_app):
+async def test_service_stop_cancels_worker(mock_app, mock_heavy_stack):
     service = DummyService()
     mock_app.state.start.set()
 

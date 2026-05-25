@@ -1,3 +1,4 @@
+import pytest
 from src.qubit.core.events import (
     Event,
     TwitchEvent,
@@ -18,7 +19,7 @@ from src.qubit.core.events import (
 )
 
 
-def test_base_event():
+def test_base_event(mock_heavy_stack):
     e = Event(type="base", timestamp="2026-05-25T00:00:00Z", data={"a": 1})
     assert e.type == "base"
     assert e.data["a"] == 1

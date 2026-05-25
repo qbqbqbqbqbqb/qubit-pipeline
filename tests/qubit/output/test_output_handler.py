@@ -5,6 +5,8 @@ from datetime import datetime, timezone, timedelta
 from src.qubit.output.output_handler import OutputHandler
 from src.qubit.core.events import ResponseGeneratedEvent
 
+# Output layer tests (TTS, OBS, audio) are heavy — use shared mocking strategy.
+
 
 @pytest.fixture
 def output_handler(mock_tts_handler, mock_obs_handler, mock_vtube_handler, mock_memory_handler):
@@ -34,7 +36,7 @@ def output_handler_no_extras(mock_tts_handler, mock_obs_handler):
 
 
 @pytest.mark.asyncio
-async def test_handle_response_queues_valid_twitch_message(output_handler, sample_response_event, mock_memory_handler):
+async def test_handle_response_queues_valid_twitch_message(output_handler, sample_response_event, mock_memory_handler, mock_heavy_stack):
     event = sample_response_event
     event.source = "twitch_chat_processed"
     event.prompt = "How are you?"
@@ -85,7 +87,7 @@ async def test_handle_response_skips_empty_response(output_handler, mock_tts_han
 
 
 @pytest.mark.asyncio
-async def test_handle_response_skips_blacklisted_via_sanitiser(output_handler):
+async def test_handle_response_skips_blacklisted_via_sanitiser(output_handler, mock_heavy_stack):
     # Inject a blacklist that will cause sanitiser to still return valid=True but we can test the path
     # (real filtering happens in filter_utils; here we just ensure it goes through)
     with patch.object(output_handler.dialogue_sanitiser, "is_valid", return_value=(False, "blocked")):
