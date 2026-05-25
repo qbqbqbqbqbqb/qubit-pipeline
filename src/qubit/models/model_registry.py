@@ -1,18 +1,17 @@
-"""Model configuration and LLM profile registry.
+"""Model configuration and LLM profile registry (config-driven).
 
-MODEL_REGISTRY contains the raw ModelConfig definitions (loading + generation params).
+MODEL_REGISTRY = catalog of available models (you can add more here).
 
-LLM_PROFILES provides the higher-level named profiles used by LLMService.
-Each profile combines a ModelConfig with a PromptFormatter and generation defaults.
+LLM_PROFILES are built at startup based on settings.active_model (from .env).
 
-This is the recommended way to define "main", "reflection", "monologue", etc.
+Set ACTIVE_MODEL=gpt6 (or stheno, etc.) in your .env to choose which model
+both "main" and "reflection" profiles will use.
 """
-
-from dataclasses import replace
 
 from src.qubit.models.model_config import ModelConfig, GenerationConfig
 from src.qubit.models.llm_profile import LLMProfile
 from src.qubit.models.prompt_formatters import get_formatter
+from config.env_config import settings
 
 # Registry mapping model identifiers to their configurations.
 # Keys: str identifiers used to select a model.
@@ -40,6 +39,7 @@ MODEL_REGISTRY = {
         lora_path="training_data/training/qubit-lora-final",
         use_chat_template=False,
         system_model_specific_prompt="Respond as Qubit to this Twitch message.",
+        default_prompt_formatter="pygmalion",   # important for config-driven loading
         generation_config=GenerationConfig(
             temperature=0.9,
             top_p=0.9,
@@ -52,39 +52,38 @@ MODEL_REGISTRY = {
 
 
 # ---------------------------------------------------------------------------
-# LLM Profiles (new multi-LLM architecture)
-# These are the named units that LLMService and the rest of the app use.
+# LLM Profiles — fully driven by config (no hardcoding)
 # ---------------------------------------------------------------------------
 
+active_key = settings.active_model
+
+if active_key not in MODEL_REGISTRY:
+    print(f"[model_registry] WARNING: ACTIVE_MODEL='{active_key}' not found. Falling back to 'stheno'.")
+    active_key = "stheno"
+
+base_config = MODEL_REGISTRY[active_key]
+
+# Main formatter priority:
+# 1. MAIN_FORMATTER env var
+# 2. Model's default_prompt_formatter
+# 3. "raw" as last resort
+main_formatter = settings.main_formatter or base_config.default_prompt_formatter or "raw"
+
+# Reflection formatter priority:
+# 1. REFLECTION_FORMATTER env var
+# 2. "reflection" (analytical style)
+reflection_formatter = settings.reflection_formatter or "reflection"
+
 LLM_PROFILES: dict[str, LLMProfile] = {
-    "main": LLMProfile(
+    "main": LLMProfile.from_model_config(
         key="main",
-        config=MODEL_REGISTRY["stheno"],
-        formatter=get_formatter("chat_template"),   # Stheno is Llama-3 based → good chat template
-        generation_defaults=MODEL_REGISTRY["stheno"].generation_config,
+        model_config=base_config,
+        formatter_name=main_formatter,
     ),
 
-    "reflection": LLMProfile(
+    "reflection": LLMProfile.from_model_config(
         key="reflection",
-        # We give it its own ModelConfig instance (same HF weights) so generation config is independent
-        config=replace(
-            MODEL_REGISTRY["stheno"],
-            generation_config=GenerationConfig(
-                temperature=0.3,
-                top_p=0.9,
-                top_k=50,
-                repetition_penalty=1.05,
-                do_sample=True,
-            )
-        ),
-        formatter=get_formatter("reflection"),
-        generation_defaults=replace(MODEL_REGISTRY["stheno"].generation_config, temperature=0.3, repetition_penalty=1.05),
+        model_config=base_config,
+        formatter_name=reflection_formatter,
     ),
 }
-
-# Convenience: the old "gpt6" entry can be turned into a profile on demand:
-# LLM_PROFILES["gpt6-main"] = LLMProfile.from_model_config(
-#     key="gpt6-main",
-#     model_config=MODEL_REGISTRY["gpt6"],
-#     formatter_name="pygmalion",
-# )

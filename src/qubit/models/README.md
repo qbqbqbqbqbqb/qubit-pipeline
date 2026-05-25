@@ -80,35 +80,53 @@ The service handles formatting, merging of defaults + overrides, and async execu
 
 You can add as many more as you like (`"monologue"`, `"critique"`, `"planner"`, ...).
 
+## Choosing the Active Model (Config-Driven)
+
+Model selection is no longer hardcoded. Everything is driven from your config:
+
+```env
+# .env
+ACTIVE_MODEL=gpt6
+```
+
+**Supported env vars:**
+
+| Variable                | Purpose                                      | Example          |
+|-------------------------|----------------------------------------------|------------------|
+| `ACTIVE_MODEL`          | Which model from `MODEL_REGISTRY` to use     | `gpt6`, `stheno` |
+| `MAIN_FORMATTER`        | Override formatter for the main profile      | `pygmalion`      |
+| `REFLECTION_FORMATTER`  | Override formatter for reflections           | `reflection`, `pygmalion` |
+
+Both `"main"` and `"reflection"` profiles will automatically use the model defined by `ACTIVE_MODEL`.
+
+Example — use gpt6 for everything, but force a different formatter only for reflections:
+
+```env
+ACTIVE_MODEL=gpt6
+REFLECTION_FORMATTER=reflection
+```
+
+This is the recommended way to switch models or experiment with different prompt styles.
+
 ## Adding or Switching a Model
 
-1. Define the model in `MODEL_REGISTRY` (in `model_registry.py`) if it doesn't exist.
-2. Create an `LLMProfile` and add it to `LLM_PROFILES`:
+### Simple switching (recommended)
+Just change the model in your `.env`:
 
-```python
-from src.qubit.models.llm_profile import LLMProfile
-from src.qubit.models.model_config import ModelConfig, GenerationConfig
-from src.qubit.models.prompt_formatters import get_formatter
-
-LLM_PROFILES["my-new-finetune"] = LLMProfile(
-    key="my-new-finetune",
-    config=ModelConfig(
-        model_name="username/my-cool-7b",
-        load_in_4bit=True,
-        lora_path=...,
-    ),
-    formatter=get_formatter("chat_template"),   # or "pygmalion", "reflection", "raw", custom...
-    generation_defaults=GenerationConfig(temperature=0.92, top_p=0.95),
-)
+```env
+ACTIVE_MODEL=gpt6
 ```
 
-3. Use it:
+Both `main` and `reflection` will automatically use it (with their respective formatters).
 
-```python
-LLM_PROFILES["main"] = LLM_PROFILES["my-new-finetune"]   # switch main personality
-# or
-LLM_PROFILES["reflection"] = LLMProfile(...)             # different model for reflections
-```
+### Adding a brand new model or advanced customization
+1. Add the model definition to `MODEL_REGISTRY` in `model_registry.py`.
+2. (Optional) Set `default_prompt_formatter` on the `ModelConfig`.
+3. You can then either:
+   - Point `ACTIVE_MODEL` at it, or
+   - Manually construct custom `LLMProfile`s in the registry for more complex setups.
+
+For most day-to-day use (including using the same model for main + reflections), **just use the env vars**.
 
 ## Choosing a PromptFormatter
 
@@ -138,10 +156,11 @@ You never have to run more than one model.
 
 ## Where to Look in the Code
 
-- `model_registry.py` — current profile definitions
-- `llm_service.py` — the orchestrator
+- `config/env_config.py` — model selection (`ACTIVE_MODEL`, `REFLECTION_FORMATTER`, etc.)
+- `model_registry.py` — available models + dynamic profile construction
+- `llm_service.py` — the orchestrator you call at runtime
 - `llm_profile.py` — `LLMProfile` + `GenerationOverrides`
 - `prompt_formatters/` — all the actual formatting logic
-- `hf_model_manager.py` — the current concrete loader + generator (used by the service)
+- `hf_model_manager.py` — the current concrete loader + generator
 
 This is the complete, forward-only design. No legacy singletons remain.
