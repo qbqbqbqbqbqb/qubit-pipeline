@@ -48,7 +48,8 @@ class TTSHandler:
         Speak the given text asynchronously.
         Handles VTube lip-sync if available.
 
-        Uses streaming synthesis + chunked playback for lower latency.
+        Args:
+            text: The text to be spoken
         """
         if not text.strip():
             return
@@ -56,8 +57,8 @@ class TTSHandler:
         normalised_text = normalise_text_for_tts(text)
 
         async with self._speaking_lock:
-            # New streaming path (preferred)
             await self._speak_streaming(normalised_text)
+
 
     def _generate_wav_bytes(self: Any, text: str) -> bytes:
         """
@@ -109,7 +110,7 @@ class TTSHandler:
                 config = json.load(f)
             return config["speaker_id_map"][TTS_SPEAKER_NAME]
         except Exception:
-            return 0  # safe default for tests and mocking scenarios
+            return 0
 
     def _build_synthesis_config(self: Any, speaker_id: int) -> SynthesisConfig:
         """
@@ -126,58 +127,58 @@ class TTSHandler:
 
     async def _speak_streaming(self: Any, text: str) -> None:
         """
-        Streaming synthesis + chunked playback.
-        Much lower latency than full WAV buffering.
+            Stream synthesis and play audio concurrently.
+
+            This starts playing audio as soon as the first chunks arrive (while
+            synthesis is still running in the background). No more per-chunk
+            open/close overhead that caused word cutoffs.
         """
         speaker_id = self._get_speaker_id()
         syn_config = self._build_synthesis_config(speaker_id)
 
         loop = asyncio.get_running_loop()
 
-        # Piper's synthesize() yields audio chunks as numpy arrays
-        # We play them as they arrive
-        def _synthesize_stream():
-            # This is a generator that yields (sample_rate, chunk)
-            # In real Piper, synthesize returns chunks directly in newer versions.
-            # We wrap it for compatibility.
-            chunks = []
-            sample_rate = 22050  # default, will be overridden by first chunk if possible
+        def _stream_synthesis_and_play():
+            """Runs in a thread: consumes Piper generator and feeds one stream."""
+            pa = pyaudio.PyAudio()
+            stream = None
+            try:
+                for audio_chunk in self.tts_manager.voice.synthesize(
+                    text, syn_config=syn_config
+                ):
+                    if stream is None:
+                        sample_rate = 22050
+                        if hasattr(audio_chunk, "dtype"):
+                            pass
+                        stream = pa.open(
+                            format=pyaudio.paInt16,
+                            channels=1,
+                            rate=sample_rate,
+                            output=True,
+                            frames_per_buffer=1024,
+                        )
 
-            # Use synthesize which can be made to stream
-            # For now we simulate real streaming by yielding chunks
-            # In production you would do:
-            # for chunk in self.tts_manager.voice.synthesize(text, syn_config=syn_config):
-            #     yield sample_rate, chunk
+                    if isinstance(audio_chunk, (bytes, bytearray)):
+                        stream.write(audio_chunk)
+                    else:
+                        stream.write(audio_chunk.tobytes())
 
-            # Fallback to old full synthesis but split into chunks for demo
-            wav_bytes = self._generate_wav_bytes(text)  # still uses old path for now
-            sr, full_audio = self._decode_wav_bytes(wav_bytes)
+            except Exception as e:
+                wav_bytes = self._generate_wav_bytes(text)
+                sr, full_audio = self._decode_wav_bytes(wav_bytes)
+                if stream is None:
+                    stream = pa.open(
+                        format=pyaudio.paInt16,
+                        channels=1,
+                        rate=sr,
+                        output=True,
+                        frames_per_buffer=1024,
+                    )
+                stream.write(full_audio.tobytes())
+            finally:
+                if stream is not None:
+                    stream.stop_stream()
+                    stream.close()
+                pa.terminate()
 
-            # Chunk the audio for streaming playback simulation
-            chunk_size = 1024 * 4  # ~4k samples per chunk
-            for i in range(0, len(full_audio), chunk_size):
-                chunks.append((sr, full_audio[i:i + chunk_size]))
-
-            return chunks
-
-        chunks = await loop.run_in_executor(None, _synthesize_stream)
-
-        for sample_rate, chunk in chunks:
-            await loop.run_in_executor(None, self._play_audio_chunk, sample_rate, chunk)
-
-    def _play_audio_chunk(self: Any, sample_rate: int, audio_chunk: np.ndarray) -> None:
-        """
-        Play a single audio chunk. Used for true streaming playback.
-        """
-        pa = pyaudio.PyAudio()
-        stream = pa.open(
-            format=pyaudio.paInt16,
-            channels=1,
-            rate=sample_rate,
-            output=True,
-            frames_per_buffer=1024
-        )
-        stream.write(audio_chunk.tobytes())
-        stream.stop_stream()
-        stream.close()
-        pa.terminate()
+        await loop.run_in_executor(None, _stream_synthesis_and_play)
