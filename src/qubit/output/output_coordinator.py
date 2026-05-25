@@ -1,15 +1,23 @@
-"""Output handler service for TTS, OBS subtitles, and VTuber integration.
+"""Output Coordinator.
 
-This module provides OutputHandler, a service that processes generated
-responses, sanitizes dialogue, handles TTS playback, updates OBS subtitles,
-and optionally interacts with VTuber Studio for mouth animation. It
-supports asynchronous operation using asyncio and maintains a queue of
-recent outputs, with automatic removal of stale items.
+LAYER: Output (see ARCHITECTURE.md)
 
-Classes:
-    OutputHandler: Main service handling the output pipeline.
+This is the central coordinator for all final output:
+- Receives ResponseGeneratedEvent
+- Sanitises dialogue (via DialogueSanitiser)
+- Owns the output queue + staleness handling
+- Coordinates TTS + OBS subtitles + optional VTuber mouth animation
+- Owns and drives ai_speaking / ai_thinking state in RuntimeState
+
+It deliberately delegates the actual work to pure leaf handlers:
+- TTSHandler
+- OBSHandler
+- (optional) VTubeStudioHandler
+- DialogueSanitiser
+
+This class should only coordinate — it should not contain low-level synthesis,
+websocket logic, or sanitiser rules.
 """
-#TODO: refactor class, too muych going on
 
 import asyncio
 from collections import deque
@@ -23,45 +31,30 @@ from src.qubit.core.events import ResponseGeneratedEvent
 from src.qubit.output.output_sanitiser import DialogueSanitiser
 from src.qubit.core.service import Service
 
-class OutputHandler(Service):
-    """Service for processing generated responses to TTS, subtitles, and VTuber output.
+class OutputCoordinator(Service):
+    """
+    Central coordinator for the entire output pipeline.
 
-    Handles dialogue sanitisation, memory integration, OBS subtitle updates,
-    TTS synthesis, and optional VTuber mouth animations. Maintains an
-    asynchronous queue of recent outputs and drops stale items.
+    Responsibilities (narrowed per target architecture):
+    - Own the response queue and staleness logic
+    - Sanitise + forward to memory
+    - Drive ai_speaking / ai_thinking state on RuntimeState
+    - Coordinate the leaf implementations (TTS, OBS, VTube)
 
-    Attributes:
-        tts_handler (TTSHandler): TTS engine for speaking text.
-        obs_handler (OBSHandler): OBS handler for updating subtitles.
-        vtube_studio_handler (Optional[Any]): Optional VTuber Studio integration.
-        memory_handler (Optional[Any]): Optional memory handler for events.
-        dialogue_sanitiser (DialogueSanitiser): Sanitiser for filtering responses.
-        queue (deque): Queue of recent outputs.
-        max_age (timedelta): Maximum age for outputs before dropping.
-        enable_subtitles (bool): Whether to update OBS subtitles.
+    It must not contain the implementation details of speech synthesis,
+    OBS websocket commands, or banned-word lists.
     """
 
     SUBSCRIPTIONS = {
         "response_generated": "handle_response"
-
     }
 
-    def __init__(self: Any, tts_handler: TTSHandler, obs_handler: OBSHandler,  vtube_studio_handler=None, max_age_seconds:int=30,  enable_subtitles:bool=False, memory_handler=None):
-        """Initialise the OutputHandler service.
-
-        Args:
-            tts_handler (TTSHandler): TTS engine for speaking text.
-            obs_handler (OBSHandler): OBS handler for updating subtitles.
-            vtube_studio_handler (Optional[Any]): VTuber Studio mouth animation handler.
-            max_age_seconds (int): Maximum age of queued items before dropping.
-            enable_subtitles (bool): Whether to enable OBS subtitles.
-            memory_handler (Optional[Any]): Optional memory handler for events.
-        """
-        super().__init__("output_handler")
+    def __init__(self: Any, tts_handler: TTSHandler, obs_handler: OBSHandler,  vtube_studio_handler=None, max_age_seconds:int=30,  enable_subtitles:bool=False, memory_writer=None):
+        super().__init__("output_coordinator")
         self.tts_handler = tts_handler
         self.obs_handler = obs_handler
         self.vtube_studio_handler = vtube_studio_handler
-        self.memory_handler = memory_handler
+        self.memory_writer = memory_writer
         self.dialogue_sanitiser = DialogueSanitiser(blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
         self.queue = deque()
         self.max_age = timedelta(seconds=max_age_seconds)
@@ -137,13 +130,13 @@ class OutputHandler(Service):
         return event
 
     async def _handle_memory_event(self: Any, event: ResponseGeneratedEvent) -> None:
-        """Forward the event to memory handler if available.
+        """Forward the event to the memory writer if available.
 
         Args:
             event (ResponseGeneratedEvent): Event to store in memory.
         """
-        if self.memory_handler:
-            self.memory_handler.handle_event(event)
+        if self.memory_writer:
+            await self.memory_writer.handle_event(event)
 
     async def _append_to_queue(self: Any, event: ResponseGeneratedEvent) -> None:
         """Append a response event to the output queue with timestamp.
@@ -176,7 +169,7 @@ class OutputHandler(Service):
                 await asyncio.sleep(1)
                 continue
 
-            self.logger.info("[_run] Output processor started")
+            self.logger.info("[_run] OutputCoordinator started")
             while True:
                 try:
                     if not self.queue:
@@ -197,10 +190,10 @@ class OutputHandler(Service):
                         await self._handle_text_output(text)
 
                 except asyncio.CancelledError:
-                    self.logger.info("[_run] Output processor cancelled")
+                    self.logger.info("[_run] OutputCoordinator cancelled")
                     break
                 except Exception as e:
-                    self.logger.exception("[_run] Error in output processor: %s", e)
+                    self.logger.exception("[_run] Error in OutputCoordinator: %s", e)
                     await asyncio.sleep(0.1)
 
 
@@ -225,13 +218,16 @@ class OutputHandler(Service):
 
 
     async def _handle_text_output(self: Any, text: str) -> None:
-        """Process a single text output: TTS, subtitles, VTuber mouth animation.
+        """
+        Process a single text output.
 
-        Args:
-            text (str): Text to process for output.
+        This is the single place that drives ai_speaking state.
         """
         mouth_task = None
         try:
+            if self.app and hasattr(self.app, "state"):
+                self.app.state.ai_speaking.set()
+
             if self.enable_subtitles and self.obs_handler:
                 await self.obs_handler.update_subtitle_text_and_style(new_text=text)
 
@@ -246,6 +242,9 @@ class OutputHandler(Service):
                 await self.tts_handler.speak(text)
 
         finally:
+            if self.app and hasattr(self.app, "state"):
+                self.app.state.ai_speaking.clear()
+
             if mouth_task:
                 try:
                     await mouth_task

@@ -1,6 +1,32 @@
+"""
+Core Service base class.
+
+CONTRACT (see ARCHITECTURE.md):
+- Subclass Service when your component needs its own long-running loop,
+  owns a queue, manages a connection, or performs background work.
+- Services participate in the standard start/stop lifecycle and get a _run() loop.
+- Use EventProcessor instead for pure reactors that only transform or react to events
+  with no independent loop (moderation, dedup, memory writes, etc.).
+
+This is the framework boundary. Domain logic belongs in the layers above.
+"""
+
 import asyncio
 from src.utils.log_utils import get_logger
+
+
 class Service:
+    """
+    Base class for components that own a lifecycle + optional background work.
+
+    Responsibilities of a Service:
+    - Owns its own _run() loop (started after frontend "start" signal)
+    - Manages subscriptions via the SUBSCRIPTIONS class attr
+    - Participates in graceful shutdown
+
+    Do NOT put heavy domain decision logic or prompt building here.
+    Those belong in Cognitive, Generation, Memory, or Output layers.
+    """
 
     SUBSCRIPTIONS = {}
 

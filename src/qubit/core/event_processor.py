@@ -1,14 +1,32 @@
+"""
+Core EventProcessor base class (pure event reactors).
+
+CONTRACT (see ARCHITECTURE.md):
+- Use EventProcessor for components that ONLY react to events.
+- No _run loop, no long-lived state machines, no queues they own.
+- Typical examples: moderation, deduplication, normalisation, memory writes (the "writer" part),
+  thin adapters that normalise external events.
+
+This is the preferred base for the Input Processing and MemoryWriter layers.
+
+If your component needs its own background loop or owns a queue → subclass Service instead.
+"""
+
 from abc import ABC, abstractmethod
-import asyncio
 from src.utils.log_utils import get_logger
+
 
 class EventProcessor(ABC):
     """
-    Lightweight base class for pure event processors / handlers.
-    
-    Use this instead of Service when the component:
-    - Only reacts to events (no main _run loop)
-    - Does filtering, transformation, moderation, etc.
+    Lightweight base for pure event-driven reactors.
+
+    Responsibilities:
+    - Subscribe to one or more event types via SUBSCRIPTIONS
+    - Perform filtering, transformation, or side-effects (e.g. write to memory)
+    - Never own a main loop or long-running work
+
+    All domain transformation logic that does not require independent execution
+    should live in subclasses of this class.
     """
 
     SUBSCRIPTIONS = {}

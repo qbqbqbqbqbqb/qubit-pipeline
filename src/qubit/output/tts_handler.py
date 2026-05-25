@@ -2,7 +2,7 @@
 
 This module provides TTSHandler, an asynchronous wrapper for text-to-speech
 synthesis that can be integrated with queue-based output systems such as
-OutputHandler. It uses the Piper TTS engine (via TTSManager) to generate
+OutputCoordinator. It uses the Piper TTS engine (via TTSManager) to generate
 audio from text, optionally integrates with VTube lip-sync modules, and
 supports non-blocking playback using asyncio and PyAudio.
 
@@ -31,7 +31,7 @@ from src.qubit.output.tts_manager import TTSManager
 class TTSHandler:
     """
     Async TTS module for speaking text with optional OBS subtitles.
-    Can be used with OutputHandler's queue system.
+    Can be used with OutputCoordinator's queue system.
     """
 
     def __init__(self: Any, tts_manager=TTSManager()):

@@ -4,13 +4,16 @@ from typing import Any, Dict, List
 
 class InputPriorityQueue:
     """
-    Dedicated priority queue for pending chat/STT messages.
+    LAYER: Cognitive (owned exclusively by ActivityTracker)
 
-    Handles:
-    - Adding messages with source-based priority
-    - Quality scoring (length, question marks, mentions)
-    - Recency weighting
-    - Safe removal of used messages
+    A bounded, scored queue of pending viewer messages (chat + STT).
+
+    Scoring factors:
+    - Source priority (STT is heavily preferred over chat)
+    - Simple quality heuristics (length, questions, mentions)
+    - Recency decay
+
+    Only ActivityTracker and DecisionEngine (via the context) should touch this.
     """
 
     def __init__(self, maxlen: int = 12):

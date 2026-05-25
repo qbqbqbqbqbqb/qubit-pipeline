@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from src.qubit.core.events import TwitchChatEvent
-from src.qubit.cognitive.behaviours.base import Behavior, BehaviorContext
+from src.qubit.cognitive.behaviours.base import Behavior
 
 class ChatResponseBehavior(Behavior):
     """

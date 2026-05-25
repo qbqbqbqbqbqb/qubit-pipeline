@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timezone
 
-from src.qubit.cognitive.behaviours.base import Behavior, BehaviorContext
+from src.qubit.cognitive.behaviours.base import Behavior
 from src.qubit.core.events import MonologueEvent
 from src.utils.log_utils import get_logger
 

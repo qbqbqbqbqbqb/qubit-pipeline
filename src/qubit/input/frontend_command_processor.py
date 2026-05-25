@@ -2,10 +2,13 @@ from datetime import datetime, timezone
 from src.qubit.core.event_processor import EventProcessor
 from src.qubit.core.events import Event
 
-class FrontendCommandHandler(EventProcessor):
+class FrontendCommandProcessor(EventProcessor):
     """
-    Thin adapter that normalizes frontend/WebSocket commands 
-    into the standard 'frontend_command' event type used by CognitiveService.
+    Thin EventProcessor adapter that normalizes frontend/WebSocket commands
+    into 'frontend_command' events.
+
+    These events are consumed by CognitiveOrchestrator, which forwards the
+    command into ActivityTracker (the single owner of decision context).
     """
 
     SUBSCRIPTIONS = {
@@ -13,7 +16,7 @@ class FrontendCommandHandler(EventProcessor):
     }
 
     def __init__(self):
-        super().__init__("frontend command handler")
+        super().__init__("frontend command processor")
 
     async def handle_event(self, event) -> None:
         """Normalise the frontend commands."""
@@ -34,5 +37,5 @@ class FrontendCommandHandler(EventProcessor):
             }
         )
 
-        self.logger.info(f"[FrontendCommandHandler] Received frontend command → {command}")
+        self.logger.info(f"[FrontendCommandProcessor] Received frontend command → {command}")
         await self.event_bus.publish(standardised_event)

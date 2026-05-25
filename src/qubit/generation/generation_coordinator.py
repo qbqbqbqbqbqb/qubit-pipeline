@@ -1,3 +1,23 @@
+"""
+Generation Coordinator — the single owner of the "decision → LLM call → response" path.
+
+LAYER: Generation / Prompt Pipeline (see ARCHITECTURE.md)
+
+This Service is the canonical place where:
+- High-level intents arrive (response_prompt from Cognitive, monologue_prompt from processors)
+- The full prompt is assembled (PromptAssembler + core + personality + stream type + memory RAG via prompt_assembly event)
+- The LLM is called (via LLMService with the chosen profile)
+- The final ResponseGeneratedEvent is published
+
+It owns the request queue, staleness filtering for prompts, retry logic, and
+system personality knobs (mood/tone/interaction).
+
+All other layers should treat this as a black box: "I published an intent event,
+later a response_generated event will appear."
+
+Previous name: PromptDispatcher (renamed for clarity during 2026 SoC refactor).
+"""
+
 import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -12,13 +32,19 @@ from src.qubit.prompting.modules.personality import personality_module
 from src.qubit.prompting.modules.stream_type import stream_type_module
 
 
-class PromptDispatcher(Service):
+class GenerationCoordinator(Service):
+    """
+    The central orchestrator for turning decisions into generated responses.
+
+    See module docstring for full layer responsibilities.
+    """
+
     SUBSCRIPTIONS = {
         "response_prompt": "enqueue",
     }
 
     def __init__(self, llm_service: LLMService, max_age_seconds=30, main_profile: str = "main"):
-        super().__init__("prompt_dispatcher")
+        super().__init__("generation_coordinator")
         self.llm_service = llm_service
         self.main_profile = main_profile
         self.queue = asyncio.Queue()

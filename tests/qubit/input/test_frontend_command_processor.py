@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.qubit.input.frontend_command_handler import FrontendCommandHandler
+from src.qubit.input.frontend_command_processor import FrontendCommandProcessor
 from src.qubit.core.events import Event
 
 
 @pytest.mark.asyncio
-async def test_frontend_command_handler_normalizes_bot_started(mock_heavy_stack):
-    handler = FrontendCommandHandler()
+async def test_frontend_command_processor_normalizes_bot_started(mock_heavy_stack):
+    handler = FrontendCommandProcessor()
     handler.event_bus = AsyncMock()
     handler.logger = MagicMock()  # EventProcessor sets it via super
 

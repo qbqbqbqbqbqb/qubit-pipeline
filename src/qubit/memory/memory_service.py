@@ -1,3 +1,15 @@
+"""
+MemoryService — owner of persistent memory storage and background jobs.
+
+This class is intentionally limited (see ARCHITECTURE.md Memory Layer):
+- Storage ownership (Chroma + SQLite)
+- Public history accessors for RAG
+- Background reflection generation loop
+- Narrow contribution to prompt assembly via the event bus
+
+Write routing now lives in MemoryWriter (pure EventProcessor).
+"""
+
 import asyncio
 from pathlib import Path
 from typing import Dict, List
@@ -17,6 +29,20 @@ from src.qubit.core.service import Service
 from src.qubit.memory.memory_manager import MemoryManager
 
 class MemoryService(Service):
+    """
+    Memory subsystem owner.
+
+    Responsibilities (per target architecture):
+    - Owns the persistent stores (ChromaDB + SQLite index)
+    - Owns MemoryManager (CRUD) and ReflectionsGenerator
+    - Runs the background reflection generation job (_run)
+    - Provides recent history for RAG via public getters
+    - Contributes memory injections when the prompt assembly event is published
+
+    It should NOT contain decision logic, prompt building, or write routing.
+    Writes now go through MemoryWriter (EventProcessor).
+    """
+
     SUBSCRIPTIONS = {"prompt_assembly": "handle_prompt_assembly"}
 
     def __init__(self, base_path: str = ".", llm_service: LLMService = None):
@@ -78,7 +104,7 @@ class MemoryService(Service):
                 await asyncio.sleep(1)
                 continue
 
-            REFLECTIONS_THRESHOLD = 5 # TODO: refactor this at some point
+            REFLECTIONS_THRESHOLD = 5  # TODO: consider making configurable / moving to config
             while True:
                 await asyncio.sleep(60)
                 self.logger.info("[_run] MemoryService worker checking for reflections...")
@@ -111,17 +137,36 @@ class MemoryService(Service):
     def get_recent_reflections(self) -> List[Dict]:
         return self.memory_manager.get_recent_items("reflections", limit=3)
 
+    # ------------------------------------------------------------------
+    # RAG injection support (narrow, explicit interface for prompt assembly)
+    # ------------------------------------------------------------------
+
+    def _get_chat_memory_injection(self):
+        """Returns a PromptInjection for recent chat history, or None."""
+        history = self.get_recent_chat_history()
+        return chat_memory_module(history)
+
+    def _get_reflection_memory_injection(self):
+        """Returns a PromptInjection for recent reflections, or None."""
+        reflections = self.get_recent_reflections()
+        return reflection_memory_module(reflections)
+
     async def handle_prompt_assembly(self, event: PromptAssemblyEvent) -> None:
+        """
+        Contribute memory-based injections when the prompt is being assembled.
+
+        This is the only place MemoryService participates in prompt construction.
+        It appends (at most) two injections: recent chat + recent reflections.
+        """
         if not hasattr(event, "contributions"):
             event.contributions = []
 
-        chat_injection = chat_memory_module(self.get_recent_chat_history())
-        reflection_injection = reflection_memory_module(self.get_recent_reflections())
+        chat_inj = self._get_chat_memory_injection()
+        if chat_inj and chat_inj.content:
+            event.contributions.append(chat_inj)
 
-        if chat_injection and chat_injection.content:
-            event.contributions.append(chat_injection)
-
-        if reflection_injection and reflection_injection.content:
-            event.contributions.append(reflection_injection)
+        refl_inj = self._get_reflection_memory_injection()
+        if refl_inj and refl_inj.content:
+            event.contributions.append(refl_inj)
 
         event.contributions.sort(key=lambda inj: inj.priority)

@@ -189,7 +189,7 @@ class LLMService:
         max_new_tokens: Optional[int] = None,
         overrides: Optional[GenerationOverrides] = None,
     ) -> str:
-        """Wrapper with simple retry logic (similar to old PromptDispatcher behavior)."""
+        """Wrapper with simple retry logic (similar to old PromptDispatcher / GenerationCoordinator behavior)."""
         last_error = None
         for attempt in range(1, max_attempts + 1):
             try:

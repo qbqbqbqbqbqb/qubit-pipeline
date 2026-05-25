@@ -11,12 +11,20 @@ from src.utils.log_utils import get_logger
 
 class DecisionEngine:
     """
-    Pure decision maker + behavior runner.
+    LAYER: Cognitive (pure decision logic)
 
-    This is the "brain" of the Cognitive layer.
-    It receives a pre-built context from the ActivityTracker and runs
-    all behaviors in priority order. Only one decision is executed per cycle
-    to prevent conflicting actions (monologue + response at the same time).
+    The actual "brain".
+
+    - Builds a rich context dict from the ActivityTracker
+    - Runs all registered behaviours in priority order
+    - Executes at most ONE winning decision per 5-second cycle
+      (prevents simultaneous monologue + response, etc.)
+    - Publishes the resulting high-level intent events
+
+    This class must stay completely free of:
+    - Prompt construction
+    - LLM calls
+    - Output side effects
     """
 
     def __init__(self, tracker: ActivityTracker, event_bus):
@@ -38,7 +46,7 @@ class DecisionEngine:
         """
         Run one full decision cycle.
 
-        Called every ~5 seconds by CognitiveService.
+        Called every ~5 seconds by CognitiveOrchestrator.
         Builds context → asks behaviors for decisions → executes the first one.
         """
         context = self._build_context()
@@ -65,7 +73,7 @@ class DecisionEngine:
             "features": getattr(self.tracker, "features", {}),
             "last_autonomous_speech_time": self.last_autonomous_speech_time,
             "last_user_input_response_time": self.last_user_input_response_time,
-            "frontend_command": self.tracker.cognitive.get_current_frontend_command() if hasattr(self.tracker, "cognitive") else None
+            "frontend_command": self.tracker.consume_frontend_command()
         }
 
     async def _execute_decision(self, decision: dict) -> None:

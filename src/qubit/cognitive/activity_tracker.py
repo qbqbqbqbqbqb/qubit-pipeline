@@ -1,16 +1,31 @@
 from datetime import datetime, timezone
 from src.qubit.cognitive.priority_queue import InputPriorityQueue
 
+
 class ActivityTracker:
     """
-    Only responsible for activity score + routing input to the priority queue.
-    No more pending_messages logic here.
+    LAYER: Cognitive (pure state holder for all decision-making context)
+
+    This is the single source of truth for everything the DecisionEngine
+    and behaviours need to make a choice:
+
+    - Current activity_score (decays, boosted by input)
+    - Pending messages (via InputPriorityQueue)
+    - Last activity timestamps
+    - Most recent frontend command (e.g. "start", "random_fact")
+
+    CognitiveOrchestrator only feeds data into this tracker.
+    DecisionEngine only reads from it (via the context dict).
+    No other layer should touch this object.
     """
 
     def __init__(self):
         self.activity_score = 0.0
         self.last_activity = datetime.now(timezone.utc)
         self.queue = InputPriorityQueue(maxlen=12)
+
+        # The only piece of external "intent" state we currently care about
+        self._current_frontend_command: str | None = None
 
     async def handle_input(self, event, features: dict):
         source = self._get_source(event)
@@ -20,6 +35,19 @@ class ActivityTracker:
 
         self._update_activity_score(source, features)
         self.queue.add(text, source, event)
+
+    def set_frontend_command(self, command: str | None):
+        """Called by CognitiveOrchestrator when a frontend_command event arrives."""
+        self._current_frontend_command = command
+
+    def consume_frontend_command(self) -> str | None:
+        """
+        Returns the current frontend command (if any) and clears it.
+        This is the clean hand-off to the decision context.
+        """
+        cmd = self._current_frontend_command
+        self._current_frontend_command = None
+        return cmd
 
     def _get_source(self, event) -> str:
         type_map = {

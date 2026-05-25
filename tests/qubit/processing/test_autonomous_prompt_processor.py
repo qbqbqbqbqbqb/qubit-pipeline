@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock
 from datetime import datetime, timezone, timedelta
 
-from src.qubit.processing.monologue_input_handler import AutonomousInputHandler
+from src.qubit.processing.autonomous_prompt_processor import AutonomousPromptProcessor
 from src.qubit.core.events import Event
 
 
@@ -15,11 +15,11 @@ def handler():
     }
     mock_prompt.dispatcher = MagicMock()
     mock_prompt.dispatcher.enqueue = AsyncMock()
-    mock_memory = MagicMock()
-    return AutonomousInputHandler(
+    mock_memory = AsyncMock()
+    return AutonomousPromptProcessor(
         max_age_seconds=30,
         prompt_handler=mock_prompt,
-        memory_handler=mock_memory
+        memory_writer=mock_memory
     )
 
 
@@ -33,7 +33,7 @@ async def test_handle_event_drops_stale_message(handler):
     )
 
     await handler.handle_event(event)
-    handler.memory_handler.handle_event.assert_not_called()
+    handler.memory_writer.handle_event.assert_not_called()
     handler.prompt_handler.dispatcher.enqueue.assert_not_awaited()
 
 
@@ -47,5 +47,5 @@ async def test_handle_event_processes_fresh_message(handler):
     )
 
     await handler.handle_event(event)
-    handler.memory_handler.handle_event.assert_called_once_with(event)
+    handler.memory_writer.handle_event.assert_called_once_with(event)
     handler.prompt_handler.dispatcher.enqueue.assert_awaited_once()

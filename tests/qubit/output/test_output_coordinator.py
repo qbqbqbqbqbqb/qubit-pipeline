@@ -2,19 +2,19 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone, timedelta
 
-from src.qubit.output.output_handler import OutputHandler
+from src.qubit.output.output_coordinator import OutputCoordinator
 from src.qubit.core.events import ResponseGeneratedEvent
 
 # Output layer tests (TTS, OBS, audio) are heavy — use shared mocking strategy.
 
 
 @pytest.fixture
-def output_handler(mock_tts_handler, mock_obs_handler, mock_vtube_handler, mock_memory_handler):
-    handler = OutputHandler(
+def output_handler(mock_tts_handler, mock_obs_handler, mock_vtube_handler, mock_memory_writer):
+    handler = OutputCoordinator(
         tts_handler=mock_tts_handler,
         obs_handler=mock_obs_handler,
         vtube_studio_handler=mock_vtube_handler,
-        memory_handler=mock_memory_handler,
+        memory_writer=mock_memory_writer,
         max_age_seconds=30,
         enable_subtitles=True,
     )
@@ -25,7 +25,7 @@ def output_handler(mock_tts_handler, mock_obs_handler, mock_vtube_handler, mock_
 @pytest.fixture
 def output_handler_no_extras(mock_tts_handler, mock_obs_handler):
     """Minimal handler without vtube or memory."""
-    handler = OutputHandler(
+    handler = OutputCoordinator(
         tts_handler=mock_tts_handler,
         obs_handler=mock_obs_handler,
         max_age_seconds=30,
@@ -36,7 +36,7 @@ def output_handler_no_extras(mock_tts_handler, mock_obs_handler):
 
 
 @pytest.mark.asyncio
-async def test_handle_response_queues_valid_twitch_message(output_handler, sample_response_event, mock_memory_handler, mock_heavy_stack):
+async def test_handle_response_queues_valid_twitch_message(output_handler, sample_response_event, mock_memory_writer, mock_heavy_stack):
     event = sample_response_event
     event.source = "twitch_chat_processed"
     event.prompt = "How are you?"
@@ -47,11 +47,11 @@ async def test_handle_response_queues_valid_twitch_message(output_handler, sampl
     item = output_handler.queue[0]
     assert item["prompt"] == "How are you?"
     assert "Hello there" in item["response"]
-    mock_memory_handler.handle_event.assert_called_once_with(event)
+    mock_memory_writer.handle_event.assert_called_once_with(event)
 
 
 @pytest.mark.asyncio
-async def test_handle_response_queues_monologue_when_no_prompt(output_handler_no_extras, mock_memory_handler):
+async def test_handle_response_queues_monologue_when_no_prompt(output_handler_no_extras, mock_memory_writer):
     event = ResponseGeneratedEvent(
         type="response_generated",
         timestamp=datetime.now(timezone.utc).isoformat(),
@@ -118,7 +118,7 @@ async def test_handle_text_output_with_all_handlers(output_handler, mock_tts_han
 
 @pytest.mark.asyncio
 async def test_handle_text_output_without_vtube_or_subtitles(mock_tts_handler, mock_obs_handler):
-    handler = OutputHandler(
+    handler = OutputCoordinator(
         tts_handler=mock_tts_handler,
         obs_handler=mock_obs_handler,
         vtube_studio_handler=None,

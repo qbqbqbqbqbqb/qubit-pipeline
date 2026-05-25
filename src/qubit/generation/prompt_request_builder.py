@@ -1,10 +1,30 @@
+"""
+Transitional prompt request builder (will be folded into GenerationCoordinator).
+
+LAYER: Input Processing (current) → will move into Generation layer.
+
+This class only knows how to turn a small set of clean input events into
+ResponsePromptEvent objects with a simple text prompt. It has no knowledge of
+memory, RAG, personality, or the full PromptAssembler — that lives in the
+GenerationCoordinator (currently still called PromptDispatcher).
+
+See ARCHITECTURE.md Phase 3 and Phase 6 for the planned consolidation.
+Until then it acts as a narrow, well-isolated adapter.
+"""
+
 from datetime import datetime, timezone
 from src.utils.log_utils import get_logger
 from src.qubit.core.events import ResponsePromptEvent
 
 
 logger = get_logger(__name__)
-class LLMPromptHandler:
+
+
+class PromptRequestBuilder:
+    """Temporary adapter: clean event → minimal ResponsePromptEvent.
+
+    This will eventually be folded into GenerationCoordinator.
+    """
 
     def __init__(self, dispatcher):
         self.dispatcher = dispatcher

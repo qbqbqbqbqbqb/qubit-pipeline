@@ -7,54 +7,54 @@ sys.modules['torch'] = MagicMock()
 sys.modules['transformers'] = MagicMock()
 sys.modules['peft'] = MagicMock()
 
-from src.qubit.processing.prompt_dispatcher import PromptDispatcher
+from src.qubit.generation.generation_coordinator import GenerationCoordinator
 from src.qubit.core.events import ResponsePromptEvent, ResponseGeneratedEvent
 
 
-class TestPromptDispatcher:
+class TestGenerationCoordinator:
     @pytest.fixture
-    def dispatcher(self):
+    def coordinator(self):
         # Mock the new LLMService
         mock_service = MagicMock()
         mock_service.generate_with_retries = AsyncMock(return_value="Generated response")
-        return PromptDispatcher(llm_service=mock_service)
+        return GenerationCoordinator(llm_service=mock_service)
 
     @pytest.mark.asyncio
-    async def test_enqueue_adds_to_queue(self, dispatcher):
+    async def test_enqueue_adds_to_queue(self, coordinator):
         event = MagicMock(spec=ResponsePromptEvent)
         event.type = "response_prompt"
         event.data = {"user": "test"}
         event.prompt = "Test prompt"
 
-        await dispatcher.enqueue(event)
+        await coordinator.enqueue(event)
 
-        assert dispatcher.queue.qsize() == 1
+        assert coordinator.queue.qsize() == 1
 
     @pytest.mark.asyncio
-    async def test_is_stale_logic(self, dispatcher):
+    async def test_is_stale_logic(self, coordinator):
         from datetime import datetime, timedelta, timezone
         old_event = MagicMock(spec=ResponsePromptEvent)
         old_event.timestamp = (datetime.now(timezone.utc) - timedelta(seconds=40)).isoformat()
-        dispatcher.max_age = timedelta(seconds=30)
+        coordinator.max_age = timedelta(seconds=30)
 
-        assert dispatcher._is_stale(old_event) is True
+        assert coordinator._is_stale(old_event) is True
 
         recent_event = MagicMock(spec=ResponsePromptEvent)
         recent_event.timestamp = datetime.now(timezone.utc).isoformat()
-        assert dispatcher._is_stale(recent_event) is False
+        assert coordinator._is_stale(recent_event) is False
 
     @pytest.mark.asyncio
-    async def test_generate_response_calls_assembler_and_llm(self, dispatcher):
-        dispatcher.event_bus = AsyncMock()
+    async def test_generate_response_calls_assembler_and_llm(self, coordinator):
+        coordinator.event_bus = AsyncMock()
 
         mock_assembler = MagicMock()
         mock_assembler.build.return_value = "Final prompt"
 
-        with patch("src.qubit.processing.prompt_dispatcher.PromptAssembler") as MockAssembler, \
-             patch("src.qubit.processing.prompt_dispatcher.core_system_module") as mock_core, \
-             patch("src.qubit.processing.prompt_dispatcher.personality_module") as mock_personality, \
-             patch("src.qubit.processing.prompt_dispatcher.stream_type_module") as mock_stream, \
-             patch("src.qubit.processing.prompt_dispatcher.input_module") as mock_input:
+        with patch("src.qubit.generation.generation_coordinator.PromptAssembler") as MockAssembler, \
+             patch("src.qubit.generation.generation_coordinator.core_system_module") as mock_core, \
+             patch("src.qubit.generation.generation_coordinator.personality_module") as mock_personality, \
+             patch("src.qubit.generation.generation_coordinator.stream_type_module") as mock_stream, \
+             patch("src.qubit.generation.generation_coordinator.input_module") as mock_input:
 
             MockAssembler.return_value = mock_assembler
             mock_core.return_value = MagicMock()
@@ -62,22 +62,22 @@ class TestPromptDispatcher:
             mock_stream.return_value = MagicMock()
             mock_input.return_value = MagicMock()
 
-            dispatcher.llm_service.generate_with_retries = AsyncMock(return_value="LLM response")
+            coordinator.llm_service.generate_with_retries = AsyncMock(return_value="LLM response")
 
             event = MagicMock(spec=ResponsePromptEvent)
             event.data = {"user": "test"}
             event.prompt = "Test prompt"
 
-            response = await dispatcher._generate_response(event)
+            response = await coordinator._generate_response(event)
 
             assert response == "LLM response"
-            dispatcher.llm_service.generate_with_retries.assert_awaited()
+            coordinator.llm_service.generate_with_retries.assert_awaited()
 
 
     @pytest.mark.asyncio
-    async def test_publish_response_creates_and_publishes_event(self, dispatcher):
+    async def test_publish_response_creates_and_publishes_event(self, coordinator):
         mock_event_bus = AsyncMock()
-        dispatcher.event_bus = mock_event_bus
+        coordinator.event_bus = mock_event_bus
 
         event = MagicMock(spec=ResponsePromptEvent)
         event.data = {"user": "test"}
@@ -86,7 +86,7 @@ class TestPromptDispatcher:
 
         response = "Generated response"
 
-        await dispatcher._publish_response(event, response)
+        await coordinator._publish_response(event, response)
 
         mock_event_bus.publish.assert_awaited_once()
         published_event = mock_event_bus.publish.call_args[0][0]

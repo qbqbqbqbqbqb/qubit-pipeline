@@ -29,25 +29,12 @@ def mock_bootstrap_heavy(mocker, mock_heavy_stack):
     mock_instance.ensure_loaded = AsyncMock()
     mock_instance.generate_with_retries = AsyncMock(return_value="mock response")
 
-    mocker.patch("src.qubit.core.bootstrap.PromptDispatcher")
+    mocker.patch("src.qubit.core.bootstrap.GenerationCoordinator")
     mock_mem = mocker.patch("src.qubit.core.bootstrap.MemoryService")
     mock_mem.return_value.name = "MemoryService"
-    mocker.patch("src.qubit.core.bootstrap.LLMPromptHandler")
-    mocker.patch("src.qubit.core.bootstrap.MemoryHandler")
-    mocker.patch("src.qubit.core.bootstrap.TwitchListener")
-    mocker.patch("src.qubit.core.bootstrap.TTSHandler")
-    mocker.patch("src.qubit.core.bootstrap.OBSHandler")
-    mock_out = mocker.patch("src.qubit.core.bootstrap.OutputHandler")
-    mock_out.return_value.name = "OutputHandler"
-    mocker.patch("src.qubit.core.bootstrap.settings")
-    mock_ws = mocker.patch("src.qubit.core.bootstrap.WebSocketServerService")
-    mock_ws.return_value.name = "websocket_server"
-
-    # EventProcessor handlers — we verify registration calls were made
-    mocker.patch("src.qubit.core.bootstrap.ModerationHandler")
-    mocker.patch("src.qubit.core.bootstrap.InputHandler")
-    mocker.patch("src.qubit.core.bootstrap.AutonomousInputHandler")
-    mocker.patch("src.qubit.core.bootstrap.FrontendCommandHandler")
+    mocker.patch("src.qubit.core.bootstrap.PromptRequestBuilder")
+    mocker.patch("src.qubit.core.bootstrap.ModerationProcessor")
+    mocker.patch("src.qubit.core.bootstrap.FrontendCommandProcessor")
 
 
 @pytest.mark.asyncio
@@ -80,12 +67,12 @@ async def test_create_app_registers_event_subscriptions(mock_bootstrap_heavy, mo
     # Because we fully mock the four handlers, we assert that the wiring code called register on each
     # (the real implementations are unit-tested elsewhere).
     from src.qubit.core.bootstrap import (
-        ModerationHandler,
-        InputHandler,
-        AutonomousInputHandler,
-        FrontendCommandHandler,
+        ModerationProcessor,
+        ConversationProcessor,
+        AutonomousPromptProcessor,
+        FrontendCommandProcessor,
     )
-    ModerationHandler.return_value.register_subscriptions.assert_called_once_with(real_event_bus)
-    InputHandler.return_value.register_subscriptions.assert_called_once_with(real_event_bus)
-    AutonomousInputHandler.return_value.register_subscriptions.assert_called_once_with(real_event_bus)
-    FrontendCommandHandler.return_value.register_subscriptions.assert_called_once_with(real_event_bus)
+    ModerationProcessor.return_value.register_subscriptions.assert_called_once_with(real_event_bus)
+    ConversationProcessor.return_value.register_subscriptions.assert_called_once_with(real_event_bus)
+    AutonomousPromptProcessor.return_value.register_subscriptions.assert_called_once_with(real_event_bus)
+    FrontendCommandProcessor.return_value.register_subscriptions.assert_called_once_with(real_event_bus)

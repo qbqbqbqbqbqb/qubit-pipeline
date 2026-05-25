@@ -1,17 +1,17 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
-from src.qubit.processing.prompt_builder import LLMPromptHandler
+from src.qubit.generation.prompt_request_builder import PromptRequestBuilder
 from src.qubit.core.events import ResponsePromptEvent, Event, TwitchChatEvent
 
 
-class TestLLMPromptHandler:
+class TestPromptRequestBuilder:
     @pytest.fixture
     def dispatcher(self):
         return MagicMock()
 
     @pytest.fixture
     def handler(self, dispatcher):
-        return LLMPromptHandler(dispatcher)
+        return PromptRequestBuilder(dispatcher)
 
     def test_builders_mapping_exists(self, handler):
         assert "twitch_chat_processed" in handler.builders

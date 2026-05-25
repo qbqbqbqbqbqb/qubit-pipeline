@@ -10,7 +10,7 @@ from src.qubit.core.events import (
 from src.qubit.utils.filter_utils import contains_banned_words
 
 
-class ModerationHandler(EventProcessor):
+class ModerationProcessor(EventProcessor):
     """
     Sole responsibility: Filter and sanitise raw Twitch events.
     Produces clean *_processed events for downstream consumers.
@@ -24,7 +24,7 @@ class ModerationHandler(EventProcessor):
     }
 
     def __init__(self):
-        super().__init__("moderation handler")
+        super().__init__("moderation processor")
 
     async def handle_event(self, event: Event) -> None:
         if isinstance(event, TwitchChatEvent):
@@ -40,7 +40,7 @@ class ModerationHandler(EventProcessor):
             self.logger.info("[handle_event] Moderating twitch follow event: %s", event)
             await self._moderate_follow(event)
         else:
-            self.logger.warning("[ModerationHandler] Unknown event type: %s", event.type)
+            self.logger.warning("[ModerationProcessor] Unknown event type: %s", event.type)
 
     async def _moderate_chat(self, event: TwitchChatEvent) -> None:
         sanitised_user = self._sanitise(event.user, default="Someone")
