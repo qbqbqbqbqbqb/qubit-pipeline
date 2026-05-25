@@ -8,6 +8,8 @@ and loads external configuration files such as instructions, word lists, and dic
 from twitchAPI.type import AuthScope
 from src.utils.file_utills import load_text_file, get_root, get_file_path, load_word_list, load_phrases, load_json_file
 
+
+# === Twitch Authentication Scopes ===
 BOT_SCOPES = [
     AuthScope.CHAT_READ,
     AuthScope.CHAT_EDIT
@@ -19,19 +21,29 @@ STREAMER_SCOPES = [
     AuthScope.MODERATOR_READ_FOLLOWERS
 ]
 
+
+# === Generation Limits (currently unused) ===
 MAX_NEW_TOKENS_FOR_DIALOGUE_GENERATION = 50
 MAX_NEW_TOKENS_FOR_REFLECTION_GENERATION = 200
 MAX_GENERATION_ATTEMPTS = 3
 
-TTS_SPEAKER_NAME = "p236"
-TTS_MODEL_NAME= "en_GB-vctk-medium.onnx"
-TTS_DELAY = 1.5
 
+# === TTS Configuration ===
+TTS_SPEAKER_NAME = "p236"
+TTS_MODEL_NAME = "en_GB-vctk-medium.onnx"
+TTS_DELAY = 1.5
+TTS_SUBTITLE_NAME = "TTS_Subtitles"
+
+
+# === Project Root & External Data Files ===
 ROOT = get_root()
+
+# Instructions (unused)
 INSTRUCTIONS_FILENAME = "instructions.txt"
 INSTRUCTIONS_PATH = get_file_path(ROOT, f"data/{INSTRUCTIONS_FILENAME}")
 INSTRUCTIONS_FILE = load_text_file(INSTRUCTIONS_PATH)
 
+# Blacklist / Whitelist (used by sanitiser + moderation)
 BLACKLISTED_WORDS_FILENAME = "blacklisted_words.txt"
 BLACKLISTED_WORDS_PATH = get_file_path(ROOT, f"data/{BLACKLISTED_WORDS_FILENAME}")
 BLACKLISTED_WORDS_LIST = load_word_list(BLACKLISTED_WORDS_PATH)
@@ -40,18 +52,23 @@ WHITELISTED_WORDS_FILENAME = "whitelisted_words.txt"
 WHITELISTED_WORDS_PATH = get_file_path(ROOT, f"data/{WHITELISTED_WORDS_FILENAME}")
 WHITELISTED_WORDS_LIST = load_word_list(WHITELISTED_WORDS_PATH)
 
+# Acronym expansion (used by TTS)
 ACRONYMS_LIST_FILENAME = "acronyms.txt"
 ACRONYMS_LIST_PATH = get_file_path(ROOT, f"data/{ACRONYMS_LIST_FILENAME}")
 ACRONYMS_LIST = load_word_list(ACRONYMS_LIST_PATH)
 
+# Monologue prompts (unused)
 MONOLOGUE_PROMPTS_FILENAME = "monologue_prompts.txt"
 MONOLOGUE_PROMPTS_PATH = get_file_path(ROOT, f"data/{MONOLOGUE_PROMPTS_FILENAME}")
 MONOLOGUE_PROMPTS_FILE = load_phrases(MONOLOGUE_PROMPTS_PATH)
 
+# British/American spelling map (unused)
 SPELLING_DICTIONARY_FILENAME = "am_to_br_english.json"
 SPELLING_DICTIONARY_PATH = get_file_path(ROOT, f"data/{SPELLING_DICTIONARY_FILENAME}")
 SPELLING_DICTIONARY_FILE = load_json_file(SPELLING_DICTIONARY_PATH)
 
+
+# === Text Normalisation Rules (unused) ===
 EXCEPTIONS = {"analysis", "thesis", "crisis", "basis"}
 IRREGULAR_PLURALS = {
     "analysis": "analyses",
@@ -60,13 +77,14 @@ IRREGULAR_PLURALS = {
     "basis": "bases",
 }
 
-TTS_SUBTITLE_NAME="TTS_Subtitles"
 
+# === Bot Identity & Runtime Constants ===
 BOT_NAME = "Qubit"
-
 STREAM_TYPE = "Just Chatting"
 REFLECTIONS_THRESHOLD = 5
 
+
+# === Core System Prompt ===
 CORE_SYSTEM_PROMPT = (
     "You are Qubit, an AI Vtuber, currently streaming on Twitch and YouTube.\n"
     "Adapt your response style and tone based on the user's personality traits.\n"
