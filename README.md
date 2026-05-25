@@ -51,16 +51,19 @@ python -X faulthandler -m src.qubit.main
 
 TODO - add
 - add speech to text -> change purechat only mode to respect only when speech is spoken nto when mode is on
-- add youtube input
 - add audio file input
 - add vtubestudio output
 - add random events input -> on frontend start click
 - figure out autonomous behaviour & decision-making system
-- remove unnecessary old chat control utils
+- remove + update unnecessary old chat control utils
 
 TODO - edit
 - update frontend to not be pure html eventually
+- update frontend to check for connection w/o refreshing and losing saved settings
+-  fix hardcoding of instructions etc so its easier to change from an enduser standpoint
 
 TODO - maybe
 - add ending stream input?
 - update output logic to include emotes in text output but not tts output. requires analysing current output first
+- add back relationship signallers? move to neural tree setup when responding to better identify topics?
+- add youtube input? api kind of sucks
