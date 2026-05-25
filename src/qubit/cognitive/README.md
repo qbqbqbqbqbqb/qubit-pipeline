@@ -1,6 +1,6 @@
 # Cognitive Layer
 
-The **CognitiveService** is the central brain of Qubit.  
+The **CognitiveOrchestrator** is the central brain of Qubit. It is the **only** place allowed to decide what the AI should do next.  
 It decides:
 - When to trigger monologues (low activity **or** random chance)
 - When to respond to chat/STT messages
@@ -17,7 +17,7 @@ flowchart TD
     end
 
     subgraph Cognitive ["Cognitive Layer"]
-        Service["**CognitiveService**<br/>(thin orchestrator)"]
+        Service["**CognitiveOrchestrator**<br/>(thin orchestrator)"]
         Tracker["**ActivityTracker**<br/>(score + input routing)"]
         Queue["**InputPriorityQueue**<br/>(STT 10× • quality • recency)"]
         Engine["**DecisionEngine**<br/>(runs every 5s)"]
@@ -26,7 +26,7 @@ flowchart TD
 
     subgraph Output ["Output"]
         Bus[EventBus]
-        Pipeline[Pipeline<br/>→ PromptDispatcher → LLM → TTS/OBS]
+        Pipeline[Pipeline<br/>→ GenerationCoordinator → LLM → TTS/OBS]
     end
 
     A & B & C --> Service
