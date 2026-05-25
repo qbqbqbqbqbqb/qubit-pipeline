@@ -92,9 +92,18 @@ class OutputCoordinator(Service):
             self.logger.warning("[handle_response] Invalid response, skipping.")
             return
 
-        response_clean = self.dialogue_sanitiser.strip_leading_punctuation(
-            self.dialogue_sanitiser.remove_trailing_text(
-            self.dialogue_sanitiser.remove_bot_name(filtered_response)))
+        def _log_mutation(step: str, before: str, after: str):
+            if after != before:
+                self.logger.info("[handle_response] %s changed text: %r -> %r", step, before, after)
+
+        after_bot = self.dialogue_sanitiser.remove_bot_name(filtered_response)
+        _log_mutation("remove_bot_name", filtered_response, after_bot)
+
+        after_trailing = self.dialogue_sanitiser.remove_trailing_text(after_bot)
+        _log_mutation("remove_trailing_text", after_bot, after_trailing)
+
+        response_clean = self.dialogue_sanitiser.strip_leading_punctuation(after_trailing)
+        _log_mutation("strip_leading_punctuation", after_trailing, response_clean)
 
         event = await self._set_event_attributes(event, prompt, source, response_clean)
         await self._handle_memory_event(event)
