@@ -1,11 +1,33 @@
+"""
+Domain event definitions for the entire Qubit pipeline.
+
+All significant occurrences in the system (user input, decisions, generations,
+memory operations, etc.) are represented as immutable dataclass events and
+communicated exclusively through the EventBus.
+
+Base Event provides the minimal common structure.
+Specialized events add the fields required by their consumers.
+"""
+
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
 from src.qubit.prompting.injections import PromptInjection
 from src.qubit.prompting.prompt_assembler import PromptAssembler
 
+
 @dataclass
 class Event:
+    """
+    Base event for all domain events in the system.
+
+    Attributes:
+        type: String identifier used for routing on the EventBus
+              (e.g. "twitch_chat_processed", "response_prompt", "response_generated").
+        timestamp: ISO 8601 timestamp when the event was created.
+        data: Arbitrary payload. Specific event types usually expose
+              typed fields in addition to (or instead of) using this dict.
+    """
     type: str
     timestamp: str
     data: Dict[str, Any]

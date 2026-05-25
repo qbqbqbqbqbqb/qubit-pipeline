@@ -21,6 +21,20 @@ logger = get_logger(__name__)
 
 
 async def run_app(app):
+    """
+    Main entry point that orchestrates the entire application lifecycle.
+
+    Responsibilities:
+    - Starts all registered Services concurrently (they block internally until the "start" signal).
+    - Waits for the frontend "start" signal via RuntimeState.
+    - Publishes the "bot_started" event once the user clicks start in the browser.
+    - Sets up signal handlers for graceful shutdown (SIGINT / SIGTERM).
+    - Waits for shutdown signal.
+    - Stops all services in registration order and cancels their tasks.
+
+    This function is pure infrastructure. It contains no domain logic,
+    decision making, or business rules.
+    """
 
     tasks = []
 

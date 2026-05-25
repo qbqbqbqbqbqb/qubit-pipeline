@@ -11,20 +11,23 @@ from src.utils.log_utils import get_logger
 
 class DecisionEngine:
     """
-    LAYER: Cognitive (pure decision logic)
+    Pure decision logic for the Cognitive layer.
 
-    The actual "brain".
+    This is the component that actually chooses what the bot does next.
 
-    - Builds a rich context dict from the ActivityTracker
-    - Runs all registered behaviours in priority order
-    - Executes at most ONE winning decision per 5-second cycle
-      (prevents simultaneous monologue + response, etc.)
-    - Publishes the resulting high-level intent events
+    Responsibilities:
+    - Build a context snapshot from the ActivityTracker (scores, queue, features, timers)
+    - Execute all registered behaviours in a defined order
+    - Select and execute at most one winning behaviour per decision cycle
+    - Publish the resulting high-level event (ResponsePromptEvent or MonologueEvent)
 
-    This class must stay completely free of:
-    - Prompt construction
-    - LLM calls
-    - Output side effects
+    Strict constraints:
+    - No prompt assembly
+    - No LLM calls
+    - No direct output or TTS
+    - All "intelligence" is delegated to individual Behaviour implementations
+
+    The 5-second cycle is driven by the CognitiveOrchestrator.
     """
 
     def __init__(self, tracker: ActivityTracker, event_bus):
@@ -44,10 +47,16 @@ class DecisionEngine:
 
     async def run_decision_cycle(self) -> None:
         """
-        Run one full decision cycle.
+        Execute one decision cycle (called every 5s by the orchestrator).
 
-        Called every ~5 seconds by CognitiveOrchestrator.
-        Builds context → asks behaviors for decisions → executes the first one.
+        Process:
+        1. Snapshot current state into a context dict from the tracker.
+        2. Iterate behaviours in priority order (Idle, ChatResponse, FrontendMonologue).
+        3. The first behaviour that returns a non-None decision wins.
+        4. Execute that decision (publish event + update cooldown timers).
+        5. Stop — only one action per cycle is allowed.
+
+        This "at most one winner" rule prevents conflicting actions (e.g. monologue + response at the same time).
         """
         context = self._build_context()
         self.logger.info(f"[DecisionEngine] Cycle | activity={context['activity_score']:.2f} | "
@@ -62,10 +71,14 @@ class DecisionEngine:
 
     def _build_context(self) -> dict:
         """
-        Build the context object passed to every behavior.
+        Construct the rich context snapshot passed to every Behaviour.tick().
 
-        Returns:
-            dict: Everything a behavior needs to make a smart decision
+        The context contains everything behaviours need to make informed decisions:
+        - Current activity score
+        - The priority queue of pending inputs
+        - Feature flags (monologue, stt, etc.)
+        - Cooldown timers
+        - Any pending frontend command
         """
         return {
             "activity_score": self.tracker.activity_score,
@@ -78,13 +91,13 @@ class DecisionEngine:
 
     async def _execute_decision(self, decision: dict) -> None:
         """
-        Execute the winning decision from a behavior.
+        Execute the single winning decision returned by a Behaviour.
 
-        Creates the appropriate event and publishes it to the bus.
-        Updates internal timers for cooldowns.
+        Supported decision types:
+        - "response" → publish ResponsePromptEvent (triggers Generation)
+        - "monologue" → publish MonologueEvent (triggers autonomous speech)
 
-        Args:
-            decision: Dict returned by a behavior's .tick() method
+        Also updates the last_*_time trackers used for cooldown logic in behaviours.
         """
         now = datetime.now(timezone.utc)
 

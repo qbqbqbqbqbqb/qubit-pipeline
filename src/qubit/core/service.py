@@ -1,14 +1,18 @@
 """
 Core Service base class.
 
-CONTRACT (see ARCHITECTURE.md):
-- Subclass Service when your component needs its own long-running loop,
-  owns a queue, manages a connection, or performs background work.
-- Services participate in the standard start/stop lifecycle and get a _run() loop.
-- Use EventProcessor instead for pure reactors that only transform or react to events
-  with no independent loop (moderation, dedup, memory writes, etc.).
+This is the foundational building block for any component that owns a long-running
+loop, manages connections, owns a queue, or performs background work.
 
-This is the framework boundary. Domain logic belongs in the layers above.
+CONTRACT:
+- Subclass Service when your component needs independent lifecycle management
+  (e.g. GenerationCoordinator, OutputCoordinator, MemoryService, listeners).
+- Services are started after the frontend "start" signal and stopped on shutdown.
+- They automatically register event subscriptions defined in SUBSCRIPTIONS.
+- They receive a dedicated _run() coroutine that runs until shutdown.
+
+Do NOT use Service for pure event reactors (use EventProcessor instead).
+Domain decision logic belongs in the Cognitive layer, not here.
 """
 
 import asyncio
@@ -17,15 +21,28 @@ from src.utils.log_utils import get_logger
 
 class Service:
     """
-    Base class for components that own a lifecycle + optional background work.
+    Abstract base for long-lived components that require their own execution context.
 
-    Responsibilities of a Service:
-    - Owns its own _run() loop (started after frontend "start" signal)
-    - Manages subscriptions via the SUBSCRIPTIONS class attr
-    - Participates in graceful shutdown
+    A Service is the correct base class when a component needs to:
+    - Run an independent background loop (_run)
+    - Own and drain a queue
+    - Manage external connections (Twitch, WebSocket, audio, etc.)
+    - Perform periodic background work (reflections, token refresh, etc.)
 
-    Do NOT put heavy domain decision logic or prompt building here.
-    Those belong in Cognitive, Generation, Memory, or Output layers.
+    Key lifecycle:
+    1. start(app) is called by the runtime
+    2. Subscriptions from SUBSCRIPTIONS are automatically registered
+    3. The component waits for the global "start" signal
+    4. _run() is launched as a background task
+    5. stop() cancels the task on shutdown
+
+    Attributes:
+        name: Human-readable identifier used for logging.
+        app: Reference to the central App container.
+        event_bus: The global EventBus (injected on start).
+        logger: Dedicated logger for this service.
+
+    Subclasses must define SUBSCRIPTIONS when they want to react to events.
     """
 
     SUBSCRIPTIONS = {}
@@ -38,6 +55,17 @@ class Service:
         self._worker_task = None
 
     async def start(self, app):
+        """
+        Initialize the service and begin its lifecycle.
+
+        This method:
+        - Stores references to the App and EventBus
+        - Registers all event handlers declared in SUBSCRIPTIONS
+        - Waits for the global frontend "start" signal
+        - Launches the background _run() task
+
+        Should only be called by the central runtime (bootstrap / Runtime).
+        """
         self.app = app
         self.event_bus = app.event_bus
 

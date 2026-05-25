@@ -48,6 +48,20 @@ from config.env_config import settings
 
 
 async def create_app():
+    """
+    The single place that assembles the entire application graph according to
+    the target architecture.
+
+    This function:
+    - Creates all layer components in the correct dependency order
+    - Wires them together (passing shared dependencies like MemoryWriter, LLMService, event_bus)
+    - Registers Services for lifecycle management and pure EventProcessors for direct bus subscriptions
+    - Returns a fully configured App instance ready to be run by runtime.run_app()
+
+    IMPORTANT: This is intentionally the ONLY file that knows the full wiring.
+    Changing the architecture (new layers, renames, new dependencies) should
+    primarily happen here and be reflected in the layer READMEs.
+    """
     app = App()
     app.state = RuntimeState()
     app.event_bus = event_bus

@@ -1,3 +1,22 @@
+"""
+Moderation processor (pure EventProcessor).
+
+LAYER: Input Processing
+
+This component is the first filter in the input pipeline. It receives raw
+Twitch events (chat, subscriptions, raids, follows) and produces sanitized
+*_processed events for downstream layers.
+
+Responsibilities:
+- Detect and filter banned words using the shared filter utilities
+- Remove or sanitize problematic content before it reaches Cognitive or Memory
+- Emit clean events (twitch_chat_processed, etc.) so that the rest of the
+  system can assume input has already been moderated
+
+This processor is intentionally narrow. It does not make decisions about
+whether to respond — that belongs in the Cognitive layer.
+"""
+
 from src.qubit.core.event_processor import EventProcessor
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 from src.qubit.core.events import (
@@ -12,8 +31,13 @@ from src.qubit.utils.filter_utils import contains_banned_words
 
 class ModerationProcessor(EventProcessor):
     """
-    Sole responsibility: Filter and sanitise raw Twitch events.
-    Produces clean *_processed events for downstream consumers.
+    Pure EventProcessor that sanitizes raw Twitch input events.
+
+    It acts as a gatekeeper: any event that passes through is considered
+    safe for storage in memory and for feeding into the decision engine.
+
+    The processor emits new events with "_processed" suffix rather than
+    mutating the originals.
     """
 
     SUBSCRIPTIONS = {
@@ -27,6 +51,12 @@ class ModerationProcessor(EventProcessor):
         super().__init__("moderation processor")
 
     async def handle_event(self, event: Event) -> None:
+        """
+        Entry point for all raw Twitch events.
+
+        Dispatches to the appropriate moderation method based on event type.
+        Each moderated event is published as a clean *_processed variant.
+        """
         if isinstance(event, TwitchChatEvent):
             self.logger.info("[handle_event] Moderating twitch chat event: %s", event)
             await self._moderate_chat(event)
@@ -43,6 +73,7 @@ class ModerationProcessor(EventProcessor):
             self.logger.warning("[ModerationProcessor] Unknown event type: %s", event.type)
 
     async def _moderate_chat(self, event: TwitchChatEvent) -> None:
+        """Sanitise username and message text, then publish a clean processed event."""
         sanitised_user = self._sanitise(event.user, default="Someone")
         sanitised_msg = self._sanitise(event.text, default="")
 
@@ -56,6 +87,7 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_subscription(self, event: TwitchSubscriptionEvent) -> None:
+        """Sanitise subscription events (user + optional sub message)."""
         sanitised_user = self._sanitise(event.user, default="Someone")
         sanitised_msg = self._sanitise(event.sub_message, default="")
 
@@ -71,6 +103,7 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_raid(self, event: TwitchRaidEvent) -> None:
+        """Sanitise raid events (mainly the raider username)."""
         sanitised_user = self._sanitise(event.user, default="Someone")
 
         sanitised_event = TwitchRaidEvent(
@@ -83,6 +116,7 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_follow(self, event: TwitchFollowEvent) -> None:
+        """Sanitise follow events (mainly the follower username)."""
         sanitised_user = self._sanitise(event.user, default="Someone")
 
         sanitised_event = TwitchFollowEvent(

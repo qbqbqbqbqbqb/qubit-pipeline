@@ -4,13 +4,19 @@ from datetime import datetime, timezone
 
 class Behavior(ABC):
     """
-    Pure strategy for one possible decision the system can make.
+    Abstract base for a single decision strategy in the cognitive layer.
 
-    A behavior receives a plain dict context (built by DecisionEngine)
-    and returns either a decision dict or None.
+    Each concrete behavior implements one possible action the bot can take
+    (e.g. respond to chat, emit monologue, react to frontend command).
 
-    Behaviours must be stateless with respect to the rest of the system.
-    They never reach outside the context they are given.
+    Contract:
+    - Receives a context dict from DecisionEngine._build_context()
+    - Returns a decision dict (with 'type' key) if it wants to act, else None
+    - Must be completely stateless; all state lives in the context or the tracker
+    - The first behavior in the list that returns a decision wins the cycle
+
+    This design makes it trivial to add, remove, or reorder behaviours without
+    touching the decision engine.
     """
 
     def __init__(self, name: str):
@@ -20,5 +26,14 @@ class Behavior(ABC):
 
     @abstractmethod
     async def tick(self, context: dict) -> dict | None:
-        """Return a decision dict to execute, or None if this behavior does not trigger."""
+        """
+        Evaluate the current context and decide whether to trigger this behavior.
+
+        Args:
+            context: Snapshot from ActivityTracker + feature flags + timers.
+
+        Returns:
+            A decision dict (e.g. {"type": "response", "prompt": ...}) or None.
+            Only the first non-None decision in the ordered list is executed.
+        """
         pass

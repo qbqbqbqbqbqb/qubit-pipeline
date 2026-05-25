@@ -25,10 +25,19 @@ from src.qubit.utils.message_tracker import MessageTracker
 
 class ConversationProcessor(EventProcessor):
     """
-    Pure EventProcessor for normal viewer input (chat, subs, raids, follows).
+    Pure EventProcessor responsible for conversational input events.
 
-    It performs only the mechanical filtering + memory forwarding steps.
-    All decision logic lives in the Cognitive layer.
+    Responsibilities:
+    - Deduplicates recent messages using MessageTracker (prevents repeat spam)
+    - Drops stale events older than max_age_seconds
+    - Forwards qualifying events to MemoryWriter for long-term storage
+
+    This processor deliberately does **not** decide whether to respond.
+    That decision belongs exclusively in the Cognitive layer
+    (DecisionEngine + Behaviours).
+
+    After processing, chat events may result in a ResponsePromptEvent
+    being published later by the Cognitive layer.
     """
 
     SUBSCRIPTIONS = {
@@ -39,12 +48,23 @@ class ConversationProcessor(EventProcessor):
     }
 
     def __init__(self, max_age_seconds=30, memory_writer=None):
+        """
+        Args:
+            max_age_seconds: Events older than this are dropped as stale.
+            memory_writer: Optional MemoryWriter to forward events for long-term storage.
+        """
         super().__init__("conversation processor")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
         self.memory_writer = memory_writer
 
     async def handle_event(self, event) -> None:
+        """
+        Main entry point for conversational events.
+
+        Applies deduplication, staleness filtering, and memory forwarding.
+        Does not publish any ResponsePromptEvent — that is the Cognitive layer's job.
+        """
         self.logger.info("[handle_event] Handling event in ConversationProcessor (Cognitive-controlled mode)")
 
         text = event.data.get("text", "").lower().strip()
@@ -60,11 +80,13 @@ class ConversationProcessor(EventProcessor):
         await forward_to_memory(event, self.memory_writer, self.logger)
 
     def _is_repeated(self, text: str) -> bool:
+        """Returns True if this exact text was seen recently (anti-spam)."""
         if self.message_tracker.is_repeated(text):
             self.logger.debug("[_is_repeated] Dropped repeated message: %s", text)
             return True
         return False
 
     def _track_message(self, text: str) -> None:
+        """Records the message text for future deduplication checks."""
         if self.message_tracker:
             self.message_tracker.add_message(text)

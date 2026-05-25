@@ -18,7 +18,18 @@ import asyncio
 
 
 class RuntimeState:
-    """Central holder for application-wide runtime flags and events."""
+    """
+    Single source of truth for all cross-cutting runtime state.
+
+    This object is intentionally mutable and shared. It holds:
+    - Lifecycle events (start, shutdown)
+    - Feature toggles (can be changed live from the frontend)
+    - AI activity signals (ai_speaking, ai_thinking) — these are set/cleared
+      exclusively by the Output layer when speech is actually happening.
+
+    No other component should duplicate these flags. All layers read from
+    or react to this state (or the events it drives).
+    """
 
     def __init__(self):
         # Lifecycle

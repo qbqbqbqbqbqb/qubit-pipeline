@@ -1,10 +1,21 @@
 """
-Example of a well-structured integration-style test for a complex wiring factory.
+Integration tests for the application bootstrap factory (create_app).
 
-Follows the guidelines in tests/AGENTS.md:
-- Uses the shared mock_heavy_stack + a specific local fixture
-- Lazy / mocked construction to avoid real ML / external dependencies
-- Clear assertions on the resulting object graph
+This test verifies that the central wiring function in src/qubit/core/bootstrap.py
+correctly instantiates and connects all layers according to the target architecture:
+
+- Core runtime components (App, RuntimeState, EventBus)
+- Models layer (LLMService + profiles)
+- Generation layer (GenerationCoordinator)
+- Memory layer (MemoryService + MemoryWriter)
+- Input Processing layer (Moderation, Conversation, Autonomous processors)
+- Cognitive layer (CognitiveOrchestrator)
+- Output layer (OutputCoordinator)
+- Input sources (TwitchListener)
+- Infrastructure (WebSocketServerService)
+
+The tests use heavy mocking (via mock_heavy_stack and local fixture) to avoid
+loading real ML models, databases, or external services during collection and execution.
 """
 import pytest
 from unittest.mock import MagicMock, AsyncMock
@@ -17,10 +28,16 @@ from src.qubit.core.event_bus import event_bus as real_event_bus
 
 @pytest.fixture
 def mock_bootstrap_heavy(mocker, mock_heavy_stack):
-    """Specific wiring mocks on top of the broad mock_heavy_stack.
-    
-    The shared fixture handles the heavy scientific / external packages.
-    This fixture focuses on the exact constructors used inside create_app().
+    """
+    Mocks the constructors of all major components instantiated inside create_app().
+
+    This allows the test to verify the wiring logic without actually constructing
+    real LLM services, memory systems, or external listeners.
+
+    The fixture:
+    - Mocks LLMService and configures its async methods
+    - Mocks GenerationCoordinator, MemoryService, and the four main EventProcessors
+    - Relies on the shared mock_heavy_stack for torch/transformers/chromadb/etc.
     """
     mock_llm_service = mocker.patch("src.qubit.core.bootstrap.LLMService")
     # Make the instance support the async methods called in create_app
@@ -41,7 +58,12 @@ def mock_bootstrap_heavy(mocker, mock_heavy_stack):
 @pytest.mark.asyncio
 async def test_create_app_returns_properly_wired_app(mock_bootstrap_heavy):
     """
-    Test that create_app wires the core components correctly (using mocks for heavy deps).
+    Verifies that create_app produces a correctly structured App instance.
+
+    Assertions check:
+    - The returned object is an App with proper RuntimeState and real EventBus
+    - Core services (websocket, memory, generation) are registered for lifecycle management
+    - At least 6 services are present (infrastructure + major layers)
     """
     app = await create_app()
 
@@ -61,7 +83,14 @@ async def test_create_app_returns_properly_wired_app(mock_bootstrap_heavy):
 @pytest.mark.asyncio
 async def test_create_app_registers_event_subscriptions(mock_bootstrap_heavy, mock_heavy_stack):
     """
-    Verify that the EventProcessor-style handlers are instantiated and have register_subscriptions called.
+    Verifies that pure EventProcessors are wired to the EventBus via register_subscriptions.
+
+    This test imports the classes from bootstrap (which are the mocked versions) and
+    asserts that the wiring code in create_app correctly calls register_subscriptions
+    on ModerationProcessor, ConversationProcessor, AutonomousPromptProcessor, and
+    FrontendCommandProcessor.
+
+    The real implementations of these processors are tested in their own unit tests.
     """
     app = await create_app()
 

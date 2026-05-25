@@ -1,3 +1,23 @@
+"""
+MemoryManager — low-level owner of ChromaDB collections + SQLite index.
+
+LAYER: Memory (see ARCHITECTURE.md)
+
+This class is the single place that talks directly to the persistent stores.
+It is deliberately narrow:
+
+- CRUD for conversation items and reflections
+- Timestamp normalization + locking for thread safety
+- Delegation to ReflectionGenerator when asked
+- Internal SQL index for fast recency queries
+
+It must remain free of:
+- Decision logic or background loops (those live in MemoryService)
+- Write routing (that lives in MemoryWriter)
+- Prompt assembly (MemoryService contributes injections via the bus)
+
+In the 2026 SoC refactor this replaced the old monolithic MemoryHandler.
+"""
 
 import threading
 from datetime import datetime, timedelta, timezone
@@ -12,6 +32,28 @@ from src.qubit.models.llm_service import LLMService
 
 
 class MemoryManager:
+    """
+    Low-level manager for the two Chroma collections + SQLite recency index.
+
+    Responsibilities (strict per Memory layer):
+    - Own the raw collections ("chat", "reflections")
+    - Provide thread-safe add/get/update operations
+    - Normalize all timestamps to unix floats
+    - Delegate reflection generation to ReflectionGenerator
+    - Maintain a fast SQLite index for "recent items" queries
+
+    It is the only component allowed to call chromadb.Client directly for writes/reads.
+    Higher layers (MemoryService, MemoryWriter) talk to this class only.
+
+    The 2026 refactor split the old MemoryHandler into:
+    - MemoryWriter (pure EventProcessor for writes)
+    - MemoryService (Service + background jobs + RAG accessors)
+    - MemoryManager (this class: the actual store owner)
+
+    TODO (still present): Consider injecting pre-created collections or using a factory
+    for better testability / separation.
+    """
+
     # TODO: Consider injecting pre-created collections or using a factory for better testability / separation.
     def __init__(
         self,
@@ -33,6 +75,13 @@ class MemoryManager:
         self.lock = threading.Lock()
 
     def _to_unix_ts(self, ts: Any) -> float:
+        """
+        Normalize any timestamp representation to a UTC unix float.
+
+        Accepts: None, int/float seconds, datetime (naive or aware), ISO string (with or without Z).
+        Always returns a float suitable for Chroma metadata and SQLite.
+        Falls back to now() on any parse failure.
+        """
         if ts is None:
             return datetime.now(timezone.utc).timestamp()
         if isinstance(ts, (int, float)):
@@ -55,9 +104,15 @@ class MemoryManager:
         return datetime.now(timezone.utc).timestamp()
 
     def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
-
         """
-        Add a chat message to the persistent conversation history.
+        Persist a single conversation turn (chat, response, event, or monologue).
+
+        Writes to both:
+        - Chroma "conversation_collection" (for semantic search / future RAG)
+        - SQLite memory_index (for fast recency + filtering queries)
+
+        All writes are performed under self.lock.
+        The "reflected" flag starts False; MemoryService flips it after reflections are generated.
         """
         self.logger.info("[add_conversation_item] adding message: %s from %s %s", content, role, user_id)
 
@@ -99,9 +154,13 @@ class MemoryManager:
         except Exception as e:
             self.logger.error("[add_conversation_item] Error adding chat message: %s", e)
 
+
     def add_reflection_item(self, content: str) -> None:
         """
-        Add a reflection to the persistent reflections collection.
+        Persist a generated reflection (Q&A pair) into the dedicated reflections collection.
+
+        Used exclusively by MemoryService after ReflectionGenerator produces items.
+        Reflections are stored with type="reflection" and user_id="system".
         """
         self.logger.info("[add_reflection_item] adding reflection item: %s", content)
         coll = self.collections["reflections"]
@@ -137,7 +196,16 @@ class MemoryManager:
         limit: int = 20,
         max_age_minutes: int = 120
     ) -> List[Dict]:
+        """
+        Return the most recent items from either "chat" or "reflections" collection.
 
+        Uses the SQLite memory_index for fast ID selection (recency + age filter),
+        then fetches full documents from Chroma. Results are re-filtered and sorted
+        defensively.
+
+        This is the primary method used by MemoryService for RAG injections and
+        by ReflectionGenerator for input to the reflection LLM call.
+        """
         if collection_type not in self.collections:
             raise ValueError(f"Invalid collection: {collection_type}")
 
@@ -192,6 +260,12 @@ class MemoryManager:
             return []
 
     def update_items_metadata(self, item_ids: List[str], new_metadata: Dict) -> None:
+        """
+        Patch metadata (e.g. {"reflected": True}) on a batch of chat items.
+
+        Called by MemoryService after successful reflection generation to prevent
+        the same messages from being re-reflected.
+        """
         coll = self.collections["chat"]
         try:
             with self.lock:
@@ -204,6 +278,12 @@ class MemoryManager:
             self.logger.error("[update_items_metadata] Error updating metadata for items: %s", e)
 
     async def generate_reflections(self) -> List[Tuple[str, str]]:
+        """
+        Trigger ReflectionGenerator to produce Q&A pairs from recent unreflected chat.
+
+        This is the bridge method called from MemoryService's background worker.
+        It passes self (the manager) so the generator can call get_recent_items.
+        """
         self.logger.info("[generate_reflections] Generating reflections")
         self.logger.info("[generate_reflections] Reflections generator: %s", self.reflections_generator)
         if self.reflections_generator is None:

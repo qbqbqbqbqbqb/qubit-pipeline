@@ -17,23 +17,35 @@ from src.qubit.models.model_config import ModelConfig, GenerationConfig
 
 
 class _HuggingFaceExecutor:
-    """Internal executor for a single Hugging Face model.
+    """
+    Internal executor for a single Hugging Face model (private to the models package).
 
-    This class is responsible for:
-    - Loading (with quant, LoRA, etc.)
-    - Actual text generation
-    - Resource cleanup
+    Responsibilities (post-2026 SoC refactor):
+    - Own all direct torch/transformers/peft usage so LLMService stays a pure orchestrator.
+    - Handle model loading (quantization via BitsAndBytes, optional LoRA via PeftModel).
+    - Perform actual text generation with correct token handling and generation kwargs.
+    - Provide clean unload path for GPU memory release.
 
-    It should only be used by LLMService.
+    This class is intentionally private (leading underscore). It is instantiated only by
+    LLMService._get_executor() and must never be imported outside the models package.
+
+    See llm_service.py for the public API and models/README.md for the architecture decision.
     """
 
     def __init__(self, config: ModelConfig) -> None:
+        """
+        Create executor and immediately load the model according to ModelConfig.
+
+        Args:
+            config: ModelConfig with name, quant flags, LoRA path, dtype, context length, etc.
+        """
         self.config = config
         self._model: Any = None
         self._tokenizer: Any = None
         self._load()
 
     def _load(self) -> None:
+        """Load tokenizer + model (with optional 4-bit quant + LoRA) and put model in eval mode."""
         self._tokenizer = AutoTokenizer.from_pretrained(
             self.config.model_name,
             trust_remote_code=self.config.trust_remote_code
@@ -70,6 +82,7 @@ class _HuggingFaceExecutor:
 
     @property
     def tokenizer(self):
+        """Expose the loaded tokenizer (used by LLMService for prompt formatting)."""
         return self._tokenizer
 
     def generate(
@@ -78,7 +91,22 @@ class _HuggingFaceExecutor:
         max_new_tokens: int,
         effective_gen: GenerationConfig,
     ) -> str:
-        """Run generation with the given prompt and effective generation config."""
+        """
+        Run actual model.generate() and return the decoded continuation.
+
+        This is the only public entry point called by LLMService.generate().
+
+        Args:
+            formatted_prompt: Already-assembled prompt string (role-mapped or chat-template).
+            max_new_tokens: Hard cap for this generation.
+            effective_gen: GenerationConfig merged from profile + runtime overrides.
+
+        Returns:
+            str: The generated text (stripped, special tokens removed).
+
+        Raises:
+            ValueError: If input token ids are out of tokenizer vocab range (safety check).
+        """
         inputs = self._tokenizer(
             formatted_prompt,
             return_tensors="pt",
@@ -108,6 +136,12 @@ class _HuggingFaceExecutor:
         ).strip()
 
     def _build_generation_kwargs(self, max_new_tokens: int, gen: GenerationConfig) -> dict[str, Any]:
+        """
+        Assemble the exact kwargs dict passed to model.generate().
+
+        Handles custom EOS tokens (including extra_eos_tokens from ModelConfig) and
+        optional min_p. All sampling params come from the effective GenerationConfig.
+        """
         eos_token_id = self._tokenizer.eos_token_id
 
         if self.config.extra_eos_tokens:
@@ -144,7 +178,11 @@ class _HuggingFaceExecutor:
         return kwargs
 
     def unload(self) -> None:
-        """Unload model and free GPU memory."""
+        """
+        Release model and tokenizer references and clear CUDA cache.
+
+        Called by LLMService when switching profiles or during shutdown.
+        """
         if self._model is not None:
             del self._model
         self._model = None

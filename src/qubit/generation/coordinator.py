@@ -34,9 +34,22 @@ from src.qubit.prompting.modules.stream_type import stream_type_module
 
 class GenerationCoordinator(Service):
     """
-    The central orchestrator for turning decisions into generated responses.
+    The single owner of the "high-level intent → full prompt → LLM call → ResponseGeneratedEvent" path.
 
-    See module docstring for full layer responsibilities.
+    This Service is the canonical choke point for all text generation in the system.
+    It receives ResponsePromptEvent (from Cognitive for chat responses, or from
+    AutonomousPromptProcessor for monologues), assembles the complete prompt using
+    the PromptAssembler + all injection modules + memory RAG, calls the LLM via
+    LLMService, and publishes the final response event.
+
+    It owns:
+    - The input queue for pending generation requests
+    - Staleness filtering (drop old prompts)
+    - Retry logic for LLM calls
+    - System personality state (mood, tone, interaction level)
+    - The 5s background loop that drains the queue
+
+    All other layers treat this as a black box.
     """
 
     SUBSCRIPTIONS = {
@@ -44,6 +57,12 @@ class GenerationCoordinator(Service):
     }
 
     def __init__(self, llm_service: LLMService, max_age_seconds=30, main_profile: str = "main"):
+        """
+        Args:
+            llm_service: The central LLM orchestrator (provides generate_with_retries).
+            max_age_seconds: Prompts older than this are dropped as stale.
+            main_profile: Default LLM profile to use for generation.
+        """
         super().__init__("generation_coordinator")
         self.llm_service = llm_service
         self.main_profile = main_profile
@@ -89,6 +108,12 @@ class GenerationCoordinator(Service):
         await super().stop()
 
     async def enqueue(self, event: ResponsePromptEvent):
+        """
+        Receive a high-level generation intent from Cognitive or Autonomous layer.
+
+        The event is queued for processing in the background _run loop.
+        Staleness and timestamp normalization are handled here.
+        """
         event_type = getattr(event, "type", "unknown")
         user = event.data.get("user", "unknown")
         prompt = getattr(event, "prompt", "")
@@ -98,7 +123,12 @@ class GenerationCoordinator(Service):
         await self.queue.put(event)
 
     def update_system_personality(self, mood=None, tone=None, interaction_level=None) -> None:
-        """Change the system module parameters at runtime."""
+        """
+        Runtime hook to adjust the personality injection modules.
+
+        Called from frontend or tests to change mood/tone without restart.
+        These values are injected into every prompt via the personality_module.
+        """
         if mood:
             self.system_mood = mood
         if tone:

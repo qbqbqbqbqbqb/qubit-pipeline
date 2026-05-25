@@ -1,15 +1,21 @@
 """
-Core EventProcessor base class (pure event reactors).
+Core EventProcessor base class — for pure, stateless event reactors.
 
-CONTRACT (see ARCHITECTURE.md):
-- Use EventProcessor for components that ONLY react to events.
-- No _run loop, no long-lived state machines, no queues they own.
-- Typical examples: moderation, deduplication, normalisation, memory writes (the "writer" part),
-  thin adapters that normalise external events.
+Use this base class for any component whose only job is to react to events
+without owning its own execution loop or long-lived resources.
 
-This is the preferred base for the Input Processing and MemoryWriter layers.
+Typical use cases:
+- Input Processing layer (ConversationProcessor, ModerationProcessor, etc.)
+- MemoryWriter (pure writes from events)
+- Any thin adapter that normalises or filters events
 
-If your component needs its own background loop or owns a queue → subclass Service instead.
+Key contract:
+- No _run() method
+- No ownership of queues or background tasks
+- All work happens synchronously inside handle_event() (or async if needed)
+- Subscriptions are declared in the SUBSCRIPTIONS class attribute
+
+If your component needs to own a loop, a queue, or background work, inherit from Service instead.
 """
 
 from abc import ABC, abstractmethod
@@ -18,15 +24,19 @@ from src.utils.log_utils import get_logger
 
 class EventProcessor(ABC):
     """
-    Lightweight base for pure event-driven reactors.
+    Base class for pure event reactors.
 
-    Responsibilities:
-    - Subscribe to one or more event types via SUBSCRIPTIONS
-    - Perform filtering, transformation, or side-effects (e.g. write to memory)
-    - Never own a main loop or long-running work
+    An EventProcessor is the correct abstraction when a component's only
+    responsibility is to transform or react to events in a deterministic way.
 
-    All domain transformation logic that does not require independent execution
-    should live in subclasses of this class.
+    Characteristics:
+    - Stateless or minimally stateful (state should be external when possible)
+    - No ownership of execution loops
+    - Work is triggered exclusively via the EventBus
+    - Fast, predictable, and easy to test in isolation
+
+    Subclasses must implement handle_event().
+    Subscriptions are declared on the class via the SUBSCRIPTIONS dict.
     """
 
     SUBSCRIPTIONS = {}
