@@ -2,7 +2,7 @@
 import threading
 from datetime import datetime, timedelta, timezone
 import uuid
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import chromadb
 
@@ -32,6 +32,28 @@ class MemoryManager:
         self.conn = conn
         self.lock = threading.Lock()
 
+    def _to_unix_ts(self, ts: Any) -> float:
+        if ts is None:
+            return datetime.now(timezone.utc).timestamp()
+        if isinstance(ts, (int, float)):
+            return float(ts)
+        if isinstance(ts, datetime):
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            return ts.timestamp()
+        if isinstance(ts, str):
+            try:
+                s = ts
+                if s.endswith("Z"):
+                    s = s[:-1] + "+00:00"
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt.timestamp()
+            except Exception:
+                pass
+        return datetime.now(timezone.utc).timestamp()
+
     def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
 
         """
@@ -44,11 +66,8 @@ class MemoryManager:
         try:
             item_id = str(uuid.uuid4())
 
-            timestamp = (
-                metadata.get("timestamp")
-                if metadata and "timestamp" in metadata
-                else datetime.now(timezone.utc).timestamp()
-            )
+            raw_ts = metadata.get("timestamp") if metadata and "timestamp" in metadata else None
+            timestamp = self._to_unix_ts(raw_ts)
 
             source = (
                 metadata.get("source")
@@ -151,15 +170,19 @@ class MemoryManager:
 
             for i in range(len(results["ids"])):
                 meta = results["metadatas"][i]
+                raw_ts = meta.get("timestamp", 0.0)
+                ts = self._to_unix_ts(raw_ts)
                 items.append({
                     "id": results["ids"][i],
-                    "timestamp": meta.get("timestamp", 0.0),
+                    "timestamp": ts,
                     "role": meta.get("role", "Unknown"),
                     "content": results["documents"][i],
                     "user_id": meta.get("user_id", "Unknown"),
                     "reflected": meta.get("reflected", False)
                 })
 
+            cutoff = (datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)).timestamp()
+            items = [it for it in items if it["timestamp"] >= cutoff]
             items.sort(key=lambda x: x["timestamp"], reverse=True)
 
             return items[:limit]
