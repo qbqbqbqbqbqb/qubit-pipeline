@@ -114,11 +114,21 @@ class HuggingFaceModelManager(BaseModelManager):
         if self.config.extra_eos_tokens:
             eos_ids = [self.tokenizer.eos_token_id]
 
+            # Use get_vocab() first, but fall back to convert_tokens_to_ids
+            # (important for chat template special tokens like <|eot_id|>)
             vocab = self.tokenizer.get_vocab()
 
             for token in self.config.extra_eos_tokens:
                 if token in vocab:
                     eos_ids.append(self.tokenizer.convert_tokens_to_ids(token))
+                else:
+                    # Try direct lookup anyway (works for many added special tokens)
+                    try:
+                        token_id = self.tokenizer.convert_tokens_to_ids(token)
+                        if token_id is not None and token_id >= 0:
+                            eos_ids.append(token_id)
+                    except Exception:
+                        pass
 
             eos_token_id = eos_ids
 
@@ -178,9 +188,16 @@ class HuggingFaceModelManager(BaseModelManager):
             max_length=self.config.max_context_length
         ).to(self.model.device)
 
-        vocab_size = self.tokenizer.vocab_size
+        # Use len(tokenizer) instead of .vocab_size because chat templates
+        # (and some models) add special tokens that increase the effective vocab.
+        # This prevents false "out of range" errors with models like Llama-3 / Stheno.
+        vocab_size = len(self.tokenizer)
+
         if torch.any(inputs.input_ids >= vocab_size) or torch.any(inputs.input_ids < 0):
-            raise ValueError(f"Input tokens out of range: vocab_size={vocab_size}, max_input_id={inputs.input_ids.max()}")
+            raise ValueError(
+                f"Input tokens out of range: vocab_size={vocab_size}, "
+                f"max_input_id={inputs.input_ids.max()}, tokenizer_len={len(self.tokenizer)}"
+            )
 
         outputs = self.model.generate(
             input_ids=inputs["input_ids"],
