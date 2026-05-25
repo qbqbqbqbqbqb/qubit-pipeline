@@ -50,7 +50,7 @@ python -X faulthandler -m src.qubit.main
 **TODOs**:
 
 TODO - add
-- add speech to text
+- add speech to text -> change purechat only mode to respect only when speech is spoken nto when mode is on
 - add youtube input
 - add audio file input
 - add vtubestudio output
