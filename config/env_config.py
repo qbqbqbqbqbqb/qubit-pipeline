@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     kick_redirect_uri: str = ""
     kick_streamer_name: str = ""
     kick_bot_name: str = ""
+    audio_directory: str = "audio"   # folder containing pre-converted RVC singing files
     obs_host: str
     obs_port: str
     obs_password: str

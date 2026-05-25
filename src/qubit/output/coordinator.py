@@ -193,6 +193,13 @@ class OutputCoordinator(Service):
                     if await self._check_if_timestamp_stale(item):
                         continue
 
+                    # Block normal output while high-priority audio file is playing
+                    if (self.app and hasattr(self.app, "audio_player")
+                            and self.app.audio_player.is_playing()):
+                        await asyncio.sleep(0.2)
+                        self.queue.appendleft(item)
+                        continue
+
                     for key in ("prompt", "response"):
                         text = item.get(key)
                         if not text:
