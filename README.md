@@ -2,7 +2,7 @@
 
 # qubit-pipeline
 
-This is the main pipeline for Qubit (AI VTuber).
+This is the main pipeline for Qubit.
 
 > **Architecture note**: For the full layered model and responsibilities, see the `src/qubit/` subdirectories (each has its own README where relevant). The system follows a strict Separation of Concerns with these primary layers:
 
@@ -47,14 +47,9 @@ src/qubit/
 ```bash
 python -m pytest tests/qubit/ -q
 ```
-
-## Notes
-
-This project deliberately uses a very explicit, layered design even if it feels "over-engineered" for Python. The goal is maximum clarity when coming back to the code months later.
-
 ---
 
-**Old TODOs** (kept for reference):
+**TODOs**:
 
 - add speech to text
 - add kick input
