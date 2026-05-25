@@ -66,6 +66,7 @@ class CognitiveOrchestrator(Service):
         """
         await super().start(app)
         self.engine = DecisionEngine(self.tracker, self.event_bus)
+        self.tracker.features = self.app.state.features
         self.logger.info("[Cognitive] Orchestrator online (tracker + engine)")
 
     async def _handle_input(self, event):
