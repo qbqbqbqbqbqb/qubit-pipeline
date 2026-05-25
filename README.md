@@ -64,4 +64,4 @@ TODO - edit
 
 TODO - maybe
 - add ending stream input?
-- update output logic to include emotes in text output but not tts output
+- update output logic to include emotes in text output but not tts output. requires analysing current output first
