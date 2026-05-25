@@ -35,6 +35,8 @@ def mock_bootstrap_heavy(mocker, mock_heavy_stack):
     mocker.patch("src.qubit.core.bootstrap.PromptRequestBuilder")
     mocker.patch("src.qubit.core.bootstrap.ModerationProcessor")
     mocker.patch("src.qubit.core.bootstrap.FrontendCommandProcessor")
+    mocker.patch("src.qubit.core.bootstrap.ConversationProcessor")
+    mocker.patch("src.qubit.core.bootstrap.AutonomousPromptProcessor")
 
 
 @pytest.mark.asyncio

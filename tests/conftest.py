@@ -86,8 +86,8 @@ def mock_heavy_stack(mocker):
         "src.qubit.models.hf_model_manager.HuggingFaceModelManager",
         "src.qubit.memory.memory_service.chromadb",
         "src.qubit.input.twitch.listener.TwitchListener",
-        "src.qubit.output.tts_handler.TTSHandler",
-        "src.qubit.output.obs_handler.OBSHandler",
+        "src.qubit.output.handlers.tts.TTSHandler",
+        "src.qubit.output.handlers.obs.OBSHandler",
     ]
     for target in targets:
         try:

@@ -1,6 +1,6 @@
 import pytest
 
-from src.qubit.output.output_sanitiser import DialogueSanitiser
+from src.qubit.output.handlers.sanitiser import DialogueSanitiser
 
 
 @pytest.fixture

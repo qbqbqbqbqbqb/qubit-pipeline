@@ -1,6 +1,6 @@
 import pytest
 
-from src.qubit.output.vtube_studio_handler import VtubeStudioHandler
+from src.qubit.output.handlers.vtube import VtubeStudioHandler
 
 
 def test_vtube_studio_handler_is_instantiable(mock_heavy_stack):

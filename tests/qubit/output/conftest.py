@@ -74,7 +74,7 @@ def mock_vtube_handler():
 @pytest.fixture
 def mock_memory_writer():
     m = MagicMock()
-    m.handle_event = MagicMock()
+    m.handle_event = AsyncMock()
     return m
 
 

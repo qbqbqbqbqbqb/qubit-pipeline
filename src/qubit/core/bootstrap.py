@@ -22,8 +22,8 @@ from src.qubit.input.frontend_command_processor import FrontendCommandProcessor
 
 # --- Output (coordinator + leaves) ---
 from src.qubit.output.coordinator import OutputCoordinator
-from src.qubit.output.tts_handler import TTSHandler
-from src.qubit.output.obs_handler import OBSHandler
+from src.qubit.output.handlers.tts import TTSHandler
+from src.qubit.output.handlers.obs import OBSHandler
 
 # --- Processing (pure EventProcessors: transform / filter / normalise) ---
 from src.qubit.processing.moderation import ModerationProcessor

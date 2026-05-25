@@ -50,11 +50,11 @@ class TestGenerationCoordinator:
         mock_assembler = MagicMock()
         mock_assembler.build.return_value = "Final prompt"
 
-        with patch("src.qubit.generation.generation_coordinator.PromptAssembler") as MockAssembler, \
-             patch("src.qubit.generation.generation_coordinator.core_system_module") as mock_core, \
-             patch("src.qubit.generation.generation_coordinator.personality_module") as mock_personality, \
-             patch("src.qubit.generation.generation_coordinator.stream_type_module") as mock_stream, \
-             patch("src.qubit.generation.generation_coordinator.input_module") as mock_input:
+        with patch("src.qubit.generation.coordinator.PromptAssembler") as MockAssembler, \
+             patch("src.qubit.generation.coordinator.core_system_module") as mock_core, \
+             patch("src.qubit.generation.coordinator.personality_module") as mock_personality, \
+             patch("src.qubit.generation.coordinator.stream_type_module") as mock_stream, \
+             patch("src.qubit.generation.coordinator.input_module") as mock_input:
 
             MockAssembler.return_value = mock_assembler
             mock_core.return_value = MagicMock()

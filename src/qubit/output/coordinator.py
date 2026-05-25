@@ -25,10 +25,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
-from src.qubit.output.obs_handler import OBSHandler
-from src.qubit.output.tts_handler import TTSHandler
+from src.qubit.output.handlers.obs import OBSHandler
+from src.qubit.output.handlers.tts import TTSHandler
+from src.qubit.output.handlers.sanitiser import DialogueSanitiser
 from src.qubit.core.events import ResponseGeneratedEvent
-from src.qubit.output.output_sanitiser import DialogueSanitiser
 from src.qubit.core.service import Service
 
 class OutputCoordinator(Service):

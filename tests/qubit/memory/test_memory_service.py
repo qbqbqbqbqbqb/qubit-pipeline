@@ -9,7 +9,7 @@ from src.qubit.memory.service import MemoryService
 async def test_memory_service_instantiation_minimal():
     # This will attempt to create real chroma + sqlite in a temp location
     # We patch to avoid side effects in test env
-    with patch("src.qubit.memory.memory_service.chromadb.PersistentClient") as mock_chroma, \
+    with patch("src.qubit.memory.service.chromadb.PersistentClient") as mock_chroma, \
          patch("sqlite3.connect") as mock_sqlite:
         mock_chroma.return_value = MagicMock()
         mock_sqlite.return_value = MagicMock()
@@ -21,7 +21,7 @@ async def test_memory_service_instantiation_minimal():
 
 @pytest.mark.asyncio
 async def test_handle_prompt_assembly_adds_injections():
-    with patch("src.qubit.memory.memory_service.chromadb.PersistentClient") as mock_chroma, \
+    with patch("src.qubit.memory.service.chromadb.PersistentClient") as mock_chroma, \
          patch("sqlite3.connect") as mock_sqlite:
         mock_chroma.return_value = MagicMock()
         mock_sqlite.return_value = MagicMock()

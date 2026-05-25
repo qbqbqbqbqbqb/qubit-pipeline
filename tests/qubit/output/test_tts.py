@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 # TTS tests are heavy (audio + model deps) — rely on shared mocking strategy.
 import numpy as np
 
-from src.qubit.output.tts_handler import TTSHandler
+from src.qubit.output.handlers.tts import TTSHandler
 
 
 @pytest.fixture
@@ -84,7 +84,7 @@ def test_decode_wav_bytes_roundtrip():
     assert isinstance(audio, np.ndarray)
 
 
-@patch("src.qubit.output.tts_handler.pyaudio")
+@patch("src.qubit.output.handlers.tts.pyaudio")
 def test_play_audio_opens_stream_and_writes(mock_pyaudio_module, mock_heavy_stack):
     handler = TTSHandler(tts_manager=MagicMock())
 
@@ -102,7 +102,7 @@ def test_play_audio_opens_stream_and_writes(mock_pyaudio_module, mock_heavy_stac
     mock_pa_instance.terminate.assert_called_once()
 
 
-@patch("src.qubit.output.tts_handler.pyaudio")
+@patch("src.qubit.output.handlers.tts.pyaudio")
 def test_play_audio_supports_chunked_streaming(mock_pyaudio_module, mock_heavy_stack):
     """Test that playback can be done in chunks (simulating real streaming)."""
     handler = TTSHandler(tts_manager=MagicMock())

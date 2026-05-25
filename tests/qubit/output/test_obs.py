@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 import json
 
-from src.qubit.output.obs_handler import OBSHandler
+from src.qubit.output.handlers.obs import OBSHandler
 
 
 def test_obs_handler_instantiation():
