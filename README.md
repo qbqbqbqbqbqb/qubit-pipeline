@@ -42,7 +42,8 @@ src/qubit/
 ## Running
 
 ```bash
-python -m pytest tests/qubit/ -q
+python -m pytest tests/ -v --asyncio-mode=auto -q      
+python -X faulthandler -m src.qubit.main   
 ```
 ---
 
