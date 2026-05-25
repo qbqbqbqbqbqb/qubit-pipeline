@@ -1,11 +1,16 @@
-"""Model configuration and LLM profile registry (config-driven).
+"""Model configuration and LLM profile registry (fully config-driven).
 
-MODEL_REGISTRY = catalog of available models (you can add more here).
+MODEL_REGISTRY holds the catalog of available models.
 
-LLM_PROFILES are built at startup based on settings.active_model (from .env).
+LLM_PROFILES are built dynamically at import time using:
+- ACTIVE_MODEL (which base model to use)
+- MAIN_FORMATTER / REFLECTION_FORMATTER (optional formatter overrides)
+- MAIN_TEMPERATURE / MAIN_TOP_P / REFLECTION_TEMPERATURE / REFLECTION_TOP_P (optional generation overrides)
 
-Set ACTIVE_MODEL=gpt6 (or stheno, etc.) in your .env to choose which model
-both "main" and "reflection" profiles will use.
+Example .env:
+    ACTIVE_MODEL=gpt6
+    REFLECTION_FORMATTER=reflection
+    REFLECTION_TEMPERATURE=0.25
 """
 
 from src.qubit.models.model_config import ModelConfig, GenerationConfig
@@ -63,27 +68,35 @@ if active_key not in MODEL_REGISTRY:
 
 base_config = MODEL_REGISTRY[active_key]
 
-# Main formatter priority:
-# 1. MAIN_FORMATTER env var
-# 2. Model's default_prompt_formatter
-# 3. "raw" as last resort
+# --- Formatters (already supported) ---
 main_formatter = settings.main_formatter or base_config.default_prompt_formatter or "raw"
-
-# Reflection formatter priority:
-# 1. REFLECTION_FORMATTER env var
-# 2. "reflection" (analytical style)
 reflection_formatter = settings.reflection_formatter or "reflection"
 
-LLM_PROFILES: dict[str, LLMProfile] = {
-    "main": LLMProfile.from_model_config(
-        key="main",
-        model_config=base_config,
-        formatter_name=main_formatter,
-    ),
+# --- Build base profiles ---
+main_profile = LLMProfile.from_model_config(
+    key="main",
+    model_config=base_config,
+    formatter_name=main_formatter,
+)
 
-    "reflection": LLMProfile.from_model_config(
-        key="reflection",
-        model_config=base_config,
-        formatter_name=reflection_formatter,
-    ),
+reflection_profile = LLMProfile.from_model_config(
+    key="reflection",
+    model_config=base_config,
+    formatter_name=reflection_formatter,
+)
+
+# --- Apply per-profile generation overrides from config (if provided) ---
+if settings.main_temperature is not None:
+    main_profile.generation_defaults.temperature = settings.main_temperature
+if settings.main_top_p is not None:
+    main_profile.generation_defaults.top_p = settings.main_top_p
+
+if settings.reflection_temperature is not None:
+    reflection_profile.generation_defaults.temperature = settings.reflection_temperature
+if settings.reflection_top_p is not None:
+    reflection_profile.generation_defaults.top_p = settings.reflection_top_p
+
+LLM_PROFILES: dict[str, LLMProfile] = {
+    "main": main_profile,
+    "reflection": reflection_profile,
 }

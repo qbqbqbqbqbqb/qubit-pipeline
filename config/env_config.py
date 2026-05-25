@@ -16,9 +16,16 @@ class Settings(BaseSettings):
     Loads settings from a .env file and provides a method to save updated tokens back to the file.
     Includes Twitch API credentials, OBS connection details, and authentication tokens.
     """
+    # ===================== MODEL SELECTION =====================
     active_model: str = "stheno"
-    reflection_formatter: str | None = None
     main_formatter: str | None = None
+    reflection_formatter: str | None = None
+
+    # Per-profile generation overrides (optional - higher precedence than model defaults)
+    main_temperature: float | None = None
+    main_top_p: float | None = None
+    reflection_temperature: float | None = None
+    reflection_top_p: float | None = None
 
     twitch_client_id: str
     twitch_client_secret: str
