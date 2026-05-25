@@ -2,12 +2,9 @@
 
 # qubit-pipeline
 
-This is the main pipeline for Qubit.
+this is my pipeline for running qubit. if you are wondering why i did something a certain way, it is because i do not respect python as a language. thank you.
 
-> **Architecture note**: For the full layered model and responsibilities, see the `src/qubit/` subdirectories (each has its own README where relevant). The system follows a strict Separation of Concerns with these primary layers:
-
-## Architecture Layers (Target SoC)
-
+## Architecture Layers
 | Layer                | Responsibility                                      | Naming Convention          | Owns Loop? |
 |----------------------|-----------------------------------------------------|----------------------------|------------|
 | **Core / Runtime**   | Lifecycle, EventBus, shared state, wiring           | `core/`                    | Yes (runtime) |
@@ -51,6 +48,7 @@ python -m pytest tests/qubit/ -q
 
 **TODOs**:
 
+TODO - add
 - add speech to text
 - add kick input
 - add youtube input
@@ -60,7 +58,9 @@ python -m pytest tests/qubit/ -q
 - figure out autonomous behaviour & decision-making system
 - remove unnecessary old chat control utils
 
+TODO - edit
 - update frontend to not be pure html eventually
 
+TODO - maybe
 - add ending stream input?
 - update output logic to include emotes in text output but not tts output
