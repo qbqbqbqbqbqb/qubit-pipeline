@@ -83,7 +83,7 @@ def mock_heavy_stack(mocker):
     """
     targets = [
         # Our internal heavy classes (safe to patch)
-        "src.qubit.models.hf_model_manager.HuggingFaceModelManager",
+        "src.qubit.models._executor._HuggingFaceExecutor",
         "src.qubit.memory.memory_service.chromadb",
         "src.qubit.input.twitch.listener.TwitchListener",
         "src.qubit.output.handlers.tts.TTSHandler",

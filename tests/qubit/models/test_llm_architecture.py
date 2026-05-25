@@ -96,13 +96,11 @@ class TestLLMService:
     """Tests for LLMService using mocks (no real model loading)."""
 
     @pytest.fixture
-    def mock_manager(self):
-        mgr = MagicMock()
-        mgr.config = MagicMock()
-        mgr.config.generation_config = GenerationConfig()
-        mgr.generate_dialogue = MagicMock(return_value="mocked response")
-        mgr.tokenizer = None
-        return mgr
+    def mock_executor(self):
+        exec = MagicMock()
+        exec.generate = MagicMock(return_value="mocked response")
+        exec.tokenizer = None
+        return exec
 
     def test_register_and_list_profiles(self):
         svc = LLMService()
@@ -113,21 +111,21 @@ class TestLLMService:
         assert "test" in svc.list_profiles()
 
     @pytest.mark.asyncio
-    async def test_generate_uses_formatter_and_calls_manager(self, mock_manager):
+    async def test_generate_uses_formatter_and_calls_manager(self, mock_executor):
         svc = LLMService()
         cfg = ModelConfig(model_name="fake/model")
         profile = LLMProfile(key="test", config=cfg, formatter=get_formatter("raw"))
 
         svc.register_profile(profile)
-        svc._managers["test"] = mock_manager  # inject mock to skip real load
+        svc._executors["test"] = mock_executor  # inject mock to skip real load
 
         result = await svc.generate("test", "hello world", max_new_tokens=50)
 
         assert result == "mocked response"
-        mock_manager.generate_dialogue.assert_called_once()
+        mock_executor.generate.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_generate_applies_overrides(self, mock_manager):
+    async def test_generate_applies_overrides(self, mock_executor):
         svc = LLMService()
         cfg = ModelConfig(model_name="fake/model")
         profile = LLMProfile(
@@ -138,7 +136,7 @@ class TestLLMService:
         )
 
         svc.register_profile(profile)
-        svc._managers["test"] = mock_manager
+        svc._executors["test"] = mock_executor
 
         await svc.generate(
             "test",
@@ -146,9 +144,8 @@ class TestLLMService:
             overrides=GenerationOverrides(temperature=0.2, max_new_tokens=99)
         )
 
-        # The service should have temporarily set the effective config
-        # We just verify it attempted to call generate_dialogue
-        mock_manager.generate_dialogue.assert_called_once()
+        # Verify the executor was called with effective generation config
+        mock_executor.generate.assert_called_once()
 
     def test_dedup_logic_exists(self):
         svc = LLMService()

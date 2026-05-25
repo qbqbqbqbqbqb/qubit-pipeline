@@ -161,6 +161,6 @@ You never have to run more than one model.
 - `llm_service.py` — the orchestrator you call at runtime
 - `llm_profile.py` — `LLMProfile` + `GenerationOverrides`
 - `prompt_formatters/` — all the actual formatting logic
-- `hf_model_manager.py` — the current concrete loader + generator
+- `_executor.py` (private) — actual model loading and generation (internal detail)
 
 This is the complete, forward-only design. No legacy singletons remain.

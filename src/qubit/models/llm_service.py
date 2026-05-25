@@ -9,8 +9,7 @@ import asyncio
 from typing import Any, Dict, Optional, Union, List
 
 from src.qubit.models.llm_profile import LLMProfile, GenerationOverrides
-from src.qubit.models.hf_model_manager import HuggingFaceModelManager
-from src.qubit.models.prompt_formatters import get_formatter
+from src.qubit.models._executor import _HuggingFaceExecutor
 from src.qubit.models.model_config import GenerationConfig
 from src.utils.log_utils import get_logger
 
@@ -28,7 +27,7 @@ class LLMService:
 
     def __init__(self):
         self._profiles: Dict[str, LLMProfile] = {}
-        self._managers: Dict[str, HuggingFaceModelManager] = {}
+        self._executors: Dict[str, _HuggingFaceExecutor] = {}
         self._locks: Dict[str, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------ #
@@ -49,39 +48,38 @@ class LLMService:
     def list_profiles(self) -> List[str]:
         return list(self._profiles.keys())
 
-    async def load_profile(self, key: str) -> HuggingFaceModelManager:
-        """Load the underlying model for a profile (idempotent).
+    async def load_profile(self, key: str) -> _HuggingFaceExecutor:
+        """Load the model executor for a profile (idempotent).
 
-        If another profile with an identical underlying model (same model_name + lora_path + quant)
-        is already loaded, the manager is shared to avoid loading the same weights twice.
+        If another profile with an identical underlying model is already loaded,
+        the executor is shared.
         """
         if key not in self._profiles:
             raise KeyError(f"Cannot load unknown profile: {key}")
 
         async with self._locks[key]:
-            if key in self._managers:
-                return self._managers[key]
+            if key in self._executors:
+                return self._executors[key]
 
             profile = self._profiles[key]
 
-            # Simple deduplication: reuse manager if the core model identity matches an already-loaded one
-            for existing_key, existing_mgr in self._managers.items():
+            for existing_key, existing_exec in self._executors.items():
                 existing_prof = self._profiles[existing_key]
                 if self._same_model_identity(profile.config, existing_prof.config):
-                    logger.info("[LLMService] Reusing already-loaded manager for profile '%s' (same model as '%s')", key, existing_key)
-                    self._managers[key] = existing_mgr
-                    return existing_mgr
+                    logger.info("[LLMService] Reusing already-loaded executor for profile '%s'", key)
+                    self._executors[key] = existing_exec
+                    return existing_exec
 
             logger.info("[LLMService] Loading profile '%s' -> %s", key, profile.config.model_name)
 
             try:
-                manager = HuggingFaceModelManager(profile.config)
+                executor = _HuggingFaceExecutor(profile.config)
             except Exception as e:
                 logger.error("[LLMService] Failed to load profile '%s': %s", key, e)
                 raise
 
-            self._managers[key] = manager
-            return manager
+            self._executors[key] = executor
+            return executor
 
     def _same_model_identity(self, a, b) -> bool:
         """Return True if two ModelConfigs point to the exact same underlying model weights."""
@@ -92,16 +90,16 @@ class LLMService:
             and getattr(a, "load_in_8bit", False) == getattr(b, "load_in_8bit", False)
         )
 
-    async def ensure_loaded(self, key: str) -> HuggingFaceModelManager:
-        """Return the loaded manager, loading it if necessary."""
-        if key in self._managers:
-            return self._managers[key]
+    async def ensure_loaded(self, key: str) -> _HuggingFaceExecutor:
+        """Return the loaded executor, loading it if necessary."""
+        if key in self._executors:
+            return self._executors[key]
         return await self.load_profile(key)
 
     def unload_profile(self, key: str) -> None:
-        if key in self._managers:
-            self._managers[key].unload()
-            del self._managers[key]
+        if key in self._executors:
+            self._executors[key].unload()
+            del self._executors[key]
             logger.info("[LLMService] Unloaded profile '%s'", key)
 
     # ------------------------------------------------------------------ #
@@ -120,11 +118,11 @@ class LLMService:
         This is the primary method the rest of the application should call.
         """
         prof = self.get_profile(profile)
-        manager = await self.ensure_loaded(profile)
+        executor = await self.ensure_loaded(profile)
 
         # 1. Prepare the prompt using the profile's formatter
         formatter = prof.formatter
-        tokenizer = getattr(manager, "tokenizer", None)
+        tokenizer = getattr(executor, "tokenizer", None)
 
         formatted_prompt: str
         if isinstance(input, list):
@@ -140,13 +138,12 @@ class LLMService:
                 model_config=prof.config,
             )
 
-        # 2. Merge generation parameters (profile defaults + call-time overrides)
+        # 2. Merge generation parameters
         gen_cfg = prof.generation_defaults
         ov = overrides or GenerationOverrides()
 
         max_tokens = max_new_tokens or ov.max_new_tokens or 150
 
-        # Build a temporary GenerationConfig for this specific call
         effective_gen = GenerationConfig(
             temperature=ov.temperature if ov.temperature is not None else gen_cfg.temperature,
             top_p=ov.top_p if ov.top_p is not None else gen_cfg.top_p,
@@ -156,16 +153,15 @@ class LLMService:
             do_sample=ov.do_sample if ov.do_sample is not None else gen_cfg.do_sample,
         )
 
-        # 3. Temporarily apply the effective generation config to the manager for this call only
-        original_gen_cfg = manager.config.generation_config
-        manager.config.generation_config = effective_gen
-
-        # 4. Call the underlying manager (sync) from a thread to stay async-friendly
+        # 3. Call the private executor (no mutation of shared state)
         loop = asyncio.get_running_loop()
 
         def _do_generate() -> str:
-            # We call generate_dialogue directly. It will now see the effective_gen we just set.
-            return manager.generate_dialogue(formatted_prompt, max_new_tokens=max_tokens)
+            return executor.generate(
+                formatted_prompt=formatted_prompt,
+                max_new_tokens=max_tokens,
+                effective_gen=effective_gen,
+            )
 
         try:
             response = await loop.run_in_executor(None, _do_generate)
@@ -173,9 +169,6 @@ class LLMService:
         except Exception as e:
             logger.error("[LLMService] Generation failed for profile '%s': %s", profile, e)
             return "Sorry, I couldn't generate a response right now."
-        finally:
-            # Always restore the original config so other profiles/calls are unaffected
-            manager.config.generation_config = original_gen_cfg
 
     # ------------------------------------------------------------------ #
     # Convenience / compatibility helpers
@@ -203,6 +196,6 @@ class LLMService:
         logger.error("[LLMService] All %s attempts failed for profile %s", max_attempts, profile)
         return "Sorry, I couldn't generate a response right now."
 
-    def get_manager(self, profile: str) -> Optional[HuggingFaceModelManager]:
-        """Advanced escape hatch: direct access to the loaded HF manager."""
-        return self._managers.get(profile)
+    def _get_executor(self, profile: str) -> Optional[_HuggingFaceExecutor]:
+        """Internal escape hatch for advanced use (not part of public API)."""
+        return self._executors.get(profile)
