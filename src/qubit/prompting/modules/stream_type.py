@@ -1,6 +1,7 @@
 """Prompt injection module for defining stream type context."""
 
 from src.qubit.prompting.injections import PromptInjection
+from config.config import STREAM_TYPE
 
 def stream_type_module() -> PromptInjection:
     """
@@ -14,8 +15,6 @@ def stream_type_module() -> PromptInjection:
         PromptInjection: The configured prompt injection with
         stream type context.
     """
-    STREAM_TYPE = "Just Chatting"
-    # TODO: move stream type into config
     content = (
         f"You are doing a {STREAM_TYPE} stream."
     )

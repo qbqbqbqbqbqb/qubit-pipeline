@@ -8,18 +8,12 @@ from src.qubit.core.events import Event
 
 @pytest.fixture
 def handler():
-    mock_prompt = MagicMock()
-    mock_prompt.builders = {
-        "monologue_prompt": lambda e: MagicMock(),
-        "start_message": lambda e: MagicMock()
-    }
-    mock_prompt.dispatcher = MagicMock()
-    mock_prompt.dispatcher.enqueue = AsyncMock()
     mock_memory = AsyncMock()
+    mock_bus = AsyncMock()
     return AutonomousPromptProcessor(
         max_age_seconds=30,
-        prompt_handler=mock_prompt,
-        memory_writer=mock_memory
+        memory_writer=mock_memory,
+        event_bus=mock_bus
     )
 
 
@@ -34,7 +28,7 @@ async def test_handle_event_drops_stale_message(handler):
 
     await handler.handle_event(event)
     handler.memory_writer.handle_event.assert_not_called()
-    handler.prompt_handler.dispatcher.enqueue.assert_not_awaited()
+    handler.event_bus.publish.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -48,4 +42,4 @@ async def test_handle_event_processes_fresh_message(handler):
 
     await handler.handle_event(event)
     handler.memory_writer.handle_event.assert_called_once_with(event)
-    handler.prompt_handler.dispatcher.enqueue.assert_awaited_once()
+    handler.event_bus.publish.assert_awaited_once()

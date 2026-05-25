@@ -22,7 +22,6 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
         await super().start(app)
 
 
-    # TODO: split this up, a lot happening
     async def _run(self: Any) -> None:
         await super()._run()
         while not self.app.state.shutdown.is_set():
@@ -35,17 +34,7 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
 
             if twitch_enabled:
                 try:
-                    if not self.connected:
-                        self.connected = await self._start_client()
-                        if not self.connected:
-                            self.logger.error("[_run]Failed to connect. Retrying in 10s...")
-                            await asyncio.sleep(10)
-                            continue
-
-                        self.eventsub = EventSubWebsocket(self.twitch_streamer)
-                        self.eventsub.start()
-                        await self._subscribe_to_follow_events()
-
+                    await self._ensure_connected()
                     await self._refresh_tokens()
                     await asyncio.sleep(60 * 60)
 
@@ -53,6 +42,21 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
                     self.logger.error("[_run] Listener error: %s. Restarting...", e)
                     await self.stop()
                     await asyncio.sleep(5)
+
+    async def _ensure_connected(self: Any) -> None:
+        """Ensure Twitch client + EventSub are connected (with retry)."""
+        if self.connected:
+            return
+
+        self.connected = await self._start_client()
+        if not self.connected:
+            self.logger.error("[_ensure_connected] Failed to connect. Retrying in 10s...")
+            await asyncio.sleep(10)
+            return
+
+        self.eventsub = EventSubWebsocket(self.twitch_streamer)
+        self.eventsub.start()
+        await self._subscribe_to_follow_events()
 
 
     async def _start_client(self: Any) -> bool:

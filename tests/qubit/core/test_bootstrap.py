@@ -30,9 +30,8 @@ def mock_bootstrap_heavy(mocker, mock_heavy_stack):
     mock_instance.generate_with_retries = AsyncMock(return_value="mock response")
 
     mocker.patch("src.qubit.core.bootstrap.GenerationCoordinator")
-    mock_mem = mocker.patch("src.qubit.core.bootstrap.MemoryService")
+    mock_mem =     mocker.patch("src.qubit.core.bootstrap.MemoryService")
     mock_mem.return_value.name = "MemoryService"
-    mocker.patch("src.qubit.core.bootstrap.PromptRequestBuilder")
     mocker.patch("src.qubit.core.bootstrap.ModerationProcessor")
     mocker.patch("src.qubit.core.bootstrap.FrontendCommandProcessor")
     mocker.patch("src.qubit.core.bootstrap.ConversationProcessor")

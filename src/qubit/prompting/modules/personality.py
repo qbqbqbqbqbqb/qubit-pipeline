@@ -3,8 +3,8 @@
 from typing import Literal
 from src.qubit.prompting.injections import PromptInjection
 
-# TODO: can we use the interaction level passed into here to control priorities on the cognitive layer too?
-# i forget where its passed from rn 
+# Note: interaction_level is accepted here but currently only affects prompt content.
+# Future: could feed this into Cognitive layer priority/weighting.
 def personality_module(
     mood: str = "energetic",
     tone: str = "casual and humorous",

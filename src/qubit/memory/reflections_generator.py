@@ -10,10 +10,13 @@ Classes:
     ReflectionGenerator: Handles the generation and parsing of reflection-based memories.
 """
 import re
-from typing import Any, List, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
 from src.qubit.models.llm_service import LLMService
 from src.utils.log_utils import get_logger
+
+if TYPE_CHECKING:
+    from src.qubit.memory.memory_manager import MemoryManager
 
 class ReflectionGenerator:
     """
@@ -56,8 +59,7 @@ Q3: [Question]
 A3: [Answer]
 """
 
-    async def perform_reflection(self: Any, memory_manager: Any) -> List[Tuple[str, str]]: # circular import if i instantiate type, 
-                                                                                          #TODO: find out if theres a better way to organise RAG to solve this
+    async def perform_reflection(self: Any, memory_manager: "MemoryManager") -> List[Tuple[str, str]]:
         """
         Perform reflection on recent messages to generate Q&A memories.
 

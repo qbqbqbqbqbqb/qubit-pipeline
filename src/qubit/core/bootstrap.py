@@ -31,7 +31,6 @@ from src.qubit.processing.conversation import ConversationProcessor
 from src.qubit.processing.autonomous import AutonomousPromptProcessor
 
 # --- Generation (the single owner of intent → full prompt → LLM → response_generated) ---
-from src.qubit.generation.prompt_builder import PromptRequestBuilder
 from src.qubit.generation.coordinator import GenerationCoordinator
 
 # --- Memory (storage + RAG provider + background reflections) ---
@@ -73,9 +72,6 @@ async def create_app():
     # =====================================================================
     generation_coordinator = GenerationCoordinator(llm_service=llm_service, main_profile="main")
 
-    # Temporary glue (will be folded into GenerationCoordinator later)
-    prompt_request_builder = PromptRequestBuilder(dispatcher=generation_coordinator)
-
     # =====================================================================
     # LAYER: Memory (storage owner + RAG provider + background reflections)
     # Writes go through the pure MemoryWriter (EventProcessor).
@@ -94,8 +90,8 @@ async def create_app():
     )
     autonomous_prompt_processor = AutonomousPromptProcessor(
         max_age_seconds=30,
-        prompt_handler=prompt_request_builder,
-        memory_writer=memory_writer
+        memory_writer=memory_writer,
+        event_bus=event_bus
     )
 
     # =====================================================================

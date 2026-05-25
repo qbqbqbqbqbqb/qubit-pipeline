@@ -27,6 +27,7 @@ from src.qubit.prompting.modules.chat import chat_memory_module
 from src.qubit.prompting.modules.reflection import reflection_memory_module
 from src.qubit.core.service import Service
 from src.qubit.memory.memory_manager import MemoryManager
+from config.config import REFLECTIONS_THRESHOLD
 
 class MemoryService(Service):
     """
@@ -104,7 +105,6 @@ class MemoryService(Service):
                 await asyncio.sleep(1)
                 continue
 
-            REFLECTIONS_THRESHOLD = 5  # TODO: consider making configurable / moving to config
             while True:
                 await asyncio.sleep(60)
                 self.logger.info("[_run] MemoryService worker checking for reflections...")

@@ -12,7 +12,7 @@ from src.qubit.models.llm_service import LLMService
 
 
 class MemoryManager:
-    # TODO: refactor this
+    # TODO: Consider injecting pre-created collections or using a factory for better testability / separation.
     def __init__(
         self,
         chroma_client: chromadb.Client,
