@@ -1,14 +1,18 @@
-"""Model configuration registry.
+"""Model configuration and LLM profile registry.
 
-This module defines available model configurations used by the application.
-Each entry in MODEL_REGISTRY maps a model identifier to a ModelConfig
-instance, which specifies loading parameters and text generation behaviour.
+MODEL_REGISTRY contains the raw ModelConfig definitions (loading + generation params).
 
-The configurations include model-specific settings such as quantisation,
-prompt formatting, and sampling strategies via GenerationConfig.
+LLM_PROFILES provides the higher-level named profiles used by LLMService.
+Each profile combines a ModelConfig with a PromptFormatter and generation defaults.
+
+This is the recommended way to define "main", "reflection", "monologue", etc.
 """
 
+from dataclasses import replace
+
 from src.qubit.models.model_config import ModelConfig, GenerationConfig
+from src.qubit.models.llm_profile import LLMProfile
+from src.qubit.models.prompt_formatters import get_formatter
 
 # Registry mapping model identifiers to their configurations.
 # Keys: str identifiers used to select a model.
@@ -45,3 +49,42 @@ MODEL_REGISTRY = {
         )
     )
 }
+
+
+# ---------------------------------------------------------------------------
+# LLM Profiles (new multi-LLM architecture)
+# These are the named units that LLMService and the rest of the app use.
+# ---------------------------------------------------------------------------
+
+LLM_PROFILES: dict[str, LLMProfile] = {
+    "main": LLMProfile(
+        key="main",
+        config=MODEL_REGISTRY["stheno"],
+        formatter=get_formatter("chat_template"),   # Stheno is Llama-3 based → good chat template
+        generation_defaults=MODEL_REGISTRY["stheno"].generation_config,
+    ),
+
+    "reflection": LLMProfile(
+        key="reflection",
+        # We give it its own ModelConfig instance (same HF weights) so generation config is independent
+        config=replace(
+            MODEL_REGISTRY["stheno"],
+            generation_config=GenerationConfig(
+                temperature=0.3,
+                top_p=0.9,
+                top_k=50,
+                repetition_penalty=1.05,
+                do_sample=True,
+            )
+        ),
+        formatter=get_formatter("reflection"),
+        generation_defaults=replace(MODEL_REGISTRY["stheno"].generation_config, temperature=0.3, repetition_penalty=1.05),
+    ),
+}
+
+# Convenience: the old "gpt6" entry can be turned into a profile on demand:
+# LLM_PROFILES["gpt6-main"] = LLMProfile.from_model_config(
+#     key="gpt6-main",
+#     model_config=MODEL_REGISTRY["gpt6"],
+#     formatter_name="pygmalion",
+# )

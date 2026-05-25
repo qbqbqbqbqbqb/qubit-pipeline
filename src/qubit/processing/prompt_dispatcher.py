@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from src.qubit.core.service import Service
-from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
+from src.qubit.models.llm_service import LLMService
 
 from src.qubit.core.events import PromptAssemblyEvent, ResponseGeneratedEvent, ResponsePromptEvent
 from src.qubit.prompting.prompt_assembler import PromptAssembler
@@ -17,9 +17,10 @@ class PromptDispatcher(Service):
         "response_prompt": "enqueue",
     }
 
-    def __init__(self, llm_client = AsyncHuggingFaceLLM, max_age_seconds=30):
+    def __init__(self, llm_service: LLMService, max_age_seconds=30, main_profile: str = "main"):
         super().__init__("prompt_dispatcher")
-        self.llm = llm_client
+        self.llm_service = llm_service
+        self.main_profile = main_profile
         self.queue = asyncio.Queue()
         self.system_mood = "energetic"
         self.system_tone = "casual and humorous"
@@ -82,22 +83,23 @@ class PromptDispatcher(Service):
 
     async def generate_with_retries(self, prompt, max_attempts=3) -> Any:
         """
-        Attempt to generate a response up to `max_attempts` times.
+        Attempt to generate a response up to `max_attempts` times using the main profile.
         """
-
         for attempt in range(1, max_attempts + 1):
             self.logger.info("[_generate_with_retries][Attempt %s] prompt: %s", attempt, prompt)
             try:
                 self.logger.info("[_generate_with_retries] Generating response")
-                response = await self.llm.generate_response(prompt)
+                response = await self.llm_service.generate_with_retries(
+                    profile=self.main_profile,
+                    input=prompt,
+                    max_attempts=1,  # we handle retries here
+                )
                 if response and response.strip():
                     self.logger.info("[_generate_with_retries][Attempt %s] response: %s", attempt, response)
                     return response
                 self.logger.warning("[_generate_with_retries][Attempt %s] Empty response, retrying...", attempt)
-            except (asyncio.TimeoutError, ConnectionError, ValueError) as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
                 self.logger.error("[_generate_with_retries] [Attempt %s] LLM generation error: %s", attempt, e)
-            except Exception as e: # pylint: disable=broad-exception-caught
-                self.logger.error("[_generate_with_retries] [Attempt %s] Unexpected error: %s", attempt, e)
 
             await asyncio.sleep(1)
 

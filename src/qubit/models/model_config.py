@@ -51,6 +51,8 @@ class ModelConfig:
             to the specific model.
         generation_config (GenerationConfig): Sampling configuration for
             text generation.
+        default_prompt_formatter (str): Name of the preferred PromptFormatter
+            for this model (used when building LLMProfiles).
     """
     model_name: str
     load_in_4bit: bool = False
@@ -64,3 +66,7 @@ class ModelConfig:
     extra_eos_tokens: list[str] | None = None
     system_model_specific_prompt: Optional[str] = None
     generation_config: GenerationConfig = field(default_factory=GenerationConfig)
+
+    # New in multi-LLM architecture (2026-05): preferred formatter name for this config.
+    # Used when automatically turning ModelConfig entries into LLMProfiles.
+    default_prompt_formatter: str = "raw"

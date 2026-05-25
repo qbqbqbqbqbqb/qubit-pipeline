@@ -20,8 +20,8 @@ from src.qubit.memory.memory_handler import MemoryHandler
 from src.qubit.cognitive.cognitive_service import CognitiveService
 from src.qubit.input.frontend_command_handler import FrontendCommandHandler
 
-from src.qubit.models.model_manager import ModelManager
-from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
+from src.qubit.models.llm_service import LLMService
+from src.qubit.models.model_registry import LLM_PROFILES
 from config.env_config import settings
 
 
@@ -30,11 +30,21 @@ async def create_app():
     app.state = RuntimeState()
     app.event_bus = event_bus
 
+    # ====================== LLM SERVICE (single source of truth) ======================
+    llm_service = LLMService()
+    for prof in LLM_PROFILES.values():
+        llm_service.register_profile(prof)
+
+    # Pre-load the profiles we use at runtime
+    await llm_service.ensure_loaded("main")
+    await llm_service.ensure_loaded("reflection")
+
+    app.state.llm_service = llm_service
+
     # ====================== CORE COMPONENTS ======================
-    llm_client = AsyncHuggingFaceLLM(ModelManager.get_instance(), max_tokens=150)
-    dispatcher = PromptDispatcher(llm_client)
-    
-    memory_service = MemoryService(dispatcher=dispatcher)
+    dispatcher = PromptDispatcher(llm_service=llm_service, main_profile="main")
+
+    memory_service = MemoryService(llm_service=llm_service)
     memory_handler = MemoryHandler(memory_service)
 
     llm_handler = LLMPromptHandler(dispatcher=dispatcher)

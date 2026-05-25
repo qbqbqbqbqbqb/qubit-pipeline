@@ -21,3 +21,12 @@ def test_model_config_creation():
     cfg = ModelConfig(model_name="test/model")
     assert cfg.model_name == "test/model"
     assert isinstance(cfg.generation_config, GenerationConfig)
+
+
+def test_model_config_has_default_prompt_formatter():
+    cfg = ModelConfig(model_name="test/model")
+    assert hasattr(cfg, "default_prompt_formatter")
+    assert cfg.default_prompt_formatter == "raw"  # default value
+
+    cfg2 = ModelConfig(model_name="test/model2", default_prompt_formatter="chat_template")
+    assert cfg2.default_prompt_formatter == "chat_template"

@@ -12,7 +12,7 @@ Classes:
 import re
 from typing import Any, List, Tuple
 
-from src.qubit.processing.prompt_dispatcher import PromptDispatcher
+from src.qubit.models.llm_service import LLMService
 from src.utils.log_utils import get_logger
 
 class ReflectionGenerator:
@@ -22,12 +22,22 @@ class ReflectionGenerator:
     This class interfaces with the chat history manager and response generator to create
     memories in the form of Q&A pairs that highlight important insights from conversations.
     """
-    def __init__(self: Any, dispatcher: PromptDispatcher = None, reflection_threshold: int = 20):
+    def __init__(
+        self: Any,
+        llm_service: LLMService,
+        reflection_profile: str = "reflection",
+        reflection_threshold: int = 20,
+    ):
         """
         Initialize the ReflectionGenerator.
+
+        Args:
+            llm_service: The LLMService instance (required).
+            reflection_profile: Which profile to use for reflection generation.
         """
         self.logger = get_logger("ReflectionGenerator")
-        self.dispatcher = dispatcher
+        self.llm_service = llm_service
+        self.reflection_profile = reflection_profile
         self.reflection_threshold = reflection_threshold
         self.reflection_prompt = """
 Given the following recent conversation messages, generate 3 high-level question-answer pairs that capture the most important and distinctive aspects of this conversation. Focus on insights, patterns, or key information that would be valuable to remember for future interactions.
@@ -81,10 +91,10 @@ A3: [Answer]
 
         self.logger.info("[perform_reflection] Generated reflection messages")
         try:
-            if self.dispatcher is None:
-                raise ValueError("[perform_reflection] Dispatcher not set for reflection generation")
-            reflection_response = await self.dispatcher.generate_with_retries(
-                prompt=reflection_messages
+            reflection_response = await self.llm_service.generate_with_retries(
+                profile=self.reflection_profile,
+                input=reflection_messages,
+                max_attempts=3,
             )
             self.logger.info("[perform_reflection] Reflection response: %s", reflection_response)
 

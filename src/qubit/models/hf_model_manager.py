@@ -6,7 +6,7 @@ causal language models. It supports quantisation, LoRA adapters, and
 customisable text generation settings.
 """
 
-from typing import Any, Union, List, Dict, Optional
+from typing import Any, Optional
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
@@ -95,7 +95,7 @@ class HuggingFaceModelManager(BaseModelManager):
         """
         return self._tokenizer
 
-    def _build_generation_config(self: Any, max_new_tokens: int) -> Dict[str, Any]:
+    def _build_generation_config(self: Any, max_new_tokens: int) -> dict[str, Any]:
         """Construct generation parameters for model inference.
 
         This method merges the configured GenerationConfig with runtime
@@ -138,7 +138,7 @@ class HuggingFaceModelManager(BaseModelManager):
 
         return config
 
-    def format_chat_prompt(self: Any, messages: List[Dict[str, str]]) -> str:
+    def format_chat_prompt(self: Any, messages: list[dict[str, str]]) -> str:
         """Format a list of chat messages into a plain text prompt.
 
         Args:
@@ -201,33 +201,3 @@ class HuggingFaceModelManager(BaseModelManager):
         """
         del self._model
         torch.cuda.empty_cache()
-
-    def prepare_prompt(self: Any, prompt: Union[str, List[Dict[str, str]], Dict[str, str]]) -> str:
-        """Prepare and normalise a prompt for model input.
-
-        This method applies system prompts, chat templates, or fallback
-        formatting depending on the input type and configuration.
-
-        Args:
-            prompt (str | list | dict): Input prompt in various formats.
-
-        Returns:
-            str: Prepared prompt string ready for tokenisation.
-        """
-        if self.config.system_model_specific_prompt and isinstance(prompt, str):
-            prompt = f"{self.config.system_model_specific_prompt}\n{prompt}"
-
-        if isinstance(prompt, list) and self.config.use_chat_template:
-            return self.tokenizer.apply_chat_template(
-                prompt,
-                tokenize=False,
-                add_generation_prompt=True
-            )
-
-        if isinstance(prompt, list):
-            return "\n".join([m.get("content", "") for m in prompt])
-
-        if isinstance(prompt, dict):
-            return prompt.get("content", "")
-
-        return str(prompt)

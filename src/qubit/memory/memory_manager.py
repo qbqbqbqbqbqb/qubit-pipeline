@@ -8,15 +8,22 @@ import chromadb
 
 from src.qubit.memory.reflections_generator import ReflectionGenerator
 from src.utils.log_utils import get_logger
-from src.qubit.processing.prompt_dispatcher import PromptDispatcher
+from src.qubit.models.llm_service import LLMService
 
 
-# TODO: refactor this
 class MemoryManager:
-    def __init__(self, chroma_client: chromadb.Client, dispatcher: PromptDispatcher = None, reflections_generator: ReflectionGenerator = None, conn = None):
+    # TODO: refactor this
+    def __init__(
+        self,
+        chroma_client: chromadb.Client,
+        reflections_generator: ReflectionGenerator = None,
+        conn = None,
+        llm_service: LLMService = None,
+    ):
         self.logger = get_logger("MemoryManager")
         self.chroma_client = chroma_client
-        self.dispatcher = dispatcher
+        self.llm_service = llm_service
+
         self.collections = {
             "chat": self.chroma_client.get_or_create_collection(name="conversation_collection", metadata={"hnsw:space": "l2"}),
             "reflections": self.chroma_client.get_or_create_collection(name="reflections_collection", metadata={"hnsw:space": "l2"})
@@ -26,6 +33,7 @@ class MemoryManager:
         self.lock = threading.Lock()
 
     def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
+
         """
         Add a chat message to the persistent conversation history.
         """

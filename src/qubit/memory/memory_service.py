@@ -7,8 +7,8 @@ from sqlite3 import Connection
 import chromadb
 from chromadb.config import Settings
 
-from src.qubit.processing.prompt_dispatcher import PromptDispatcher
 from src.qubit.memory.reflections_generator import ReflectionGenerator
+from src.qubit.models.llm_service import LLMService
 
 from src.qubit.core.events import PromptAssemblyEvent
 from src.qubit.prompting.modules.chat import chat_memory_module
@@ -19,7 +19,7 @@ from src.qubit.memory.memory_manager import MemoryManager
 class MemoryService(Service):
     SUBSCRIPTIONS = {"prompt_assembly": "handle_prompt_assembly"}
 
-    def __init__(self, base_path: str = ".", dispatcher: PromptDispatcher= None):
+    def __init__(self, base_path: str = ".", llm_service: LLMService = None):
         super().__init__("MemoryService")
 
         self.base_path = Path(base_path)
@@ -27,7 +27,7 @@ class MemoryService(Service):
         self.memories_dir.mkdir(exist_ok=True)
         self.sql_dir = self.memories_dir / "sql"
         self.sql_dir.mkdir(exist_ok=True)
-        self.dispatcher = dispatcher
+        self.llm_service = llm_service
 
         self.chroma_client = chromadb.PersistentClient(
             path=str(self.memories_dir / "chroma.db"),
@@ -45,11 +45,16 @@ class MemoryService(Service):
         )
         self.conn.row_factory = sqlite3.Row
 
-        self.reflections_generator = ReflectionGenerator(dispatcher=self.dispatcher)
-        self.memory_manager = MemoryManager(self.chroma_client,
-                                            dispatcher=self.dispatcher,
-                                            conn=self.conn,
-                                            reflections_generator=self.reflections_generator)
+        self.reflections_generator = ReflectionGenerator(
+            llm_service=self.llm_service,
+            reflection_profile="reflection",
+        )
+        self.memory_manager = MemoryManager(
+            self.chroma_client,
+            conn=self.conn,
+            reflections_generator=self.reflections_generator,
+            llm_service=self.llm_service,
+        )
         with self.memory_manager.lock:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS memory_index (
