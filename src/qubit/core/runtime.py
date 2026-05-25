@@ -1,3 +1,16 @@
+"""
+Runtime entry point.
+
+Responsibilities (see ARCHITECTURE.md):
+- Start all registered Services in parallel
+- Wait for the frontend "start" signal via RuntimeState
+- Publish the bot_started event
+- Handle graceful shutdown (SIGINT/SIGTERM)
+- Stop all services in reverse order
+
+This is pure infrastructure. No domain logic lives here.
+"""
+
 import asyncio
 from datetime import datetime, timezone
 import signal
@@ -6,7 +19,22 @@ from src.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
 
+
 async def run_app(app):
+    """
+    Main entry point that orchestrates the entire application lifecycle.
+
+    Responsibilities:
+    - Starts all registered Services concurrently (they block internally until the "start" signal).
+    - Waits for the frontend "start" signal via RuntimeState.
+    - Publishes the "bot_started" event once the user clicks start in the browser.
+    - Sets up signal handlers for graceful shutdown (SIGINT / SIGTERM).
+    - Waits for shutdown signal.
+    - Stops all services in registration order and cancels their tasks.
+
+    This function is pure infrastructure. It contains no domain logic,
+    decision making, or business rules.
+    """
 
     tasks = []
 
@@ -19,6 +47,7 @@ async def run_app(app):
 
     logger.info(" Bot started")
 
+    # This event is the trigger that many components (Cognitive, Generation, Output) wait for
     event = Event(
             type="bot_started",
             timestamp=datetime.now(timezone.utc).isoformat(),

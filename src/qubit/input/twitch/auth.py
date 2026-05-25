@@ -21,6 +21,7 @@ Responsibilities
 """
 import asyncio
 import logging
+from typing import Any
 import aiohttp
 from twitchAPI.twitch import Twitch
 from twitchAPI.oauth import UserAuthenticator, refresh_access_token
@@ -46,7 +47,7 @@ class TwitchAuthMixin:
     """
     logger: logging.Logger
 
-    async def _authenticate_bot_account(self) -> None:
+    async def _authenticate_bot_account(self: Any) -> None:
         """
         Authenticate the bot Twitch account.
 
@@ -77,7 +78,7 @@ class TwitchAuthMixin:
             )
 
 
-    async def _authenticate_streamer_account(self) -> None:
+    async def _authenticate_streamer_account(self: Any) -> None:
         """
         Authenticate the streamer Twitch account.
 
@@ -107,25 +108,7 @@ class TwitchAuthMixin:
                 self.settings.streamer_refresh_token
             )
 
-
-    """     async def _authenticate_twitch_accounts(self: Any, client_attr: str, token_attr: str, refresh_token_attr: str, account_type: str, scopes: list) -> None:
-            self.twitch_account = await Twitch(self.settings.twitch_client_id, self.settings.twitch_client_secret)
-            setattr(self, client_attr, self.twitch_account)
-            
-            token = getattr(self.settings, token_attr)
-            refresh_token = getattr(self.settings, refresh_token_attr)
-
-            if not token or not refresh_token:
-                self.logger.info("[_authenticate_twitch_accounts] No %s found, authenticating interactively...", account_type)
-                auth = UserAuthenticator(self.twitch_account, scopes, url=self.settings.twitch_redirect_uri)
-                token, refresh_token = await auth.authenticate()
-                setattr(self.settings, token_attr, token)
-                setattr(self.settings, refresh_token_attr, refresh_token)
-            else:
-                await setattr(token, scopes, refresh_token)
-    """
-
-    async def _refresh_tokens(self) -> None:
+    async def _refresh_tokens(self: Any) -> None:
         """
         Refresh OAuth access tokens for bot and streamer accounts.
 

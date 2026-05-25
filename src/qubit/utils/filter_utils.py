@@ -6,16 +6,17 @@ from config.config import BOT_NAME
 
 logger = get_logger("Filter_Utils")
 
+
 """
-Filter utilities module for text processing.
+Filter utilities for banned-word detection and sanitisation.
 
-This module provides functions to filter and check text for banned words using
-blacklists and whitelists. It supports case-insensitive matching and partial
-word filtering with options to replace or detect prohibited content.
+Used primarily by DialogueSanitiser in the output layer.
 
-Functions:
-    contains_banned_words: Check if text contains any banned words.
-    filter_banned_words: Replace banned words in text with [filtered].
+Provides case-insensitive substring matching against blacklist with
+whitelist exceptions. Supports both detection (contains_banned_words) and
+replacement (filter_banned_words → "[filtered]").
+
+Part of the 2026 output sanitisation cleanup.
 """
 
 
@@ -74,10 +75,12 @@ def filter_banned_words(text: str, blacklist: list[str], whitelist: list[str] = 
         str: The filtered text with banned words replaced by '[filtered]'.
 
     Example:
-        >>> filter_banned_words("Hello badword!", ["bad"])
+        >>> filter_banned_words("Hello bad!", ["bad"])
         "Hello [filtered]!"
         >>> filter_banned_words("Hello badword!", ["bad"], ["badword"])
         "Hello badword!"
+        >>> filter_banned_words("Hello badwordextra!", ["bad"])
+        "Hello [filtered]wordextra!"
     """
     banned_set = set(word.lower() for word in blacklist)
     whitelist_set = set(word.lower() for word in whitelist or [])
