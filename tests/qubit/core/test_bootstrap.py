@@ -7,10 +7,12 @@ Follows the guidelines in tests/AGENTS.md:
 - Clear assertions on the resulting object graph
 """
 import pytest
+from unittest.mock import MagicMock, AsyncMock
 from src.qubit.core.bootstrap import create_app
 from src.qubit.core.app import App
 from src.qubit.core.runtime_state import RuntimeState
 from src.qubit.core.event_bus import event_bus as real_event_bus
+
 
 
 @pytest.fixture
@@ -20,8 +22,13 @@ def mock_bootstrap_heavy(mocker, mock_heavy_stack):
     The shared fixture handles the heavy scientific / external packages.
     This fixture focuses on the exact constructors used inside create_app().
     """
-    mocker.patch("src.qubit.core.bootstrap.ModelManager")
-    mocker.patch("src.qubit.core.bootstrap.AsyncHuggingFaceLLM")
+    mock_llm_service = mocker.patch("src.qubit.core.bootstrap.LLMService")
+    # Make the instance support the async methods called in create_app
+    mock_instance = mock_llm_service.return_value
+    mock_instance.register_profile = MagicMock()
+    mock_instance.ensure_loaded = AsyncMock()
+    mock_instance.generate_with_retries = AsyncMock(return_value="mock response")
+
     mocker.patch("src.qubit.core.bootstrap.PromptDispatcher")
     mock_mem = mocker.patch("src.qubit.core.bootstrap.MemoryService")
     mock_mem.return_value.name = "MemoryService"

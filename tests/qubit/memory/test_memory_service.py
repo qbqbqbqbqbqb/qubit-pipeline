@@ -14,7 +14,7 @@ async def test_memory_service_instantiation_minimal():
         mock_chroma.return_value = MagicMock()
         mock_sqlite.return_value = MagicMock()
 
-        service = MemoryService(base_path=".", dispatcher=MagicMock())
+        service = MemoryService(base_path=".", llm_service=MagicMock())
         assert service.memory_manager is not None
         assert "MemoryService" in service.name
 
@@ -26,7 +26,7 @@ async def test_handle_prompt_assembly_adds_injections():
         mock_chroma.return_value = MagicMock()
         mock_sqlite.return_value = MagicMock()
 
-        service = MemoryService(base_path=".", dispatcher=MagicMock())
+        service = MemoryService(base_path=".", llm_service=MagicMock())
         service.get_recent_chat_history = MagicMock(return_value=[])
         service.get_recent_reflections = MagicMock(return_value=[])
 

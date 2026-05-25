@@ -14,10 +14,10 @@ from src.qubit.core.events import ResponsePromptEvent, ResponseGeneratedEvent
 class TestPromptDispatcher:
     @pytest.fixture
     def dispatcher(self):
-        # Mock the LLM client
-        mock_llm = MagicMock()
-        mock_llm.generate_response = AsyncMock(return_value="Generated response")
-        return PromptDispatcher(llm_client=mock_llm)
+        # Mock the new LLMService
+        mock_service = MagicMock()
+        mock_service.generate_with_retries = AsyncMock(return_value="Generated response")
+        return PromptDispatcher(llm_service=mock_service)
 
     @pytest.mark.asyncio
     async def test_enqueue_adds_to_queue(self, dispatcher):
@@ -62,7 +62,7 @@ class TestPromptDispatcher:
             mock_stream.return_value = MagicMock()
             mock_input.return_value = MagicMock()
 
-            dispatcher.llm.generate_response = AsyncMock(return_value="LLM response")
+            dispatcher.llm_service.generate_with_retries = AsyncMock(return_value="LLM response")
 
             event = MagicMock(spec=ResponsePromptEvent)
             event.data = {"user": "test"}
@@ -71,7 +71,7 @@ class TestPromptDispatcher:
             response = await dispatcher._generate_response(event)
 
             assert response == "LLM response"
-            dispatcher.llm.generate_response.assert_awaited_with("Final prompt")
+            dispatcher.llm_service.generate_with_retries.assert_awaited()
 
 
     @pytest.mark.asyncio

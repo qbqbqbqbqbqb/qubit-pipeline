@@ -8,8 +8,9 @@ from src.qubit.memory.reflections_generator import ReflectionGenerator
 class TestReflectionGeneratorParsing:
     @pytest.fixture
     def generator(self):
-        # The autouse fixture already mocks the LLM; just construct
-        return ReflectionGenerator(dispatcher=None)
+        # The autouse fixture already mocks the LLM; just construct with required llm_service
+        mock_llm = MagicMock()
+        return ReflectionGenerator(llm_service=mock_llm)
 
     def test_parse_qa_pairs_standard_format(self, generator):
         response = """Q1: What is the main topic?
@@ -56,7 +57,8 @@ A4: A4"""
 
 @pytest.mark.asyncio
 async def test_perform_reflection_returns_empty_when_few_messages():
-    gen = ReflectionGenerator(dispatcher=MagicMock())
+    mock_llm = MagicMock()
+    gen = ReflectionGenerator(llm_service=mock_llm)
     mock_memory_manager = MagicMock()
     mock_memory_manager.get_recent_items.return_value = [{"role": "User", "content": "hi"}] * 5
 
