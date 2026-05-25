@@ -19,7 +19,7 @@ async def test_start_creates_server_and_stop_closes_it():
     # Patch the actual websockets.serve so we don't open real sockets in unit test
     with patch("src.qubit.core.server.websockets.serve", new_callable=AsyncMock) as mock_serve:
         fake_server = AsyncMock()
-        fake_server.close = AsyncMock()
+        fake_server.close = MagicMock()
         fake_server.wait_closed = AsyncMock()
         mock_serve.return_value = fake_server
 
