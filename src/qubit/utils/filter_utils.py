@@ -74,10 +74,12 @@ def filter_banned_words(text: str, blacklist: list[str], whitelist: list[str] = 
         str: The filtered text with banned words replaced by '[filtered]'.
 
     Example:
-        >>> filter_banned_words("Hello badword!", ["bad"])
+        >>> filter_banned_words("Hello bad!", ["bad"])
         "Hello [filtered]!"
         >>> filter_banned_words("Hello badword!", ["bad"], ["badword"])
         "Hello badword!"
+        >>> filter_banned_words("Hello badwordextra!", ["bad"])
+        "Hello [filtered]wordextra!"
     """
     banned_set = set(word.lower() for word in blacklist)
     whitelist_set = set(word.lower() for word in whitelist or [])
