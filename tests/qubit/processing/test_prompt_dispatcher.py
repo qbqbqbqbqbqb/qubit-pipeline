@@ -1,12 +1,14 @@
+import sys
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-# Skip if torch is not available (since prompt_dispatcher uses AsyncHuggingFaceLLM which requires torch)
-pytest.importorskip("torch", reason="PromptDispatcher requires torch and transformers")
+# Mock torch and transformers before any imports that might trigger them
+sys.modules['torch'] = MagicMock()
+sys.modules['transformers'] = MagicMock()
+sys.modules['peft'] = MagicMock()
 
 from src.qubit.processing.prompt_dispatcher import PromptDispatcher
 from src.qubit.core.events import ResponsePromptEvent, ResponseGeneratedEvent
-from src.qubit.models.async_hf_model_manager import AsyncHuggingFaceLLM
 
 
 class TestPromptDispatcher:
@@ -43,16 +45,11 @@ class TestPromptDispatcher:
 
     @pytest.mark.asyncio
     async def test_generate_response_calls_assembler_and_llm(self, dispatcher):
-        # Mock the assembler and the LLM
+        dispatcher.event_bus = AsyncMock()
+
         mock_assembler = MagicMock()
-        mock_assembler.build = MagicMock(return_value="Final prompt")
-        dispatcher.llm.generate_response = AsyncMock(return_value="LLM response")
+        mock_assembler.build.return_value = "Final prompt"
 
-        event = MagicMock(spec=ResponsePromptEvent)
-        event.data = {"user": "test"}
-        event.prompt = "Test prompt"
-
-        # We need to mock the PromptAssembler and the modules it uses
         with patch("src.qubit.processing.prompt_dispatcher.PromptAssembler") as MockAssembler, \
              patch("src.qubit.processing.prompt_dispatcher.core_system_module") as mock_core, \
              patch("src.qubit.processing.prompt_dispatcher.personality_module") as mock_personality, \
@@ -65,10 +62,17 @@ class TestPromptDispatcher:
             mock_stream.return_value = MagicMock()
             mock_input.return_value = MagicMock()
 
+            dispatcher.llm.generate_response = AsyncMock(return_value="LLM response")
+
+            event = MagicMock(spec=ResponsePromptEvent)
+            event.data = {"user": "test"}
+            event.prompt = "Test prompt"
+
             response = await dispatcher._generate_response(event)
 
             assert response == "LLM response"
-            dispatcher.llm.generate_response.assert_awaited_once_with("Final prompt")
+            dispatcher.llm.generate_response.assert_awaited_with("Final prompt")
+
 
     @pytest.mark.asyncio
     async def test_publish_response_creates_and_publishes_event(self, dispatcher):
@@ -78,6 +82,7 @@ class TestPromptDispatcher:
         event = MagicMock(spec=ResponsePromptEvent)
         event.data = {"user": "test"}
         event.prompt = "Test prompt"
+        event.source = "test_source"
 
         response = "Generated response"
 

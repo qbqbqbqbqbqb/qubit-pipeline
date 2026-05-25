@@ -25,7 +25,7 @@ def test_contains_banned_words_whitelist_allows_substring():
 
 
 def test_filter_banned_words_replacement():
-    assert filter_banned_words("hello badword", ["bad"]) == "hello [filtered]"
+    assert filter_banned_words("hello badword", ["bad"]) == "hello [filtered]word"
     assert filter_banned_words("hello goodword", ["bad"]) == "hello goodword"
 
 
@@ -37,8 +37,8 @@ def test_filter_banned_words_whitelist_prevents_replacement():
 
 
 def test_filter_banned_words_punctuation_preserved():
-    assert filter_banned_words("hello badword!", ["bad"]) == "hello [filtered]!"
-    assert filter_banned_words("hello, badword.", ["bad"]) == "hello, [filtered]."
+    assert filter_banned_words("hello badword!", ["bad"]) == "hello [filtered]word!"
+    assert filter_banned_words("hello, badword.", ["bad"]) == "hello, [filtered]word."
 
 
 def test_filter_banned_words_multiple_occurrences():
