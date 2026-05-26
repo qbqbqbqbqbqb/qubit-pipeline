@@ -4,19 +4,23 @@ from datetime import datetime, timezone
 
 class Behavior(ABC):
     """
-    Abstract base for a single decision strategy in the cognitive layer.
+    Abstract base for a pluggable decision strategy in the cognitive layer.
 
-    Each concrete behavior implements one possible action the bot can take
-    (e.g. respond to chat, emit monologue, react to frontend command).
+    New contract (scored proposal model):
+    - Receives rich context from DecisionEngine._build_context()
+    - Returns either None (no proposal) or a scored proposal dict:
+        {
+            "type": "response" | "monologue",
+            "score": float,          # 0.0–1.0 (higher wins). STT responses may exceed 1.0
+            "reason": str,
+            "best_message": dict | None,   # only for "response"
+            "topic": str | None,           # only for "monologue"
+        }
+    - Completely stateless. All timers, features, queue state come from context.
+    - DecisionEngine collects proposals from ALL behaviors every cycle, then picks the single highest-scoring one.
+    - This enables dynamic trade-offs (e.g. strong STT priority at every activity level + natural idle speech at low activity).
 
-    Contract:
-    - Receives a context dict from DecisionEngine._build_context()
-    - Returns a decision dict (with 'type' key) if it wants to act, else None
-    - Must be completely stateless; all state lives in the context or the tracker
-    - The first behavior in the list that returns a decision wins the cycle
-
-    This design makes it trivial to add, remove, or reorder behaviours without
-    touching the decision engine.
+    Adding new behaviors (raids, emotes, alerts, etc.) is now trivial and safe.
     """
 
     def __init__(self, name: str):
@@ -27,13 +31,10 @@ class Behavior(ABC):
     @abstractmethod
     async def tick(self, context: dict) -> dict | None:
         """
-        Evaluate the current context and decide whether to trigger this behavior.
+        Evaluate context and return a scored proposal or None.
 
-        Args:
-            context: Snapshot from ActivityTracker + feature flags + timers.
-
-        Returns:
-            A decision dict (e.g. {"type": "response", "prompt": ...}) or None.
-            Only the first non-None decision in the ordered list is executed.
+        The returned dict MUST contain at minimum:
+            "type", "score", "reason"
+        Optional keys: "best_message", "topic" depending on type.
         """
         pass

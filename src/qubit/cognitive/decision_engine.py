@@ -11,94 +11,83 @@ from src.utils.log_utils import get_logger
 
 class DecisionEngine:
     """
-    Pure decision logic for the Cognitive layer.
+    Pure decision logic for the Cognitive layer (scored proposal model).
 
-    This is the component that actually chooses what the bot does next.
+    Every 5s cycle:
+    1. Build rich context snapshot.
+    2. Ask EVERY registered behavior for a scored proposal (or None).
+    3. Select the single highest-scoring proposal.
+    4. Execute it (publish event + update timers).
+    5. Only one action per cycle.
 
-    Responsibilities:
-    - Build a context snapshot from the ActivityTracker (scores, queue, features, timers)
-    - Execute all registered behaviours in a defined order
-    - Select and execute at most one winning behaviour per decision cycle
-    - Publish the resulting high-level event (ResponsePromptEvent or MonologueEvent)
-
-    Strict constraints:
-    - No prompt assembly
-    - No LLM calls
-    - No direct output or TTS
-    - All "intelligence" is delegated to individual Behaviour implementations
-
-    The 5-second cycle is driven by the CognitiveOrchestrator.
+    Key properties (designed for your requirements):
+    - STT responses receive massive score boosts inside ChatResponseBehavior → they win at ANY activity level.
+    - At low activity: both IdleMonologue and responses get high willingness scores → natural mix.
+    - At high activity: ChatResponse becomes selective (only strong STT + high-quality chat survive), while Idle still has a chance for occasional autonomous color.
+    - Adding new behaviors (raids, emotes, alerts, etc.) is safe and automatic.
     """
 
     def __init__(self, tracker: ActivityTracker, event_bus):
-        """
-        Initialize the decision engine.
-
-        Args:
-            tracker: ActivityTracker instance that holds score + priority queue
-            event_bus: The central event bus used to publish final decisions
-        """
         self.tracker = tracker
         self.logger = get_logger("DecisionEngine")
         self.event_bus = event_bus
-        self.behaviors = [IdleMonologueBehavior(), ChatResponseBehavior(), FrontendTriggeredMonologueBehavior()]
+        self.behaviors = [
+            IdleMonologueBehavior(),
+            ChatResponseBehavior(),
+            FrontendTriggeredMonologueBehavior(),
+        ]
         self.last_autonomous_speech_time = datetime.now(timezone.utc)
         self.last_user_input_response_time = datetime.now(timezone.utc)
 
     async def run_decision_cycle(self) -> None:
-        """
-        Execute one decision cycle (called every 5s by the orchestrator).
-
-        Process:
-        1. Snapshot current state into a context dict from the tracker.
-        2. Iterate behaviours in priority order (Idle, ChatResponse, FrontendMonologue).
-        3. The first behaviour that returns a non-None decision wins.
-        4. Execute that decision (publish event + update cooldown timers).
-        5. Stop — only one action per cycle is allowed.
-
-        This "at most one winner" rule prevents conflicting actions (e.g. monologue + response at the same time).
-        """
         context = self._build_context()
-        self.logger.info(f"[DecisionEngine] Cycle | activity={context['activity_score']:.2f} | "
-                        f"pending={len(getattr(self.tracker.queue, 'messages', []))} | "
-                        f"last_mono={(datetime.now(timezone.utc) - self.last_autonomous_speech_time).total_seconds():.0f}s")
 
+        pending = len(getattr(self.tracker.queue, "messages", []))
+        self.logger.info(
+            f"[DecisionEngine] Cycle | activity={context['activity_score']:.2f} | "
+            f"pending={pending} | "
+            f"last_mono={(datetime.now(timezone.utc) - self.last_autonomous_speech_time).total_seconds():.0f}s"
+        )
+
+        proposals: list[dict] = []
         for behavior in self.behaviors:
-            decision = await behavior.tick(context)
-            if decision:
-                await self._execute_decision(decision)
-                break
+            proposal = await behavior.tick(context)
+            if proposal:
+                proposals.append(proposal)
+
+        if not proposals:
+            return
+
+        # STT hard priority tie-breaker: any proposal whose best_message is STT wins ties
+        def proposal_key(p: dict) -> float:
+            score = p.get("score", 0.0)
+            best = p.get("best_message")
+            if best and best.get("source") == "user_input_stt":
+                score += 10.0  # absolute dominance for live streamer voice
+            return score
+
+        winner = max(proposals, key=proposal_key)
+
+        self.logger.info(
+            f"[DecisionEngine] WINNER: {winner.get('reason')} (score={winner.get('score'):.3f})"
+        )
+
+        await self._execute_decision(winner)
 
     def _build_context(self) -> dict:
-        """
-        Construct the rich context snapshot passed to every Behaviour.tick().
-
-        The context contains everything behaviours need to make informed decisions:
-        - Current activity score
-        - The priority queue of pending inputs
-        - Feature flags (monologue, stt, etc.)
-        - Cooldown timers
-        - Any pending frontend command
-        """
+        now = datetime.now(timezone.utc)
         return {
             "activity_score": self.tracker.activity_score,
             "queue": self.tracker.queue,
             "features": getattr(self.tracker, "features", {}),
             "last_autonomous_speech_time": self.last_autonomous_speech_time,
             "last_user_input_response_time": self.last_user_input_response_time,
-            "frontend_command": self.tracker.consume_frontend_command()
+            "time_since_last_autonomous": (now - self.last_autonomous_speech_time).total_seconds(),
+            "time_since_last_user_response": (now - self.last_user_input_response_time).total_seconds(),
+            "frontend_command": self.tracker.consume_frontend_command(),
         }
 
     async def _execute_decision(self, decision: dict) -> None:
-        """
-        Execute the single winning decision returned by a Behaviour.
-
-        Supported decision types:
-        - "response" → publish ResponsePromptEvent (triggers Generation)
-        - "monologue" → publish MonologueEvent (triggers autonomous speech)
-
-        Also updates the last_*_time trackers used for cooldown logic in behaviours.
-        """
         now = datetime.now(timezone.utc)
 
         if decision["type"] == "monologue":
@@ -110,7 +99,7 @@ class DecisionEngine:
                 user="system",
                 timestamp=now.isoformat(),
                 data={"user": "system", "topic": topic, "prompt": prompt},
-                prompt=prompt
+                prompt=prompt,
             )
             await self.event_bus.publish(event)
             self.last_autonomous_speech_time = now
@@ -123,9 +112,8 @@ class DecisionEngine:
                 data={"user": "viewer", "source": best["source"]},
                 user="viewer",
                 source=best["source"],
-                prompt=best["text"]
+                prompt=best["text"],
             )
             await self.event_bus.publish(event)
             self.last_user_input_response_time = now
-
             self.tracker.queue.remove(best)
