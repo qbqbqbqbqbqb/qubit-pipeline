@@ -12,6 +12,7 @@ You can also call start_idle() manually after connection if you want idle moveme
 
 import asyncio
 import math
+import random
 import time
 
 try:
@@ -155,87 +156,131 @@ class VtubeStudioHandler:
             print(f"[VtubeStudioHandler] Request error: {e}")
             return None
 
+    async def _blink(self, duration: float = 0.12):
+        """Natural blink using EyeOpen parameters."""
+        if not self.connected or self.vts is None:
+            return
+        try:
+            await self._send_request(
+                self.vts.vts_request.BaseRequest(
+                    "InjectParameterDataRequest",
+                    {
+                        "faceFound": True,
+                        "mode": "set",
+                        "parameterValues": [
+                            {"id": "EyeOpenLeft", "value": 0.0},
+                            {"id": "EyeOpenRight", "value": 0.0},
+                        ]
+                    }
+                )
+            )
+            await asyncio.sleep(duration)
+
+            await self._send_request(
+                self.vts.vts_request.BaseRequest(
+                    "InjectParameterDataRequest",
+                    {
+                        "faceFound": True,
+                        "mode": "set",
+                        "parameterValues": [
+                            {"id": "EyeOpenLeft", "value": 1.0},
+                            {"id": "EyeOpenRight", "value": 1.0},
+                        ]
+                    }
+                )
+            )
+        except Exception:
+            pass
+
     async def _mouth_animation_loop(self) -> None:
-            """Enhanced speaking animation (mouth + more movement)."""
-            await self.ensure_connected()
-            if not self.connected or self.vts is None:
-                return
-
-            start_time = time.time()
-            try:
-                while self.speaking:
-                    t = time.time() - start_time
-
-                    # Mouth (stronger when speaking)
-                    mouth_value = (math.sin(t * 9) + 1) / 2 * 0.95
-
-                    # Extra movement while speaking (head bob + slight body)
-                    head_y = math.sin(t * 1.8) * 4
-                    head_x = math.sin(t * 1.2) * 2.5
-
-                    request = self.vts.vts_request.BaseRequest(
-                        "InjectParameterDataRequest",
-                        {
-                            "faceFound": True,
-                            "mode": "set",
-                            "parameterValues": [
-                                {"id": "MouthOpen", "value": mouth_value},
-                                {"id": "FaceAngleY", "value": head_y},
-                                {"id": "FaceAngleX", "value": head_x},
-                            ]
-                        }
-                    )
-                    await self._send_request(request)
-                    await asyncio.sleep(0.033)
-
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                print(f"[VtubeStudioHandler] Mouth animation error: {e}")
-            finally:
-                # Reset key parameters when speaking ends
-                try:
-                    reset = self.vts.vts_request.BaseRequest(
-                        "InjectParameterDataRequest",
-                        {
-                            "faceFound": True,
-                            "mode": "set",
-                            "parameterValues": [
-                                {"id": "MouthOpen", "value": 0.0},
-                                {"id": "FaceAngleY", "value": 0.0},
-                                {"id": "FaceAngleX", "value": 0.0},
-                            ]
-                        }
-                    )
-                    await self._send_request(reset)
-                except Exception:
-                    pass
-                
-    async def send(self, text: str):
-        """Placeholder for future use (hotkeys, props, etc)."""
-        pass
-
-    async def idle_animation(self) -> None:
-        """Runs subtle idle movements when not speaking"""
+        """Smoother speaking with consistent smile"""
         await self.ensure_connected()
         if not self.connected or self.vts is None:
             return
 
+        start_time = time.time()
+        last_blink = time.time()
+        last_variation = 0.0
+
+        var_smile = 0.25
+        var_face_x = var_face_y = var_face_z = 0.0
+
+        target_smile = 0.25
+        target_face_x = target_face_y = target_face_z = 0.0
+
         try:
-            while not self.speaking:   # Only run when not speaking
+            while self.speaking:
+                t = time.time() - start_time
+
+                # Even slower variation changes
+                if t - last_variation > random.uniform(2.5, 6.0):
+                    target_smile = random.uniform(0.20, 0.70)
+                    target_face_x = random.uniform(-4.5, 4.5)
+                    target_face_y = random.uniform(-4.0, 4.0)
+                    target_face_z = random.uniform(-2.5, 2.5)
+                    last_variation = t
+
+                # Very strong smoothing to reduce jumping
+                var_smile = var_smile * 0.94 + target_smile * 0.06
+                var_face_x = var_face_x * 0.95 + target_face_x * 0.05
+                var_face_y = var_face_y * 0.95 + target_face_y * 0.05
+                var_face_z = var_face_z * 0.95 + target_face_z * 0.05
+
+                jaw = (math.sin(t * 8.7) + 1) / 2 * 0.92
+                mouth_open = jaw * 0.75 + (math.sin(t * 11.8) + 1) / 2 * 0.25
+
+                smile = max(0.18, 0.42 + math.sin(t * 1.65) * 0.15 + var_smile)
+
+                face_x = math.sin(t * 1.35) * 5.0 + var_face_x
+                face_y = math.sin(t * 1.8) * 4.5 + var_face_y
+                face_z = math.cos(t * 1.05) * 2.6 + var_face_z
+
+                params = [
+                    {"id": "JawOpen", "value": jaw},
+                    {"id": "MouthOpen", "value": mouth_open},
+                    {"id": "MouthSmile", "value": smile},
+                    {"id": "FaceAngleX", "value": face_x},
+                    {"id": "FaceAngleY", "value": face_y},
+                    {"id": "FaceAngleZ", "value": face_z},
+                ]
+
+                await self._send_request(self.vts.vts_request.BaseRequest(
+                    "InjectParameterDataRequest",
+                    {"faceFound": True, "mode": "set", "parameterValues": params}
+                ))
+
+                if time.time() - last_blink > random.uniform(3.8, 6.2):
+                    await self._blink(0.12)
+                    last_blink = time.time()
+
+                await asyncio.sleep(0.033)
+
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"[VtubeStudioHandler] Speaking error: {e}")
+        finally:
+            await self._reset_speaking_parameters()
+
+    async def idle_animation(self) -> None:
+        """Natural idle with proper smile for your model"""
+        await self.ensure_connected()
+        if not self.connected or self.vts is None:
+            return
+
+        last_blink = time.time()
+
+        try:
+            while not self.speaking:
                 t = time.time()
 
-                # Gentle breathing
-                breath = (math.sin(t * 1.2) + 1) / 2 * 0.6 + 0.2   # 0.2 ~ 0.8
+                # Smooth and subtle movement
+                face_x = math.sin(t * 0.25) * 3.8
+                face_y = math.sin(t * 0.21) * 3.2 + math.cos(t * 0.15) * 1.5
+                face_z = math.cos(t * 0.18) * 2.0
 
-                # Very subtle head movement
-                head_x = math.sin(t * 0.8) * 8
-                head_y = math.sin(t * 0.5) * 5
-                head_z = math.cos(t * 0.3) * 3
-
-                # Tiny eye movement
-                eye_x = math.sin(t * 2.5) * 3
-                eye_y = math.sin(t * 1.7) * 2
+                eye_x = math.sin(t * 0.42) * 2.0
+                eye_y = math.sin(t * 0.33) * 1.3
 
                 request = self.vts.vts_request.BaseRequest(
                     "InjectParameterDataRequest",
@@ -243,9 +288,10 @@ class VtubeStudioHandler:
                         "faceFound": True,
                         "mode": "set",
                         "parameterValues": [
-                            {"id": "FaceAngleX", "value": head_x},
-                            {"id": "FaceAngleY", "value": head_y},
-                            {"id": "FaceAngleZ", "value": head_z},
+                            {"id": "FaceAngleX", "value": face_x},
+                            {"id": "FaceAngleY", "value": face_y},
+                            {"id": "FaceAngleZ", "value": face_z},
+                            {"id": "MouthSmile", "value": 0.48},     # ← Increased for your model
                             {"id": "EyeLeftX", "value": eye_x},
                             {"id": "EyeLeftY", "value": eye_y},
                             {"id": "EyeRightX", "value": eye_x},
@@ -255,19 +301,51 @@ class VtubeStudioHandler:
                 )
 
                 await self._send_request(request)
-                await asyncio.sleep(0.05)   # 20 FPS is enough for idle
+
+                if time.time() - last_blink > random.uniform(4.0, 6.8):
+                    await self._blink(0.13)
+                    last_blink = time.time()
+
+                await asyncio.sleep(0.085)
 
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"[VtubeStudioHandler] Idle animation error: {e}")
+            print(f"[VtubeStudioHandler] Idle error: {e}")
         finally:
-            # Reset idle parameters when stopping
             await self._reset_idle_parameters()
 
-    async def _reset_idle_parameters(self):
+    async def _reset_speaking_parameters(self):
+        if not self.connected or self.vts is None:
+            return
         try:
-            reset_request = self.vts.vts_request.BaseRequest(
+            reset = self.vts.vts_request.BaseRequest(
+                "InjectParameterDataRequest",
+                {
+                    "faceFound": True,
+                    "mode": "set",
+                    "parameterValues": [
+                        {"id": "JawOpen", "value": 0.0},
+                        {"id": "MouthOpen", "value": 0.0},
+                        {"id": "MouthSmile", "value": 0.25},   # ← Leave a light smile after speaking
+                        {"id": "MouthFunnel", "value": 0.0},
+                        {"id": "CheekPuff", "value": 0.0},
+                        {"id": "FaceAngleX", "value": 0.0},
+                        {"id": "FaceAngleY", "value": 0.0},
+                        {"id": "FaceAngleZ", "value": 0.0},
+                        {"id": "Brows", "value": 0.0},
+                    ]
+                }
+            )
+            await self._send_request(reset)
+        except Exception:
+            pass
+
+    async def _reset_idle_parameters(self):
+        if not self.connected or self.vts is None:
+            return
+        try:
+            reset = self.vts.vts_request.BaseRequest(
                 "InjectParameterDataRequest",
                 {
                     "faceFound": True,
@@ -276,6 +354,7 @@ class VtubeStudioHandler:
                         {"id": "FaceAngleX", "value": 0.0},
                         {"id": "FaceAngleY", "value": 0.0},
                         {"id": "FaceAngleZ", "value": 0.0},
+                        {"id": "MouthSmile", "value": 0.45},   # ← Keep gentle smile even after idle stops
                         {"id": "EyeLeftX", "value": 0.0},
                         {"id": "EyeLeftY", "value": 0.0},
                         {"id": "EyeRightX", "value": 0.0},
@@ -283,6 +362,10 @@ class VtubeStudioHandler:
                     ]
                 }
             )
-            await self._send_request(reset_request)
+            await self._send_request(reset)
         except Exception:
             pass
+        
+    async def send(self, text: str):
+        """Placeholder for future use (hotkeys, props, etc)."""
+        pass
