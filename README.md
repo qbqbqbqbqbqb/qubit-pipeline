@@ -60,6 +60,7 @@ TODO - edit
 - update frontend to not be pure html eventually
 - update frontend to check for connection w/o refreshing and losing saved settings
 -  fix hardcoding of instructions etc so its easier to change from an enduser standpoint
+- update VTS output to use python sound output routed to mic to force better mouth tracking? piped into vtube studio via a virtual audio cable
 
 TODO - maybe
 - add ending stream input?
