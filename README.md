@@ -51,7 +51,6 @@ python -X faulthandler -m src.qubit.main
 
 TODO - add
 - add audio file input
-- add vtubestudio output
 - add random events input -> on frontend start click
 - figure out autonomous behaviour & decision-making system
 - remove + update unnecessary old chat control utils
