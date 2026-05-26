@@ -76,6 +76,9 @@ class OutputCoordinator(Service):
                     self.vtube_studio_handler.ensure_connected(),
                     timeout=30.0
                 )
+                # Once connected, start idle animation automatically
+                await self.vtube_studio_handler.start_idle()
+                print("[OutputCoordinator] VTube Studio idle animation started.")
             except asyncio.TimeoutError:
                 print("[OutputCoordinator] VTube Studio connection timed out after 30s. Continuing without it.")
             except Exception as e:
