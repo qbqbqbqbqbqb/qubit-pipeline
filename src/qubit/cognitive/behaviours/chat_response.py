@@ -36,12 +36,13 @@ class ChatResponseBehavior(Behavior):
         """
         monologue = context["features"].get("monologue", True)
         stt_flag = context["features"].get("stt", True)
-        # Pure-chat behaviour applies unless STT is *actually* delivering input right now.
-        # This way the "stt" flag alone does not force the activity gate for chat.
         has_live_stt = context["queue"].has_source("user_input_stt") if stt_flag else False
         pure_chat_mode = not monologue and not has_live_stt
 
-        if not pure_chat_mode:
+        if has_live_stt:
+            # STT always bypasses the activity gate (high-intent input)
+            pass
+        elif not pure_chat_mode:
             if not (3.0 <= context["activity_score"] <= 9.0):
                 return None
 
