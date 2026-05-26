@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     stt_input_device_index: int | None = None
     stt_speaker_name: str = "Speaker"
 
+    # VTube Studio
+    enable_vtube_studio: bool = True
+    vtube_studio_port: int = 8001
+
     model_config = ConfigDict(env_file=".env")
 
     def save(self):

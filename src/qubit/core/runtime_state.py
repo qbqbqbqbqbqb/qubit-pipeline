@@ -46,7 +46,8 @@ class RuntimeState:
             "raid": True,
             "follow": True,
             "subs": True,
-            "monologue": True
+            "monologue": True,
+            "vtube_studio": True
         }
 
         # Cross-layer activity signals (primarily driven by Output layer)

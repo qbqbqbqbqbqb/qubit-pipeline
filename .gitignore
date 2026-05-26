@@ -192,3 +192,4 @@ blacklisted_words.txt
 instructions.txt
 /training_data
 *.db
+vtubeStudio_token.txt

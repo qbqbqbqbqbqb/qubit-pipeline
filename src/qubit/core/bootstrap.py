@@ -27,6 +27,7 @@ from src.qubit.output.coordinator import OutputCoordinator
 from src.qubit.output.handlers.tts import TTSHandler
 from src.qubit.output.handlers.obs import OBSHandler
 from src.qubit.output.handlers.audio_player import AudioFilePlayer
+from src.qubit.output.handlers.vtube import VtubeStudioHandler
 
 # --- Processing (pure EventProcessors: transform / filter / normalise) ---
 from src.qubit.processing.moderation import ModerationProcessor
@@ -67,6 +68,7 @@ async def create_app():
     """
     app = App()
     app.state = RuntimeState()
+    app.state.features["vtube_studio"] = getattr(settings, "enable_vtube_studio", True)
     app.event_bus = event_bus
 
     # =====================================================================
@@ -137,9 +139,18 @@ async def create_app():
     # Sanitises responses, owns the speaking queue, drives TTS / OBS / VTube,
     # and owns ai_speaking state.
     # =====================================================================
-    output_coordinator = OutputCoordinator(tts_handler=TTSHandler(), 
-                                            obs_handler=OBSHandler(settings=settings),  
-                                            memory_writer=memory_writer)
+    vtube_handler = None
+    if getattr(settings, "enable_vtube_studio", True):
+        vtube_handler = VtubeStudioHandler(
+            port=getattr(settings, "vtube_studio_port", 8001)
+        )
+
+    output_coordinator = OutputCoordinator(
+        tts_handler=TTSHandler(),
+        obs_handler=OBSHandler(settings=settings),
+        vtube_studio_handler=vtube_handler,
+        memory_writer=memory_writer,
+    )
 
     audio_player = AudioFilePlayer(audio_directory=getattr(settings, 'audio_directory', 'audio'))
     app.audio_player = audio_player

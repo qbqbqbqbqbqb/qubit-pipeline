@@ -68,6 +68,19 @@ class OutputCoordinator(Service):
         """
         await super().start(app)
 
+        # Block startup until VTube Studio auth succeeds or times out
+        if self.vtube_studio_handler and self.app.state.features.get("vtube_studio", True):
+            print("[OutputCoordinator] Waiting for VTube Studio connection (up to 30s)...")
+            try:
+                await asyncio.wait_for(
+                    self.vtube_studio_handler.ensure_connected(),
+                    timeout=30.0
+                )
+            except asyncio.TimeoutError:
+                print("[OutputCoordinator] VTube Studio connection timed out after 30s. Continuing without it.")
+            except Exception as e:
+                print(f"[OutputCoordinator] VTube Studio connection failed: {e}")
+
     async def stop(self: Any) -> None:
         """Stop the output handler service."""
         await super().stop()
@@ -241,7 +254,6 @@ class OutputCoordinator(Service):
 
         This is the single place that drives ai_speaking state.
         """
-        mouth_task = None
         try:
             if self.app and hasattr(self.app, "state"):
                 self.app.state.ai_speaking.set()
@@ -249,11 +261,9 @@ class OutputCoordinator(Service):
             if self.enable_subtitles and self.obs_handler:
                 await self.obs_handler.update_subtitle_text_and_style(new_text=text)
 
-            if self.vtube_studio_handler:
-                self.vtube_studio_handler.speaking = True
-                mouth_task = asyncio.create_task(
-                    self.vtube_studio_handler.mouthanimation()
-                )
+            vtube_enabled = self.app.state.features.get("vtube_studio", True) if self.app else True
+            if self.vtube_studio_handler and vtube_enabled:
+                await self.vtube_studio_handler.start_speaking()
 
             if self.tts_handler:
                 self.logger.info("[_handle_text_output] Speaking: %s", text)
@@ -263,11 +273,5 @@ class OutputCoordinator(Service):
             if self.app and hasattr(self.app, "state"):
                 self.app.state.ai_speaking.clear()
 
-            if mouth_task:
-                try:
-                    await mouth_task
-                except Exception:
-                    self.logger.exception("[_handle_text_output] Mouth animation failed")
-
             if self.vtube_studio_handler:
-                self.vtube_studio_handler.speaking = False
+                await self.vtube_studio_handler.stop_speaking()
