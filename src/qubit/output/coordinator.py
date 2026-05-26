@@ -68,6 +68,22 @@ class OutputCoordinator(Service):
         """
         await super().start(app)
 
+        # Block startup until VTube Studio auth succeeds or times out
+        if self.vtube_studio_handler and self.app.state.features.get("vtube_studio", True):
+            print("[OutputCoordinator] Waiting for VTube Studio connection (up to 30s)...")
+            try:
+                await asyncio.wait_for(
+                    self.vtube_studio_handler.ensure_connected(),
+                    timeout=30.0
+                )
+                # Once connected, start idle animation automatically
+                await self.vtube_studio_handler.start_idle()
+                print("[OutputCoordinator] VTube Studio idle animation started.")
+            except asyncio.TimeoutError:
+                print("[OutputCoordinator] VTube Studio connection timed out after 30s. Continuing without it.")
+            except Exception as e:
+                print(f"[OutputCoordinator] VTube Studio connection failed: {e}")
+
     async def stop(self: Any) -> None:
         """Stop the output handler service."""
         await super().stop()
@@ -92,9 +108,20 @@ class OutputCoordinator(Service):
             self.logger.warning("[handle_response] Invalid response, skipping.")
             return
 
-        response_clean = self.dialogue_sanitiser.strip_leading_punctuation(
-            self.dialogue_sanitiser.remove_trailing_text(
-            self.dialogue_sanitiser.remove_bot_name(filtered_response)))
+        def _log_mutation(step: str, before: str, after: str):
+            if after != before:
+                self.logger.info("[handle_response] %s changed text: %r -> %r", step, before, after)
+
+        after_bot = self.dialogue_sanitiser.remove_bot_name(filtered_response)
+        _log_mutation("remove_bot_name", filtered_response, after_bot)
+
+        #after_trailing = self.dialogue_sanitiser.remove_trailing_text(after_bot)
+        #_log_mutation("remove_trailing_text", after_bot, after_trailing)
+        after_trailing = after_bot
+        # testing keeping trailing text for now
+
+        response_clean = self.dialogue_sanitiser.strip_leading_punctuation(after_trailing)
+        _log_mutation("strip_leading_punctuation", after_trailing, response_clean)
 
         event = await self._set_event_attributes(event, prompt, source, response_clean)
         await self._handle_memory_event(event)
@@ -144,7 +171,7 @@ class OutputCoordinator(Service):
         Args:
             event (ResponseGeneratedEvent): Event to append.
         """
-        if event.source == "twitch_chat_processed" and event.prompt:
+        if event.source in ("twitch_chat_processed", "kick_chat_processed") and event.prompt:
             pair = {
                 "prompt": event.prompt,
                 "response": event.response,
@@ -180,6 +207,13 @@ class OutputCoordinator(Service):
                     self.logger.info("[_run] Processing item: %s", item)
 
                     if await self._check_if_timestamp_stale(item):
+                        continue
+
+                    # Block normal output while high-priority audio file is playing
+                    if (self.app and hasattr(self.app, "audio_player")
+                            and self.app.audio_player.is_playing()):
+                        await asyncio.sleep(0.2)
+                        self.queue.appendleft(item)
                         continue
 
                     for key in ("prompt", "response"):
@@ -223,7 +257,6 @@ class OutputCoordinator(Service):
 
         This is the single place that drives ai_speaking state.
         """
-        mouth_task = None
         try:
             if self.app and hasattr(self.app, "state"):
                 self.app.state.ai_speaking.set()
@@ -231,11 +264,9 @@ class OutputCoordinator(Service):
             if self.enable_subtitles and self.obs_handler:
                 await self.obs_handler.update_subtitle_text_and_style(new_text=text)
 
-            if self.vtube_studio_handler:
-                self.vtube_studio_handler.speaking = True
-                mouth_task = asyncio.create_task(
-                    self.vtube_studio_handler.mouthanimation()
-                )
+            vtube_enabled = self.app.state.features.get("vtube_studio", True) if self.app else True
+            if self.vtube_studio_handler and vtube_enabled:
+                await self.vtube_studio_handler.start_speaking()
 
             if self.tts_handler:
                 self.logger.info("[_handle_text_output] Speaking: %s", text)
@@ -245,11 +276,5 @@ class OutputCoordinator(Service):
             if self.app and hasattr(self.app, "state"):
                 self.app.state.ai_speaking.clear()
 
-            if mouth_task:
-                try:
-                    await mouth_task
-                except Exception:
-                    self.logger.exception("[_handle_text_output] Mouth animation failed")
-
             if self.vtube_studio_handler:
-                self.vtube_studio_handler.speaking = False
+                await self.vtube_studio_handler.stop_speaking()

@@ -18,12 +18,16 @@ from src.qubit.core.server import WebSocketServerService
 
 # --- Input sources (produce raw events) ---
 from src.qubit.input.twitch.listener import TwitchListener
+from src.qubit.input.kick.listener import KickListener
+from src.qubit.input.stt_listener import SpeechToTextListener
 from src.qubit.input.frontend_command_processor import FrontendCommandProcessor
 
 # --- Output (coordinator + leaves) ---
 from src.qubit.output.coordinator import OutputCoordinator
 from src.qubit.output.handlers.tts import TTSHandler
 from src.qubit.output.handlers.obs import OBSHandler
+from src.qubit.output.handlers.audio_player import AudioFilePlayer
+from src.qubit.output.handlers.vtube import VtubeStudioHandler
 
 # --- Processing (pure EventProcessors: transform / filter / normalise) ---
 from src.qubit.processing.moderation import ModerationProcessor
@@ -64,6 +68,7 @@ async def create_app():
     """
     app = App()
     app.state = RuntimeState()
+    app.state.features["vtube_studio"] = getattr(settings, "enable_vtube_studio", True)
     app.event_bus = event_bus
 
     # =====================================================================
@@ -91,7 +96,10 @@ async def create_app():
     # Writes go through the pure MemoryWriter (EventProcessor).
     # =====================================================================
     memory_service = MemoryService(llm_service=llm_service)
-    memory_writer = MemoryWriter(memory_service)
+    memory_writer = MemoryWriter(
+        memory_service,
+        stt_speaker_name=getattr(settings, "stt_speaker_name", "Speaker")
+    )
 
     # =====================================================================
     # LAYER: Input Processing (pure EventProcessors)
@@ -121,15 +129,31 @@ async def create_app():
     # Long-running connections / listeners. They only publish raw events.
     # =====================================================================
     twitch = TwitchListener(settings=settings)
+    kick = KickListener(settings=settings)
+    stt = SpeechToTextListener(
+        input_device_index=getattr(settings, "stt_input_device_index", None)
+    )
 
     # =====================================================================
     # LAYER: Output (coordinator + implementation leaves)
     # Sanitises responses, owns the speaking queue, drives TTS / OBS / VTube,
     # and owns ai_speaking state.
     # =====================================================================
-    output_coordinator = OutputCoordinator(tts_handler=TTSHandler(), 
-                                           obs_handler=OBSHandler(settings=settings),  
-                                           memory_writer=memory_writer)
+    vtube_handler = None
+    if getattr(settings, "enable_vtube_studio", True):
+        vtube_handler = VtubeStudioHandler(
+            port=getattr(settings, "vtube_studio_port", 8001)
+        )
+
+    output_coordinator = OutputCoordinator(
+        tts_handler=TTSHandler(),
+        obs_handler=OBSHandler(settings=settings),
+        vtube_studio_handler=vtube_handler,
+        memory_writer=memory_writer,
+    )
+
+    audio_player = AudioFilePlayer(audio_directory=getattr(settings, 'audio_directory', 'audio'))
+    app.audio_player = audio_player
 
     # =====================================================================
     # LAYER: Core infrastructure services (WebSocket control plane)
@@ -151,6 +175,9 @@ async def create_app():
 
     app.add_service(cognitive)  # still assigned to variable 'cognitive' for now (internal name)
     app.add_service(twitch)
+    app.add_service(kick)
+    app.add_service(stt)
+    app.add_service(audio_player)
     app.add_service(output_coordinator)
 
     return app

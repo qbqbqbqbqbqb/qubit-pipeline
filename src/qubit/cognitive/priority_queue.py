@@ -87,3 +87,7 @@ class InputPriorityQueue:
             "user_input_stt": 10.0,
             "user_input_chat_message": 2.0,
         }.get(source, 1.0)
+
+    def has_source(self, source: str) -> bool:
+        """Return True if the queue currently contains any message from the given source."""
+        return any(m.get("source") == source for m in self.messages)

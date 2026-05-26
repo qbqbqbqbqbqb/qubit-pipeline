@@ -19,7 +19,6 @@ import asyncio
 from datetime import datetime, timezone
 import json
 import websockets
-from src.qubit.core.events import Event
 from src.qubit.core.service import Service
 
 class WebSocketServerService(Service):
@@ -132,6 +131,28 @@ class WebSocketServerService(Service):
                     self.logger.info("[webSocketHandler] Start command from frontend")
                     self.app.state.start.set()
                     await self.broadcast_states()
+
+                elif action == 'play_audio':
+                    file_path = data.get("file_path")
+                    if file_path and hasattr(self.app, 'audio_player'):
+                        await self.app.audio_player.play_file(file_path)
+                        self.logger.info("[webSocketHandler] Playing audio: %s", file_path)
+                    else:
+                        self.logger.warning("[webSocketHandler] play_audio failed")
+
+                elif action == 'stop_audio':
+                    if hasattr(self.app, 'audio_player'):
+                        await self.app.audio_player.stop_playback()
+                        self.logger.info("[webSocketHandler] Stop audio requested")
+
+                elif action == 'list_audio_files':
+                    if hasattr(self.app, 'audio_player'):
+                        directory = self.app.audio_player.audio_directory
+                        files = []
+                        if directory.exists():
+                            for f in sorted(directory.glob("*.wav")):
+                                files.append(str(f.relative_to(directory)))
+                        await websocket.send(json.dumps({"type": "audio_files", "data": files}))
         except Exception as e:
             self.logger.error(e)
         finally:

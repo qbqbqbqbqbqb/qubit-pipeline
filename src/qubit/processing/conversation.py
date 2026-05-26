@@ -45,6 +45,11 @@ class ConversationProcessor(EventProcessor):
         "twitch_subscription_processed": "handle_event",
         "twitch_raid_processed": "handle_event",
         "twitch_follow_processed": "handle_event",
+        "kick_chat_processed": "handle_event",
+        "kick_subscription_processed": "handle_event",
+        "kick_raid_processed": "handle_event",
+        "kick_follow_processed": "handle_event",
+        "stt_processed": "handle_event",
     }
 
     def __init__(self, max_age_seconds=30, memory_writer=None):

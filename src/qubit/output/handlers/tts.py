@@ -27,6 +27,7 @@ import pyaudio
 from config.config import TTS_SPEAKER_NAME
 from src.qubit.utils.tts_utils import normalise_text_for_tts
 from src.qubit.output.tts_manager import TTSManager
+from src.utils.log_utils import get_logger
 
 class TTSHandler:
     """
@@ -42,6 +43,7 @@ class TTSHandler:
         """
         self.tts_manager = tts_manager
         self._speaking_lock = asyncio.Lock()
+        self.logger = get_logger("TTSHandler")
 
     async def speak(self: Any, text: str) -> None:
         """
@@ -55,6 +57,9 @@ class TTSHandler:
             return
 
         normalised_text = normalise_text_for_tts(text)
+
+        if normalised_text != text:
+            self.logger.info("[TTSHandler] normalise_text_for_tts changed text (emojis/unsupported chars etc. stripped for speech): %r -> %r", text, normalised_text)
 
         async with self._speaking_lock:
             await self._speak_streaming(normalised_text)

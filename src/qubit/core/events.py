@@ -23,7 +23,7 @@ class Event:
 
     Attributes:
         type: String identifier used for routing on the EventBus
-              (e.g. "twitch_chat_processed", "response_prompt", "response_generated").
+              (e.g. "twitch_chat_processed", "kick_chat_processed", "response_prompt", "response_generated").
         timestamp: ISO 8601 timestamp when the event was created.
         data: Arbitrary payload. Specific event types usually expose
               typed fields in addition to (or instead of) using this dict.
@@ -35,6 +35,11 @@ class Event:
 @dataclass
 class TwitchEvent(Event):
     pass
+
+
+class KickEvent(Event):
+    pass
+
 
 @dataclass
 class TwitchChatEvent(TwitchEvent):
@@ -65,9 +70,26 @@ class YoutubeEvent(Event):
     channel: str
 
 @dataclass
-class KickEvent(Event):
+class KickChatEvent(KickEvent):
     user: str
-    reason: str
+    text: str
+
+@dataclass
+class KickSubscriptionEvent(KickEvent):
+    user: str
+    tier: str
+    sub_type: str
+    sub_message: Optional[str] = None
+
+@dataclass
+class KickRaidEvent(KickEvent):
+    user: str
+    viewers: int
+
+@dataclass
+class KickFollowEvent(KickEvent):
+    user: str
+    followed_at: str
 
 @dataclass
 class ModeratedEvent(Event):

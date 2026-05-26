@@ -37,19 +37,28 @@ class MemoryWriter(EventProcessor):
         "twitch_chat_processed": "handle_event",
         "twitch_subscription_processed": "handle_event",
         "twitch_follow_processed": "handle_event",
+        "kick_chat_processed": "handle_event",
+        "kick_subscription_processed": "handle_event",
+        "kick_follow_processed": "handle_event",
+        "stt_processed": "handle_event",
         "monologue_prompt": "handle_event",
         "start_message": "handle_event",
         "response_generated": "handle_event",
     }
 
-    def __init__(self, memory_service: Any):
+    def __init__(self, memory_service: Any, stt_speaker_name: str = "Speaker"):
         super().__init__("memory writer")
         self.memory_service = memory_service
+        self.stt_speaker_name = stt_speaker_name
 
         self.routes = {
             "twitch_chat_processed": self._chat_memory,
             "twitch_subscription_processed": self._event_memory,
             "twitch_follow_processed": self._event_memory,
+            "kick_chat_processed": self._chat_memory,
+            "kick_subscription_processed": self._event_memory,
+            "kick_follow_processed": self._event_memory,
+            "stt_processed": self._stt_memory,
             "monologue_prompt": self._monologue_memory,
             "start_message": self._monologue_memory,
             "response_generated": self._response_memory,
@@ -73,6 +82,16 @@ class MemoryWriter(EventProcessor):
             event.text,
             user_id=event.user,
             metadata={"source": "chat", "timestamp": getattr(event, "timestamp", None)}
+        )
+
+    def _stt_memory(self, event):
+        """Store voice input from STT"""
+        self.logger.info("[_stt_memory] Handling STT memory event")
+        self.memory_service.add_conversation_item(
+            "User",
+            event.text,
+            user_id=self.stt_speaker_name,
+            metadata={"source": "stt", "timestamp": getattr(event, "timestamp", None)}
         )
 
     def _response_memory(self, event):
