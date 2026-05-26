@@ -129,6 +129,11 @@ class WebSocketServerService(Service):
                     self.app.state.shutdown.set()
                 elif action == 'start':
                     self.logger.info("[webSocketHandler] Start command from frontend")
+                    if 'features' in data:
+                        for k, v in data.get('features', {}).items():
+                            if k in self.app.state.features:
+                                self.app.state.features[k] = bool(v)
+                                self.logger.info("[webSocketHandler] Set feature %s = %s from start config", k, v)
                     self.app.state.start.set()
                     await self.broadcast_states()
 
