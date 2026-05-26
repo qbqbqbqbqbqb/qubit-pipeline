@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     obs_port: str
     obs_password: str
 
+    # STT
+    stt_input_device_index: int | None = None
+    stt_speaker_name: str = "Speaker"
+
     model_config = ConfigDict(env_file=".env")
 
     def save(self):

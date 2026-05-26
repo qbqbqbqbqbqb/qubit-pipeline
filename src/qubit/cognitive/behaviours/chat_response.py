@@ -7,23 +7,16 @@ class ChatResponseBehavior(Behavior):
     """
     Behavior responsible for deciding when and which chat/STT message to respond to.
 
-    Part of the cognitive layer's pluggable decision strategies.
-
     Behavior:
-    - In normal mode (monologue or stt enabled): only activates in the medium
-      activity window (3.0–9.0).
-    - In pure chat mode (both monologue and stt disabled): responds to any
-      pending chat that is still in the queue (no activity gate), so the bot
-      answers chats when only chat input is active.
-
-    Role in 2026 SoC refactor:
-    - Isolates response-timing and message-selection rules from DecisionEngine and Orchestrator.
-    - Implements the Behavior contract, enabling easy addition/removal/reordering of strategies.
+    - When monologue or live STT input is present: only activates inside the
+      medium activity window (3.0–9.0) so high-priority voice can win.
+    - Pure-chat mode (monologue off AND no live STT speech in queue): answers
+      any pending chat without requiring activity score. The "stt" flag alone
+      no longer forces the gate — only actual spoken input does.
 
     Contract:
     - Receives context dict (activity_score, last_user_input_response_time, queue, etc.).
-    - Returns {"type": "response", "best_message": ..., "reason": ...} or None.
-    - First non-None decision in the ordered behaviour list wins the cycle.
+    - Returns {"type": "response", ...} or None.
     """
 
     def __init__(self):
@@ -42,8 +35,11 @@ class ChatResponseBehavior(Behavior):
           so STT has priority when it arrives.
         """
         monologue = context["features"].get("monologue", True)
-        stt = context["features"].get("stt", True)
-        pure_chat_mode = not monologue and not stt
+        stt_flag = context["features"].get("stt", True)
+        # Pure-chat behaviour applies unless STT is *actually* delivering input right now.
+        # This way the "stt" flag alone does not force the activity gate for chat.
+        has_live_stt = context["queue"].has_source("user_input_stt") if stt_flag else False
+        pure_chat_mode = not monologue and not has_live_stt
 
         if not pure_chat_mode:
             if not (3.0 <= context["activity_score"] <= 9.0):

@@ -87,6 +87,7 @@ def mock_heavy_stack(mocker):
         "src.qubit.memory.memory_service.chromadb",
         "src.qubit.input.twitch.listener.TwitchListener",
         "src.qubit.input.kick.listener.KickListener",
+        "src.qubit.input.stt_listener.SpeechToTextListener",
         "src.qubit.output.handlers.tts.TTSHandler",
         "src.qubit.output.handlers.obs.OBSHandler",
     ]
@@ -100,7 +101,7 @@ def mock_heavy_stack(mocker):
     # For top-level heavy packages, pre-populate in sys.modules if not present
     # (this is safer than patch on bare module names)
     import sys
-    for mod_name in ["torch", "transformers", "chromadb", "twitchAPI", "numpy", "pyaudio", "piper"]:
+    for mod_name in ["torch", "transformers", "chromadb", "twitchAPI", "numpy", "pyaudio", "piper", "RealtimeSTT"]:
         if mod_name not in sys.modules:
             sys.modules[mod_name] = MagicMock(name=mod_name)
 

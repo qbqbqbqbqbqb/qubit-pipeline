@@ -19,6 +19,7 @@ from src.qubit.core.server import WebSocketServerService
 # --- Input sources (produce raw events) ---
 from src.qubit.input.twitch.listener import TwitchListener
 from src.qubit.input.kick.listener import KickListener
+from src.qubit.input.stt_listener import SpeechToTextListener
 from src.qubit.input.frontend_command_processor import FrontendCommandProcessor
 
 # --- Output (coordinator + leaves) ---
@@ -93,7 +94,10 @@ async def create_app():
     # Writes go through the pure MemoryWriter (EventProcessor).
     # =====================================================================
     memory_service = MemoryService(llm_service=llm_service)
-    memory_writer = MemoryWriter(memory_service)
+    memory_writer = MemoryWriter(
+        memory_service,
+        stt_speaker_name=getattr(settings, "stt_speaker_name", "Speaker")
+    )
 
     # =====================================================================
     # LAYER: Input Processing (pure EventProcessors)
@@ -124,6 +128,9 @@ async def create_app():
     # =====================================================================
     twitch = TwitchListener(settings=settings)
     kick = KickListener(settings=settings)
+    stt = SpeechToTextListener(
+        input_device_index=getattr(settings, "stt_input_device_index", None)
+    )
 
     # =====================================================================
     # LAYER: Output (coordinator + implementation leaves)
@@ -158,6 +165,7 @@ async def create_app():
     app.add_service(cognitive)  # still assigned to variable 'cognitive' for now (internal name)
     app.add_service(twitch)
     app.add_service(kick)
+    app.add_service(stt)
     app.add_service(audio_player)
     app.add_service(output_coordinator)
 
