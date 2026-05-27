@@ -49,6 +49,9 @@ python -X faulthandler -m src.qubit.main
 
 **TODOs**:
 
+TODO - TOP
+- retrain model based on chat. redo dataset. not sure if gpt6 is too stupid or my dataset was bad
+
 TODO - add
 - add audio file input
 - add random events input -> on frontend start click
