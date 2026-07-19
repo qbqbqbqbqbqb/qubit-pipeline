@@ -25,6 +25,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
+from src.qubit.output.handlers.png import PNGOutputHandler
 from src.qubit.output.handlers.obs import OBSHandler
 from src.qubit.output.handlers.tts import TTSHandler
 from src.qubit.output.handlers.sanitiser import DialogueSanitiser
@@ -49,11 +50,18 @@ class OutputCoordinator(Service):
         "response_generated": "handle_response"
     }
 
-    def __init__(self: Any, tts_handler: TTSHandler, obs_handler: OBSHandler,  vtube_studio_handler=None, max_age_seconds:int=30,  enable_subtitles:bool=False, memory_writer=None):
+    def __init__(self: Any, 
+                 tts_handler: TTSHandler, 
+                 obs_handler: OBSHandler,  
+                 vtube_studio_handler=None, 
+                 max_age_seconds:int=30,  
+                 enable_subtitles:bool=False, 
+                 memory_writer=None):
         super().__init__("output_coordinator")
         self.tts_handler = tts_handler
         self.obs_handler = obs_handler
         self.vtube_studio_handler = vtube_studio_handler
+        self.png_handler: PNGOutputHandler = None
         self.memory_writer = memory_writer
         self.dialogue_sanitiser = DialogueSanitiser(blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
         self.queue = deque()
@@ -264,9 +272,7 @@ class OutputCoordinator(Service):
             if self.enable_subtitles and self.obs_handler:
                 await self.obs_handler.update_subtitle_text_and_style(new_text=text)
 
-            vtube_enabled = self.app.state.features.get("vtube_studio", True) if self.app else True
-            if self.vtube_studio_handler and vtube_enabled:
-                await self.vtube_studio_handler.start_speaking()
+            await self._get_visual_mode()
 
             if self.tts_handler:
                 self.logger.info("[_handle_text_output] Speaking: %s", text)
@@ -278,3 +284,28 @@ class OutputCoordinator(Service):
 
             if self.vtube_studio_handler:
                 await self.vtube_studio_handler.stop_speaking()
+
+            if self.png_handler:
+                await self.png_handler.idle()
+
+    async def _handle_png_output(self: Any) -> None:
+            await self.png_handler.speak()
+
+    async def _handle_vtube_studio_output(self:Any) -> None:
+            await self.vtube_studio_handler.start_speaking()
+
+    async def _get_visual_mode(self) -> None:
+        if not getattr(self.app, "state", None):
+            self.logger.info("[_get_visual_mode] No visual output mode enabled.")
+            return
+
+        features = self.app.state.features
+        vtube_enabled = features.get("vtube_studio", False)
+        png_enabled = features.get("png_output", False)
+
+        if vtube_enabled and self.vtube_studio_handler:
+            await self._handle_vtube_studio_output()
+        elif png_enabled and self.png_handler:
+            await self._handle_png_output()
+        else:
+             self.logger.info("[_get_visual_mode] No visual output mode enabled.")
