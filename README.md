@@ -57,6 +57,7 @@ TODO - add
 - add random events input -> on frontend start click
 - figure out autonomous behaviour & decision-making system
 - remove + update unnecessary old chat control utils
+- png output. not a fan of having to pipe audio into vedeotube
 
 TODO - edit
 - update frontend to not be pure html eventually
