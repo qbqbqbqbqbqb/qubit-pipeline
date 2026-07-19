@@ -57,16 +57,16 @@ TODO - add
 - add random events input -> on frontend start click
 - figure out autonomous behaviour & decision-making system
 - remove + update unnecessary old chat control utils
-- png output. not a fan of having to pipe audio into vedeotube
 
 TODO - edit
 - update frontend to not be pure html eventually
-- update frontend to check for connection w/o refreshing and losing saved settings
 -  fix hardcoding of instructions etc so its easier to change from an enduser standpoint
-- update VTS output to use python sound output routed to mic to force better mouth tracking? piped into vtube studio via a virtual audio cable
+- update VTS output to use python sound output routed to mic to force better mouth tracking? piped into vtube studio via a virtual audio cable. surely theres a better way to do this vs audio cable
 
 TODO - maybe
 - add ending stream input?
 - update output logic to include emotes in text output but not tts output. requires analysing current output first
 - add back relationship signallers? move to neural tree setup when responding to better identify topics?
-- add youtube input? api kind of sucks
+
+OOS
+- add youtube input? api kind of sucks -> api is sooooo bad it literally wont pick up messages really cus you cant query realtime without full scraping
