@@ -1,3 +1,5 @@
+"""Wire up and return the fully constructed application instance."""
+
 from src.qubit.core.app import App
 from src.qubit.core.runtime_state import RuntimeState
 from src.qubit.core.event_bus import event_bus
@@ -33,6 +35,7 @@ from config.env_config import settings
 
 
 async def create_app():
+    """Construct the application with all services, processors, and handlers wired together."""
     app = App()
     app.state = RuntimeState()
     app.state.features["vtube_studio"] = getattr(settings, "enable_vtube_studio", True)

@@ -1,7 +1,10 @@
+"""Runtime state flags and async events for the application lifecycle."""
+
 import asyncio
 
 
 class RuntimeState:
+    """Shared mutable state for the running application."""
 
     def __init__(self):
         self.shutdown = asyncio.Event()

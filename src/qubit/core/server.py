@@ -1,11 +1,15 @@
+"""WebSocket server service for frontend communication and state broadcasting."""
+
 import asyncio
 import json
 import websockets
 from src.qubit.core.service import Service
 
 class WebSocketServerService(Service):
+    """Manages WebSocket connections and routes frontend commands."""
 
     def __init__(self, host="0.0.0.0", port=8765):
+        """Bind to the given host/port and initialise the client set."""
         super().__init__("websocket_server")
         self.host = host
         self.port = port
@@ -15,12 +19,14 @@ class WebSocketServerService(Service):
         self.event_bus = None
 
     async def start(self, app) -> None:
+        """Start the WebSocket server."""
         self.app = app
         self.event_bus = app.event_bus
         self.server = await websockets.serve(self.websocket_handler, self.host, self.port)
         self.logger.info("[start] WebSocketServer started on %s:%s", self.host, self.port)
-
+    
     async def stop(self) -> None:
+        """Gracefully close the server."""
         self.logger.info("[stop] Stopping WebSocketServer...")
         if self.server:
             self.server.close()
@@ -28,6 +34,7 @@ class WebSocketServerService(Service):
         self.logger.info("[stop] WebSocketServer stopped.")
 
     async def websocket_handler(self, websocket) -> None:
+        """Handle messages from a single connected client."""
         self.connected_clients.add(websocket)
         try:
             await self.send_states(websocket)
@@ -83,15 +90,19 @@ class WebSocketServerService(Service):
             self.connected_clients.remove(websocket)
 
     async def send_states(self, websocket) -> None:
+        """Push current feature states to a newly connected client."""
         states_message = json.dumps({"type": "states", "data": self.app.state.features})
         await websocket.send(states_message)
 
     async def broadcast_states(self) -> None:
+        """Push current feature states to all connected clients."""
         if self.connected_clients:
             message = json.dumps({"type": "states", "data": self.app.state.features})
             await asyncio.gather(*(client.send(message) for client in self.connected_clients))
 
     async def forward_event(self, event_type, data) -> None:
+        """Forward an internal event to all connected clients."""
         if self.connected_clients:
             message = json.dumps({"type": event_type, "data": data})
             await asyncio.gather(*(client.send(message) for client in self.connected_clients))
+            

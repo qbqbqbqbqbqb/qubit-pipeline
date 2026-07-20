@@ -1,11 +1,16 @@
+"""Base service class with lifecycle management and event bus integration."""
+
 import asyncio
 from src.utils.log_utils import get_logger
 
 
 class Service:
+    """Long-lived background service started by the application."""
+
     SUBSCRIPTIONS = {}
 
     def __init__(self, name):
+        """Initialise the service with its name and logger."""
         self.name = name
         self.app = None
         self.event_bus = None
@@ -13,6 +18,7 @@ class Service:
         self._worker_task = None
 
     async def start(self, app):
+        """Attach to the app, register subscriptions, wait for start, then run."""
         self.app = app
         self.event_bus = app.event_bus
 
@@ -29,18 +35,22 @@ class Service:
         self._worker_task = asyncio.create_task(self._run())
 
     async def _wait_for_start(self):
+        """Block until the application signals it is ready to start."""
         await self.app.state.start.wait()
 
     async def _run(self):
+        """Main worker loop; override in subclasses."""
         self.logger.info("[_run] %s main loop is running", self.name)
 
     async def stop(self):
+        """Cancel the worker task and clean up."""
         self.logger.info("[stop] Stopping %s", self.name)
         if self._worker_task:
             self._worker_task.cancel()
             await asyncio.gather(self._worker_task, return_exceptions=True)
 
     def _register_subscriptions(self):
+        """Bind event types to handler methods defined in SUBCRIPTIONS."""
         for event_type, handler_name in self.SUBSCRIPTIONS.items():
             handler = getattr(self, handler_name)
             if handler:
@@ -48,3 +58,4 @@ class Service:
                 self.logger.info(f"[{self.name}] Registered subscription: {event_type}")
             else:
                 self.logger.warning(f"[{self.name}] Handler {handler_name} not found")
+                

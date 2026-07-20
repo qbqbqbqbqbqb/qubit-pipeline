@@ -1,3 +1,5 @@
+"""Application startup, signal handling, and shutdown coordination."""
+
 import asyncio
 from datetime import datetime, timezone
 import signal
@@ -8,6 +10,7 @@ logger = get_logger(__name__)
 
 
 async def run_app(app):
+    """Start all services, wait for the frontend start command, then run until shutdown."""
     tasks = []
 
     for service in app.services:
