@@ -7,6 +7,13 @@ Thin coordinator over three collaborators:
 - ActivityScore: chat-only "how busy is chat" scalar (busyness.py)
 - InputPriorityQueue: chat/STT messages (../priority_queue.py)
 - CommunityEventQueue: pending raid/gift/follow reactions (community_event_queue.py)
+Event interpretation (which source, which feature flag, field extraction)
+is delegated to EventAdapter (event_adapter.py) — this class doesn't know
+anything about the shape of raw Event objects itself.
+
+Deliberately not a Service or EventProcessor — used only by
+CognitiveOrchestrator and DecisionEngine. No other layer should read or
+write this state directly.
 """
 
 from datetime import datetime
@@ -26,6 +33,8 @@ class ActivityTracker:
         self.queue = InputPriorityQueue(maxlen=self.QUEUE_MAXLEN)
         self.events = CommunityEventQueue()
 
+        # The only piece of external "intent" state tracked directly here —
+        # small enough not to warrant its own file.
         self._current_frontend_command: str | None = None
 
     @property
@@ -43,9 +52,11 @@ class ActivityTracker:
 
         flag = EventAdapter.feature_flag_for(source, event)
         if flag and not features.get(flag, True):
-            return
+            return  # this input channel is switched off — drop entirely, not just unscored
 
         if source in EventAdapter.EVENT_SOURCES:
+            # Raids/gifts/follows never touch activity_score — they're a
+            # separate, always-wins category, not a measure of chat busyness.
             self.events.add(EventAdapter.extract_event_detail(event, source))
             return
 
@@ -54,6 +65,7 @@ class ActivityTracker:
             return
 
         if source == "user_input_chat_message":
+            # The ONLY source that feeds activity_score/"busyness".
             self.busyness.register_chat_message(features)
 
         self.queue.add(text, source, event)

@@ -32,9 +32,14 @@ class CognitiveOrchestrator(Service):
         "twitch_chat_processed": "_handle_input",
         "kick_chat_processed": "_handle_input",
         "stt_processed": "_handle_input",
-        "user_event_follow": "_handle_input",
-        "user_event_subscription": "_handle_input",
-        "user_event_raid": "_handle_input",
+        # Community events arrive after moderation, using the *_processed
+        # naming convention that ModerationProcessor publishes.
+        "twitch_raid_processed": "_handle_input",
+        "twitch_subscription_processed": "_handle_input",
+        "twitch_follow_processed": "_handle_input",
+        "kick_raid_processed": "_handle_input",
+        "kick_subscription_processed": "_handle_input",
+        "kick_follow_processed": "_handle_input",
         "frontend_command": "_handle_frontend_command",
     }
 
@@ -70,25 +75,14 @@ class CognitiveOrchestrator(Service):
             await asyncio.sleep(self.DECISION_INTERVAL_SECONDS)
 
     def _should_run_cycle(self) -> bool:
-        """
-        Gate on whether the app has started AND output isn't currently busy
-        speaking.
-
-        NOTE: the speaking check is best-effort. If RuntimeState doesn't
-        expose the attribute this looks for, it falls back to "not busy" so
-        it never blocks the loop outright — which means the gate is
-        currently a no-op until wired to the real flag. Confirm the actual
-        attribute path for "currently speaking" on RuntimeState /
-        OutputCoordinator and update _is_output_busy() accordingly; this was
-        written without visibility into those files.
-        """
+        """Gate on whether the app has started AND output isn't currently speaking."""
         if not self.app.state.start.is_set():
             return False
         return not self._is_output_busy()
 
     def _is_output_busy(self) -> bool:
-        runtime = getattr(self.app.state, "runtime", None)
-        return bool(getattr(runtime, "ai_speaking", False))
+        """Return True while OutputCoordinator is actively speaking (TTS running)."""
+        return self.app.state.ai_speaking.is_set()
 
     def toggle_monologue(self, enabled: bool) -> None:
         """Convenience toggle for the monologue feature flag (used by frontend/tests)."""

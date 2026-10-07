@@ -2,7 +2,9 @@
 CommunityEventQueue - pending raid/gift/follow reactions.
 
 Owned by ActivityTracker. Deliberately separate from the chat/STT
-InputPriorityQueue 
+InputPriorityQueue — these don't have meaningful "text" and shouldn't be
+scored by chat quality heuristics. CommunityEventBehavior collates
+whatever is pending each cycle; see behaviours/community_event.py.
 """
 
 

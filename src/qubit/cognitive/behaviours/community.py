@@ -6,6 +6,12 @@ STT, so they always take priority over both chat and monologue, and also
 over live STT — see DecisionEngine.PRIORITY_TIER_BONUS and this behavior's
 PRIORITY_TIER.
 
+If more than one event is pending when this behavior ticks (e.g. several
+gifted subs land in the same window), they're collated into a single
+acknowledgement instead of firing one response per event. There's no
+explicit "is this spam" detection — it simply reacts to whatever is
+currently pending, so a burst that lands within one decision cycle is
+naturally batched, and a lone event just gets a collation of one.
 """
 
 from src.qubit.cognitive.behaviours.base import Behavior
@@ -13,6 +19,10 @@ from src.utils.log_utils import get_logger
 
 
 class CommunityEventBehavior(Behavior):
+    # Always wins against chat/idle/frontend, and against live STT — see
+    # DecisionEngine.PRIORITY_TIER_BONUS. The exact NORMALIZED_SCORE/weight
+    # barely matters once the tier bonus is added; kept at max (1.0) since
+    # a raid or gift genuinely warrants this behavior's full enthusiasm.
     PRIORITY_TIER = 2
     NORMALIZED_SCORE = 1.0
 
@@ -35,7 +45,7 @@ class CommunityEventBehavior(Behavior):
             "reason": "community_event",
             "priority_tier": self.PRIORITY_TIER,
             "topic": topic,
-            "events": events,
+            "events": events,  # snapshot — DecisionEngine removes exactly these on execution
         }
 
     def _collate(self, events: list[dict]) -> str:

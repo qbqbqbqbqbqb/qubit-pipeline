@@ -13,6 +13,11 @@ from src.utils.log_utils import get_logger
 
 
 class FrontendTriggeredMonologueBehavior(Behavior):
+    # Operator commands always mean maximum willingness from this behavior's
+    # own perspective — there's no "how eager" curve here, just on/off. The
+    # actual priority this carries relative to ChatResponse/IdleMonologue is
+    # set in DecisionEngine.BEHAVIOR_WEIGHTS, not here. RAW_PRIORITY is kept
+    # only as the value that table should use to reproduce today's behavior.
     RAW_PRIORITY = 1.35
     NORMALIZED_SCORE = 1.0
 
