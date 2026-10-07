@@ -17,6 +17,26 @@ It deliberately delegates the actual work to pure leaf handlers:
 
 This class should only coordinate — it should not contain low-level synthesis,
 websocket logic, or sanitiser rules.
+
+--- Priority queue (added) ---
+Two deques instead of one: `priority_queue` for community-event reactions
+(raids/gifts/follows), `queue` for everything else. The priority queue is
+always drained first, and gets a much longer staleness allowance
+(PRIORITY_MAX_AGE_SECONDS) — these are rare and shouldn't get silently
+dropped just because they waited behind a couple of chat responses.
+Detection of "is this a community event" reads event.data["kind"], set by
+Cognitive's DecisionExecutor — this only works if Generation forwards
+`data` through unchanged when constructing ResponseGeneratedEvent. If it
+doesn't, this falls back to normal-priority handling silently; worth
+confirming against the actual Generation code.
+
+Both deques are now capped (maxlen). Uncapped, a sustained output stall
+(TTS hung, audio_player busy for a long time) lets this grow without bound,
+since Cognitive isn't currently throttled by output being busy either (see
+CognitiveOrchestrator._is_output_busy(), still a placeholder as of the
+cognitive-layer refactor). The maxlen here is a backstop, not a fix for
+that — the real fix is wiring that gate so Cognitive stops proposing new
+output while a stall is ongoing.
 """
 
 import asyncio
@@ -50,12 +70,21 @@ class OutputCoordinator(Service):
         "response_generated": "handle_response"
     }
 
-    def __init__(self: Any, 
-                 tts_handler: TTSHandler, 
-                 obs_handler: OBSHandler,  
-                 vtube_studio_handler=None, 
-                 max_age_seconds:int=30,  
-                 enable_subtitles:bool=False, 
+    # Defaults for the split queues — see module docstring for why there
+    # are two, and why both are capped.
+    DEFAULT_QUEUE_MAXLEN = 40
+    DEFAULT_PRIORITY_QUEUE_MAXLEN = 20
+    DEFAULT_PRIORITY_MAX_AGE_SECONDS = 120
+
+    def __init__(self: Any,
+                 tts_handler: TTSHandler,
+                 obs_handler: OBSHandler,
+                 vtube_studio_handler=None,
+                 max_age_seconds:int=30,
+                 priority_max_age_seconds:int=DEFAULT_PRIORITY_MAX_AGE_SECONDS,
+                 queue_maxlen:int=DEFAULT_QUEUE_MAXLEN,
+                 priority_queue_maxlen:int=DEFAULT_PRIORITY_QUEUE_MAXLEN,
+                 enable_subtitles:bool=False,
                  memory_writer=None):
         super().__init__("output_coordinator")
         self.tts_handler = tts_handler
@@ -64,8 +93,15 @@ class OutputCoordinator(Service):
         self.png_handler: PNGOutputHandler = None
         self.memory_writer = memory_writer
         self.dialogue_sanitiser = DialogueSanitiser(blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
-        self.queue = deque()
+
+        # Normal-priority items (chat responses, idle monologues, frontend
+        # commands). Priority items (raid/gift/follow reactions) go in
+        # self.priority_queue instead and are always drained first.
+        self.queue = deque(maxlen=queue_maxlen)
+        self.priority_queue = deque(maxlen=priority_queue_maxlen)
+
         self.max_age = timedelta(seconds=max_age_seconds)
+        self.priority_max_age = timedelta(seconds=priority_max_age_seconds)
         self.enable_subtitles = enable_subtitles
 
     async def start(self: Any, app: Any) -> None:
@@ -173,31 +209,63 @@ class OutputCoordinator(Service):
         if self.memory_writer:
             await self.memory_writer.handle_event(event)
 
+    def _is_priority_event(self: Any, event: ResponseGeneratedEvent) -> bool:
+        """
+        Best-effort detection of a community-event (raid/gift/follow)
+        reaction. Depends on Generation forwarding `data` from the
+        originating MonologueEvent through to ResponseGeneratedEvent
+        unchanged — if Generation builds `data` fresh instead of passing it
+        through, this never triggers and community events silently fall
+        back to normal-priority handling. Verify against the actual
+        Generation layer.
+        """
+        data = getattr(event, "data", None) or {}
+        return data.get("kind") == "community_event"
+
     async def _append_to_queue(self: Any, event: ResponseGeneratedEvent) -> None:
-        """Append a response event to the output queue with timestamp.
+        """Append a response event to the appropriate output queue with timestamp.
 
         Args:
             event (ResponseGeneratedEvent): Event to append.
         """
+        is_priority = self._is_priority_event(event)
+        target_queue = self.priority_queue if is_priority else self.queue
+
         if event.source in ("twitch_chat_processed", "kick_chat_processed") and event.prompt:
-            pair = {
+            item = {
                 "prompt": event.prompt,
                 "response": event.response,
                 "source": event.source,
-                "timestamp": datetime.now(timezone.utc)
+                "timestamp": datetime.now(timezone.utc),
+                "priority": is_priority,
             }
-            self.queue.append(pair)
         else:
-            monologue = {
+            item = {
                 "prompt": None,
                 "response": event.response,
                 "source": event.source,
-                "timestamp": datetime.now(timezone.utc)
+                "timestamp": datetime.now(timezone.utc),
+                "priority": is_priority,
             }
-            self.queue.append(monologue)
+
+        # deque(maxlen=...) evicts the oldest item automatically once full —
+        # no manual bound-checking needed here.
+        target_queue.append(item)
+
+    def _pop_next_item(self: Any) -> tuple:
+        """Priority queue drains first, whenever it's non-empty."""
+        if self.priority_queue:
+            return self.priority_queue.popleft(), True
+        if self.queue:
+            return self.queue.popleft(), False
+        return None, False
+
+    def _requeue_front(self: Any, item: dict, from_priority: bool) -> None:
+        """Push an item back to the front of whichever queue it came from."""
+        (self.priority_queue if from_priority else self.queue).appendleft(item)
 
     async def _run(self: Any) -> None:
-        """Main loop processing the output queue asynchronously."""
+        """Main loop processing the output queues asynchronously."""
         await super()._run()
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
@@ -207,11 +275,11 @@ class OutputCoordinator(Service):
             self.logger.info("[_run] OutputCoordinator started")
             while True:
                 try:
-                    if not self.queue:
+                    item, from_priority = self._pop_next_item()
+                    if item is None:
                         await asyncio.sleep(0.05)
                         continue
 
-                    item = self.queue.popleft()
                     self.logger.info("[_run] Processing item: %s", item)
 
                     if await self._check_if_timestamp_stale(item):
@@ -221,7 +289,7 @@ class OutputCoordinator(Service):
                     if (self.app and hasattr(self.app, "audio_player")
                             and self.app.audio_player.is_playing()):
                         await asyncio.sleep(0.2)
-                        self.queue.appendleft(item)
+                        self._requeue_front(item, from_priority)
                         continue
 
                     for key in ("prompt", "response"):
@@ -242,6 +310,10 @@ class OutputCoordinator(Service):
     async def _check_if_timestamp_stale(self: Any, item: dict) -> bool:
         """Check if the queued item is too old and should be dropped.
 
+        Priority items (community events) get priority_max_age instead of
+        the normal max_age — they're rare enough that it's worth tolerating
+        a longer wait behind a backlog rather than dropping them.
+
         Args:
             item (dict): Queued output item with timestamp.
 
@@ -253,7 +325,8 @@ class OutputCoordinator(Service):
             self.logger.warning("[_check_if_timestamp_stale] Item missing timestamp, skipping.")
             return True
 
-        if datetime.now(timezone.utc) - timestamp > self.max_age:
+        max_age = self.priority_max_age if item.get("priority") else self.max_age
+        if datetime.now(timezone.utc) - timestamp > max_age:
             self.logger.info("[_check_if_timestamp_stale] Dropping stale output: %s", item)
             return True
         return False

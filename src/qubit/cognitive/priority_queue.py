@@ -1,93 +1,129 @@
-from collections import deque
+"""
+InputPriorityQueue - priority queue for pending user inputs in the cognitive layer.
+
+Owned exclusively by ActivityTracker. STT and chat are stored in separate
+lists so chat volume can never evict a live STT message (fixed-size reserved
+slots), and every message has a hard TTL so a high-priority-but-stale message
+can't win a decision cycle long after the moment it was relevant has passed.
+"""
+
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
 
 class InputPriorityQueue:
-    """
-    Bounded priority queue for pending user inputs in the cognitive layer.
+    DEFAULT_MAXLEN = 12
+    DEFAULT_STT_SLOTS = 2
+    DEFAULT_MAX_AGE_SECONDS = 90.0
 
-    Owned exclusively by ActivityTracker. Stores recent messages with pre-computed
-    base priorities and full event objects for later use by DecisionEngine and behaviours.
+    RECENCY_FLOOR = 0.1
 
-    Scoring combines:
-    - Source weight (STT inputs get 10x priority over chat)
-    - Quality heuristics (longer messages, questions, direct mentions)
-    - Recency decay (older messages lose priority over time)
+    SOURCE_PRIORITIES = {
+        "user_input_stt": 10.0,
+        "user_input_chat_message": 2.0,
+    }
+    DEFAULT_SOURCE_PRIORITY = 1.0
 
-    The queue is bounded (default maxlen=12) to prevent unbounded memory growth.
-    get_best() applies recency on the fly without modifying stored data.
-    """
+    # Chat-only quality heuristic constants. STT is scored at a fixed max
+    # quality instead — see _score_new_message().
+    QUALITY_LENGTH_NORMALIZER = 100.0
+    QUALITY_QUESTION_BONUS = 1.0
+    QUALITY_MENTION_BONUS = 0.5
+    STT_QUALITY = 1.0
 
-    def __init__(self, maxlen: int = 12):
-        self.messages: deque[Dict[str, Any]] = deque(maxlen=maxlen)
+    STT_SOURCE = "user_input_stt"
+
+    def __init__(
+        self,
+        maxlen: int = DEFAULT_MAXLEN,
+        stt_slots: int = DEFAULT_STT_SLOTS,
+        max_age_seconds: float = DEFAULT_MAX_AGE_SECONDS,
+    ):
+        self.chat_maxlen = maxlen
+        self.stt_slots = max(1, stt_slots)  # guard against a 0/negative config silently disabling STT storage
+        self.max_age_seconds = max_age_seconds
+        self.chat_messages: List[Dict[str, Any]] = []
+        self.stt_messages: List[Dict[str, Any]] = []
 
     def add(self, text: str, source: str, event: Any) -> None:
-        """
-        Add a new input message to the queue with computed priority metadata.
-
-        Stores the raw event for later use by behaviours (e.g. to extract user info).
-        Priority is calculated once at insert time for efficiency.
-        """
-        quality = self._calculate_quality(text)
-        base_priority = self._get_source_priority(source) * quality
-
-        self.messages.append({
+        quality, base_priority = self._score_new_message(text, source)
+        msg = {
             "text": text,
             "source": source,
             "timestamp": datetime.now(timezone.utc),
             "base_priority": base_priority,
             "quality": quality,
-            "event": event
-        })
+            "event": event,
+        }
 
-    def get_best(self) -> Dict[str, Any] | None:
+        if source == self.STT_SOURCE:
+            self._append_bounded(self.stt_messages, msg, self.stt_slots)
+        else:
+            self._append_bounded(self.chat_messages, msg, self.chat_maxlen)
+
+    def get_best(self) -> Optional[Dict[str, Any]]:
         """
-        Return the single highest-priority pending message after applying recency decay.
-
-        Recency is computed at read time so that waiting messages gradually lose priority.
-        Does not remove the message; caller must call remove() after use.
-        Returns None if the queue is empty.
+        Return the single highest-priority, non-expired pending message after
+        applying recency decay. Does not remove it; caller must call remove().
         """
-        if not self.messages:
-            return None
-
         now = datetime.now(timezone.utc)
-        candidates = []
-
-        for msg in self.messages:
-            age_min = (now - msg["timestamp"]).total_seconds() / 60
-            recency = max(0.1, 1.0 / (1 + age_min))
-            full_priority = msg["base_priority"] * recency
-            candidates.append((full_priority, msg))
-
-        candidates.sort(key=lambda x: x[0], reverse=True)
+        candidates = [
+            (self._score_for_ranking(msg, now), msg)
+            for msg in (*self.stt_messages, *self.chat_messages)
+            if not self._is_expired(msg, now)
+        ]
+        if not candidates:
+            return None
+        candidates.sort(key=lambda pair: pair[0], reverse=True)
         return candidates[0][1]
 
     def remove(self, message: Dict[str, Any]) -> None:
-        """
-        Remove a specific message (typically after it has been selected and processed).
-        Safe no-op if the message is no longer present (e.g. due to queue eviction).
-        """
-        if message in self.messages:
-            self.messages.remove(message)
-
-    def _calculate_quality(self, text: str) -> float:
-        """Heuristic quality score based on message characteristics (0.0 - 2.5 range)."""
-        length = min(len(text) / 100.0, 1.0)
-        question = 1.0 if "?" in text else 0.0
-        mention = 0.5 if "@" in text else 0.0
-        return length + question + mention
-
-    def _get_source_priority(self, source: str) -> float:
-        """
-        Base multiplier by input source.
-        STT gets highest weight because voice input is considered higher intent.
-        """
-        return {
-            "user_input_stt": 10.0,
-            "user_input_chat_message": 2.0,
-        }.get(source, 1.0)
+        """Remove a specific message. Safe no-op if it's no longer present."""
+        if message in self.stt_messages:
+            self.stt_messages.remove(message)
+        elif message in self.chat_messages:
+            self.chat_messages.remove(message)
 
     def has_source(self, source: str) -> bool:
         """Return True if the queue currently contains any message from the given source."""
-        return any(m.get("source") == source for m in self.messages)
+        if source == self.STT_SOURCE:
+            return bool(self.stt_messages)
+        return any(m.get("source") == source for m in self.chat_messages)
+
+    @property
+    def messages(self) -> List[Dict[str, Any]]:
+        """Flat view — keeps DecisionEngine's len(queue.messages) logging line working unchanged."""
+        return [*self.stt_messages, *self.chat_messages]
+
+    def _append_bounded(self, bucket: List[Dict[str, Any]], msg: Dict[str, Any], limit: int) -> None:
+        bucket.append(msg)
+        if len(bucket) > limit:
+            bucket.pop(0)
+
+    def _score_new_message(self, text: str, source: str) -> tuple[float, float]:
+        if source == self.STT_SOURCE:
+            # Spoken input isn't scored by the chat-shaped quality heuristic
+            # (length/question/@-mention) — treated as max quality outright.
+            return self.STT_QUALITY, self._source_priority(source)
+        quality = self._calculate_quality(text)
+        return quality, self._source_priority(source) * quality
+
+    def _is_expired(self, msg: Dict[str, Any], now: datetime) -> bool:
+        age_sec = (now - msg["timestamp"]).total_seconds()
+        return age_sec > self.max_age_seconds
+
+    def _score_for_ranking(self, msg: Dict[str, Any], now: datetime) -> float:
+        age_min = (now - msg["timestamp"]).total_seconds() / 60
+        recency = max(self.RECENCY_FLOOR, 1.0 / (1 + age_min))
+        return msg["base_priority"] * recency
+
+    def _calculate_quality(self, text: str) -> float:
+        """Heuristic quality score based on message characteristics (0.0 - 2.5 range). Chat only."""
+        length = min(len(text) / self.QUALITY_LENGTH_NORMALIZER, 1.0)
+        question = self.QUALITY_QUESTION_BONUS if "?" in text else 0.0
+        mention = self.QUALITY_MENTION_BONUS if "@" in text else 0.0
+        return length + question + mention
+
+    def _source_priority(self, source: str) -> float:
+        """Base multiplier by input source. STT gets highest weight — voice input is higher intent."""
+        return self.SOURCE_PRIORITIES.get(source, self.DEFAULT_SOURCE_PRIORITY)

@@ -51,22 +51,43 @@ python -X faulthandler -m src.qubit.main
 
 TODO - TOP
 - retrain model based on chat. redo dataset. not sure if gpt6 is too stupid or my dataset was bad
+- fix obs setup 
 
 TODO - add
-- add audio file input
+
 - add random events input -> on frontend start click
 - figure out autonomous behaviour & decision-making system
 - remove + update unnecessary old chat control utils
+- ability to toggle reading and writing to memory on/off. is memory even on rn. i dont think reading is? looking at the prompt? are reflections on>?
+- ability to log chat messages for training
+- model button and toggle
 
 TODO - edit
 - update frontend to not be pure html eventually
 -  fix hardcoding of instructions etc so its easier to change from an enduser standpoint
 - update VTS output to use python sound output routed to mic to force better mouth tracking? piped into vtube studio via a virtual audio cable. surely theres a better way to do this vs audio cable
+- fix handle text output, it wont be correct w/ changes
 
 TODO - maybe
 - add ending stream input?
 - update output logic to include emotes in text output but not tts output. requires analysing current output first
 - add back relationship signallers? move to neural tree setup when responding to better identify topics?
+- add audio file input -> getting this to work with the current voice model is difficult, cant figure it out
 
 OOS
 - add youtube input? api kind of sucks -> api is sooooo bad it literally wont pick up messages really cus you cant query realtime without full scraping
+
+bug
+-   File "C:\Users\kubi\Documents\code\qubit-pipeline\qubit-pipeline-2026\src\qubit\input\kick\listener.py", line 130, in stop
+    await self.kick_bot.close()
+          ^^^^^^^^^^^^^^^^^^^
+AttributeError: 'dict' object has no attribute 'close'
+oopsies #lol
+- reconnect button doesnt work
+- turning monologue on after turning it on doesnt make it monologue :( need to fix, toggles should be toggleable anytime
+- memory isnt being read
+
+q -
+- what does the initialise button do again? the model downloads on starting this lol
+- its responding to chat messages a bit slow, are too many monologues being produced at once? 
+- actually theres no logs of it responding, but there is of it winning. it responds to chats fine when i turn off monologues though
