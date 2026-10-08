@@ -30,19 +30,30 @@ class InputPriorityQueue:
     QUALITY_LENGTH_NORMALIZER = 100.0
     QUALITY_QUESTION_BONUS = 1.0
     QUALITY_MENTION_BONUS = 0.5
+    # Applied when a message contains @someone who is NOT in the whitelist —
+    # i.e. a viewer-to-viewer conversation that isn't directed at Qubit.
+    # Set low enough that the message is near-invisible at high activity.
+    QUALITY_OFFMENTION_PENALTY = 0.85
     STT_QUALITY = 1.0
 
     STT_SOURCE = "user_input_stt"
+    AT_SIGN = "@"
 
     def __init__(
         self,
         maxlen: int = DEFAULT_MAXLEN,
         stt_slots: int = DEFAULT_STT_SLOTS,
         max_age_seconds: float = DEFAULT_MAX_AGE_SECONDS,
+        mention_whitelist: frozenset[str] | None = None,
     ):
         self.chat_maxlen = maxlen
         self.stt_slots = max(1, stt_slots)  # guard against a 0/negative config silently disabling STT storage
         self.max_age_seconds = max_age_seconds
+        # Lowercased names that are allowed to carry the mention bonus.
+        # Any @name not in this set triggers the off-mention penalty instead.
+        # An empty/None whitelist disables the penalty entirely (safe default
+        # for tests and environments where settings aren't wired up yet).
+        self.mention_whitelist: frozenset[str] = mention_whitelist or frozenset()
         self.chat_messages: List[Dict[str, Any]] = []
         self.stt_messages: List[Dict[str, Any]] = []
 
@@ -128,8 +139,47 @@ class InputPriorityQueue:
         """Heuristic quality score based on message characteristics (0.0 - 2.5 range). Chat only."""
         length = min(len(text) / self.QUALITY_LENGTH_NORMALIZER, 1.0)
         question = self.QUALITY_QUESTION_BONUS if "?" in text else 0.0
-        mention = self.QUALITY_MENTION_BONUS if "@" in text else 0.0
-        return length + question + mention
+        mention, penalty = self._score_mentions(text)
+        return max(0.0, length + question + mention - penalty)
+
+    def _score_mentions(self, text: str) -> tuple[float, float]:
+        """
+        Return (bonus, penalty) for @ mentions in the message.
+
+        Rules:
+        - No @ in text              -> (0.0, 0.0)
+        - @ targeting a whitelisted name (case-insensitive) -> (MENTION_BONUS, 0.0)
+        - @ targeting an off-whitelist name                 -> (0.0, OFFMENTION_PENALTY)
+        - Whitelist is empty (unconfigured)                 -> treat @ as neutral (0.0, 0.0)
+
+        If a message mentions both a whitelisted and a non-whitelisted name
+        (e.g. "@qubit and @someguy"), the whitelisted mention wins — the
+        message is at least partially directed at us.
+        """
+        if self.AT_SIGN not in text:
+            return 0.0, 0.0
+
+        if not self.mention_whitelist:
+            # Whitelist not configured — don't penalise anything.
+            return 0.0, 0.0
+
+        # Extract the name token immediately following each @.
+        # Strip trailing punctuation so "@qubit," and "@qubit." both resolve.
+        mentioned = {
+            word[1:].rstrip(",.!?:;").lower()
+            for word in text.split()
+            if word.startswith(self.AT_SIGN) and len(word) > 1
+        }
+
+        if not mentioned:
+            return 0.0, 0.0
+
+        if mentioned & self.mention_whitelist:
+            # At least one mention is directed at us.
+            return self.QUALITY_MENTION_BONUS, 0.0
+
+        # Every @ is directed at someone else.
+        return 0.0, self.QUALITY_OFFMENTION_PENALTY
 
     def _source_priority(self, source: str) -> float:
         """Base multiplier by input source. STT gets highest weight — voice input is higher intent."""

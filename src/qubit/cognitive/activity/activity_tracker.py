@@ -28,9 +28,9 @@ class ActivityTracker:
     MIN_TEXT_LENGTH = 3
     QUEUE_MAXLEN = 12
 
-    def __init__(self):
+    def __init__(self, mention_whitelist: frozenset[str] | None = None):
         self.busyness = ActivityScore()
-        self.queue = InputPriorityQueue(maxlen=self.QUEUE_MAXLEN)
+        self.queue = InputPriorityQueue(maxlen=self.QUEUE_MAXLEN, mention_whitelist=mention_whitelist)
         self.events = CommunityEventQueue()
 
         # The only piece of external "intent" state tracked directly here —

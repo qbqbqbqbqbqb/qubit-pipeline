@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     # active_model), no second model is loaded — the main executor is reused.
     reflection_model: str | None = None
 
+    # Names that count as a directed mention when they appear after @ in a
+    # chat message. Seeded automatically from twitch_bot_name,
+    # twitch_streamer_name, kick_bot_name, kick_streamer_name — add any
+    # extra names here as a comma-separated string (e.g. "qubit,q_bot").
+    # Case-insensitive at match time.
+    chat_mention_whitelist: str = ""
+
     main_formatter: str | None = None
     reflection_formatter: str | None = None
 

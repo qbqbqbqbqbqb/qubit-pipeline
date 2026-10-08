@@ -22,6 +22,7 @@ This component must remain thin. Any decision logic belongs in behaviours.
 
 import asyncio
 
+from config.env_config import settings
 from src.qubit.core.service import Service
 from src.qubit.cognitive.activity.activity_tracker import ActivityTracker
 from src.qubit.cognitive.decision.decision_engine import DecisionEngine
@@ -47,15 +48,40 @@ class CognitiveOrchestrator(Service):
 
     def __init__(self):
         super().__init__("CognitiveOrchestrator")
-        self.tracker = ActivityTracker()
-        # Real DecisionEngine is built in start(), once event_bus is live.
+        # Tracker is built in start() once settings are available for the whitelist.
+        self.tracker: ActivityTracker | None = None
         self.engine: DecisionEngine | None = None
 
     async def start(self, app) -> None:
         await super().start(app)
+        self.tracker = ActivityTracker(mention_whitelist=self._build_mention_whitelist())
         self.engine = DecisionEngine(self.tracker, self.event_bus)
         self.tracker.features = self.app.state.features
         self.logger.info("[Cognitive] Orchestrator online (tracker + engine)")
+
+    @staticmethod
+    def _build_mention_whitelist() -> frozenset[str]:
+        """
+        Build the set of lowercased names that count as a directed mention.
+
+        Seeded from the four name fields already in settings so users don't
+        have to re-enter names they've already configured. Any extras go in
+        CHAT_MENTION_WHITELIST as a comma-separated string.
+        """
+        names: set[str] = set()
+        for field in (
+            settings.twitch_bot_name,
+            settings.twitch_streamer_name,
+            settings.kick_bot_name,
+            settings.kick_streamer_name,
+        ):
+            if field:
+                names.add(field.lower())
+        for extra in (settings.chat_mention_whitelist or "").split(","):
+            extra = extra.strip().lower()
+            if extra:
+                names.add(extra)
+        return frozenset(names)
 
     async def _handle_input(self, event) -> None:
         """Forward every processed input event to the ActivityTracker for scoring."""
