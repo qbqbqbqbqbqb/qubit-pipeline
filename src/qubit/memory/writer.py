@@ -23,7 +23,7 @@ This replaces the old MemoryHandler router as the clean boundary for writes.
 from typing import Any
 
 from src.qubit.core.event_processor import EventProcessor
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 
 class MemoryWriter(EventProcessor):

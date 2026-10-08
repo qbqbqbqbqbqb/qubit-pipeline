@@ -1,7 +1,7 @@
 import difflib
 from pathlib import Path
 import re
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 from config.config import BOT_NAME
 
 logger = get_logger("Filter_Utils")

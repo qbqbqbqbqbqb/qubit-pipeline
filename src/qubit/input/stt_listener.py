@@ -56,7 +56,7 @@ class SpeechToTextListener(Service):
     async def _run(self: Any) -> None:
         await super()._run()
         while not self.app.state.shutdown.is_set():
-            stt_enabled = self.app.state.features.get("stt", True)
+            stt_enabled = self.app.state.features.stt
 
             if not self.app.state.start.is_set() or not stt_enabled:
                 await asyncio.sleep(0.5)
@@ -139,7 +139,7 @@ class SpeechToTextListener(Service):
     def _is_stt_enabled(self) -> bool:
         # Re-check inside the thread (best effort)
         try:
-            return bool(self.app.state.features.get("stt", True))
+            return bool(self.app.state.features.stt)
         except Exception:
             return True
 

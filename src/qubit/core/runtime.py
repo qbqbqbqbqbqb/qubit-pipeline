@@ -1,10 +1,11 @@
 """Application startup, signal handling, and shutdown coordination."""
 
 import asyncio
-from datetime import datetime, timezone
 import signal
+from datetime import datetime, timezone
+
 from src.qubit.core.events import Event
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -19,28 +20,26 @@ async def run_app(app):
 
     logger.info("Bot initialised. Waiting for startup command from browser.")
     await app.state.start.wait()
+    logger.info("Bot started.")
 
-    logger.info(" Bot started")
+    await app.event_bus.publish(Event(
+        type="bot_started",
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        data={"status": "active"},
+    ))
 
-    event = Event(
-            type="bot_started",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            data={"status": "active"},
-        )
-    await app.event_bus.publish(event)
-
-    def shutdown():
-        app.state.shutdown.set()
-
-    signal.signal(signal.SIGINT, lambda s, f: shutdown())
-    signal.signal(signal.SIGTERM, lambda s, f: shutdown())
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, app.state.shutdown.set)
+    loop.add_signal_handler(signal.SIGTERM, app.state.shutdown.set)
 
     await app.state.shutdown.wait()
+    logger.info("Shutdown signal received — stopping services.")
 
-    for service in app.services:
+    for service in reversed(app.services):
         await service.stop()
 
     for task in tasks:
         task.cancel()
 
     await asyncio.gather(*tasks, return_exceptions=True)
+    logger.info("Shutdown complete.")

@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Union, List
 from src.qubit.models.llm_profile import LLMProfile, GenerationOverrides
 from src.qubit.models._executor import _HuggingFaceExecutor
 from src.qubit.models.model_config import GenerationConfig
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
 

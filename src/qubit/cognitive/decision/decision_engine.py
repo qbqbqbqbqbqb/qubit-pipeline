@@ -19,7 +19,7 @@ from src.qubit.cognitive.behaviours.idle_monologue import IdleMonologueBehavior
 from src.qubit.cognitive.decision.decision_executor import DecisionExecutor
 from src.qubit.cognitive.decision.idle_quota_tracker import IdleQuotaTracker
 from src.qubit.cognitive.decision.proposal_arbiter import ProposalArbiter
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 
 class DecisionEngine:

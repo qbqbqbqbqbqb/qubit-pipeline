@@ -14,7 +14,7 @@ import websocket
 
 from config.config import TTS_SUBTITLE_NAME
 
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 logger = get_logger("OBS_Websocket_Controller")
 
 

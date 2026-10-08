@@ -42,7 +42,7 @@ class KickListener(Service, KickAuthMixin, KickEventsMixin):
     async def _run(self: Any) -> None:
         await super()._run()
         while not self.app.state.shutdown.is_set():
-            kick_enabled = self.app.state.features.get("kick", True)
+            kick_enabled = self.app.state.features.kick
 
             self.logger.debug("[_run] KickListener loop - start: %s, kick_enabled: %s, connected: %s",
                               self.app.state.start.is_set(), kick_enabled, self.connected)

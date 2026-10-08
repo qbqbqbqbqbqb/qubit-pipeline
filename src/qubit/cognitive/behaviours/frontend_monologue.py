@@ -9,7 +9,7 @@ tie-breaker).
 """
 
 from src.qubit.cognitive.behaviours.base import Behavior
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 
 class FrontendTriggeredMonologueBehavior(Behavior):

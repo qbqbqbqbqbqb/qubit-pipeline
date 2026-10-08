@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Tuple
 import chromadb
 
 from src.qubit.memory.reflections_generator import ReflectionGenerator
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 from src.qubit.models.llm_service import LLMService
 
 

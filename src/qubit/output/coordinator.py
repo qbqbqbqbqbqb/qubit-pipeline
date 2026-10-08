@@ -113,7 +113,7 @@ class OutputCoordinator(Service):
         await super().start(app)
 
         # Block startup until VTube Studio auth succeeds or times out
-        if self.vtube_studio_handler and self.app.state.features.get("vtube_studio", True):
+        if self.vtube_studio_handler and self.app.state.features.vtube_studio:
             print("[OutputCoordinator] Waiting for VTube Studio connection (up to 30s)...")
             try:
                 await asyncio.wait_for(
@@ -373,8 +373,8 @@ class OutputCoordinator(Service):
             return
 
         features = self.app.state.features
-        vtube_enabled = features.get("vtube_studio", False)
-        png_enabled = features.get("png_output", False)
+        vtube_enabled = features.vtube_studio
+        png_enabled = features.png_output
 
         if vtube_enabled and self.vtube_studio_handler:
             await self._handle_vtube_studio_output()

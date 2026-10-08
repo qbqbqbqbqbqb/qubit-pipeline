@@ -15,7 +15,7 @@ import re
 from typing import TYPE_CHECKING, Any, List, Tuple
 
 from src.qubit.models.llm_service import LLMService
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 if TYPE_CHECKING:
     from src.qubit.memory.memory_manager import MemoryManager

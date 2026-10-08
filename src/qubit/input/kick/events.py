@@ -94,7 +94,7 @@ class KickEventsMixin:
                 self.logger.debug("[KickWS] unhandled event: %s -> %s", event, data)
 
     async def _on_kick_chat(self: Any, data: dict) -> None:
-        chat_enabled = self.app.state.features.get("chat", True)
+        chat_enabled = self.app.state.features.chat
         if not chat_enabled:
             return
         try:
@@ -119,7 +119,7 @@ class KickEventsMixin:
             self.logger.error("[_on_kick_chat] error: %s", e)
 
     async def _on_kick_follow(self: Any, data: dict) -> None:
-        follow_enabled = self.app.state.features.get("follow", True)
+        follow_enabled = self.app.state.features.follow
         if not follow_enabled:
             return
         try:
@@ -140,7 +140,7 @@ class KickEventsMixin:
             self.logger.error("[_on_kick_follow] error: %s", e)
 
     async def _on_kick_subscription(self: Any, data: dict) -> None:
-        subs_enabled = self.app.state.features.get("subs", True)
+        subs_enabled = self.app.state.features.subs
         if not subs_enabled:
             return
         try:
@@ -165,7 +165,7 @@ class KickEventsMixin:
             self.logger.error("[_on_kick_subscription] error: %s", e)
 
     async def _on_kick_raid(self: Any, data: dict) -> None:
-        raid_enabled = self.app.state.features.get("raid", True)
+        raid_enabled = self.app.state.features.raids
         if not raid_enabled:
             return
         try:

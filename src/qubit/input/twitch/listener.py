@@ -74,7 +74,7 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
         """
         await super()._run()
         while not self.app.state.shutdown.is_set():
-            twitch_enabled = self.app.state.features.get("twitch", True)
+            twitch_enabled = self.app.state.features.twitch
 
             self.logger.debug("[_run] TwitchListener loop - start: {self.app.state.start.is_set()}, twitch_enabled: {twitch_enabled}, connected: {self.connected}")
             if not self.app.state.start.is_set() or not twitch_enabled:

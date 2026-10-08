@@ -1,7 +1,7 @@
 """Base event processor that wires handler methods to event bus subscriptions."""
 
 from abc import ABC, abstractmethod
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 
 class EventProcessor(ABC):

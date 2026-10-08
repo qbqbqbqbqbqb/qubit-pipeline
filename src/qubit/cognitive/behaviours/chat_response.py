@@ -85,7 +85,7 @@ class ChatResponseBehavior(Behavior):
 
     def _base_willingness(self, context: dict, activity: float, has_live_stt: bool) -> float:
         features = context.get("features", {})
-        monologue_enabled = features.get("monologue", True)
+        monologue_enabled = features.monologue
         pure_chat_mode = not monologue_enabled and not has_live_stt
 
         if pure_chat_mode or has_live_stt:

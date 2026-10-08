@@ -6,7 +6,7 @@ It includes the TTSManager class which handles loading TTS models, configuring v
 speech synthesis for various applications.
 """
 from piper import PiperVoice
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 from config.config import TTS_MODEL_NAME, ROOT
 
 

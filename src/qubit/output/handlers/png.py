@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 import httpx
 
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 logger = get_logger("PNGOutputHandler")
 
 class PNGOutputHandler:

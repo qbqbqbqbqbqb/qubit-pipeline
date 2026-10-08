@@ -1,9 +1,14 @@
-"""Simple in-process event bus for async and sync handlers."""
+"""Simple in-process event bus for async and sync handlers.
+
+EventBus is instantiated once in bootstrap.py and attached to the App
+instance as app.event_bus. All services and processors receive it from
+there — nothing imports a module-level singleton.
+"""
 
 import asyncio
 from typing import Callable, Dict, List
 
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 from src.qubit.core.events import Event
 
 logger = get_logger(__name__)
@@ -35,5 +40,4 @@ class EventBus:
                     logger.error("Error in handler for %s: %s", event.type, e)
 
 
-# Global singleton used by the entire application
-event_bus = EventBus()
+

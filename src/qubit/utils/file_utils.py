@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 import json
 
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 logger = get_logger("File_Utils")
 
 def load_text_file(path: Path) -> str:

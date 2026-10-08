@@ -29,10 +29,10 @@ class ActivityScore:
         self.last_activity = datetime.now(timezone.utc)
         self._last_decay_time = datetime.now(timezone.utc)
 
-    def register_chat_message(self, features: dict) -> None:
+    def register_chat_message(self, features) -> None:
         """Bump the score for one incoming chat message, with the usual per-event decay."""
         weight = self.CHAT_WEIGHT
-        if not features.get("monologue", True):
+        if not features.monologue:
             weight *= self.MONOLOGUE_DISABLED_MULTIPLIER
 
         self.value = min(self.MAX_ACTIVITY_SCORE, self.value * self.DECAY_FACTOR + weight)

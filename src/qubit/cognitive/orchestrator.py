@@ -120,5 +120,5 @@ class CognitiveOrchestrator(Service):
 
     def toggle_monologue(self, enabled: bool) -> None:
         """Convenience toggle for the monologue feature flag (used by frontend/tests)."""
-        self.app.state.features["monologue"] = enabled
+        self.app.state.features.monologue = enabled
         self.logger.info("[Cognitive] Monologue feature toggled -> %s", enabled)

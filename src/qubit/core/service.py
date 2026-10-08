@@ -1,7 +1,7 @@
 """Base service class with lifecycle management and event bus integration."""
 
 import asyncio
-from src.utils.log_utils import get_logger
+from src.qubit.utils.log_utils import get_logger
 
 
 class Service:

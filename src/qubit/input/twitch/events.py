@@ -75,7 +75,7 @@ class TwitchEventsMixin:
         self.chat.start()
 
     async def _on_subscription(self: Any, event: EventData) -> None:
-        subs_enabled = self.app.state.features.get("subs", True)
+        subs_enabled = self.app.state.features.subs
         if not subs_enabled:
             return
         try:
@@ -106,7 +106,7 @@ class TwitchEventsMixin:
             self.logger.error(f"[_on_subscription] Error handling subscription event: {e}")
 
     async def _on_raid(self: Any, event: EventData) -> None:
-        raid_enabled = self.app.state.features.get("raid", True)
+        raid_enabled = self.app.state.features.raids
         if not raid_enabled:
             return
         try:
@@ -129,7 +129,7 @@ class TwitchEventsMixin:
             self.logger.error("[_on_raid] Error handling raid event: %s", e)
 
     async def _on_follow(self: Any, event: ChannelFollowEvent) -> None:
-        follow_enabled = self.app.state.features.get("follow", True)
+        follow_enabled = self.app.state.features.follow
         if not follow_enabled:
             return
         try:
@@ -191,7 +191,7 @@ class TwitchEventsMixin:
         Raises:
             Exception: If message processing fails.
         """
-        chat_enabled = self.app.state.features.get("chat", True)
+        chat_enabled = self.app.state.features.chat
         if not chat_enabled:
             return
         try:

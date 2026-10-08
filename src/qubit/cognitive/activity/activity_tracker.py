@@ -46,12 +46,12 @@ class ActivityTracker:
     def last_activity(self) -> datetime:
         return self.busyness.last_activity
 
-    async def handle_input(self, event, features: dict) -> None:
+    async def handle_input(self, event, features) -> None:
         """Process a new input event: gate on feature flags, then route it."""
         source = EventAdapter.get_source(event)
 
         flag = EventAdapter.feature_flag_for(source, event)
-        if flag and not features.get(flag, True):
+        if flag and not getattr(features, flag, True):
             return  # this input channel is switched off — drop entirely, not just unscored
 
         if source in EventAdapter.EVENT_SOURCES:
