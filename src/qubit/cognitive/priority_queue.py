@@ -9,6 +9,7 @@ can't win a decision cycle long after the moment it was relevant has passed.
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 
 class InputPriorityQueue:
@@ -56,6 +57,8 @@ class InputPriorityQueue:
             "event": event,
         }
 
+        msg["_id"] = str(uuid4())
+
         if source == self.STT_SOURCE:
             self._append_bounded(self.stt_messages, msg, self.stt_slots)
         else:
@@ -78,11 +81,15 @@ class InputPriorityQueue:
         return candidates[0][1]
 
     def remove(self, message: Dict[str, Any]) -> None:
-        """Remove a specific message. Safe no-op if it's no longer present."""
-        if message in self.stt_messages:
-            self.stt_messages.remove(message)
-        elif message in self.chat_messages:
-            self.chat_messages.remove(message)
+        """Remove a specific message by its assigned id. Safe no-op if it's no longer present."""
+        msg_id = message.get("_id")
+        if not msg_id:
+            return
+        for bucket in (self.stt_messages, self.chat_messages):
+            for i, m in enumerate(bucket):
+                if m.get("_id") == msg_id:
+                    del bucket[i]
+                    return
 
     def has_source(self, source: str) -> bool:
         """Return True if the queue currently contains any message from the given source."""
