@@ -45,7 +45,7 @@ class KickEventsMixin:
             f"chatrooms.{room}",
         ]
 
-        shutdown = getattr(self.app, "state", None) and getattr(self.app.state, "shutdown", None)
+        shutdown = self.app and self.app.state and self.app.state.shutdown
         while not (getattr(shutdown, "is_set", lambda: False)() if shutdown else False):
             try:
                 async with websockets.connect(PUSHER_URL) as ws:

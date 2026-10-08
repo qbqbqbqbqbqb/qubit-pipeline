@@ -286,7 +286,7 @@ class OutputCoordinator(Service):
                         continue
 
                     # Block normal output while high-priority audio file is playing
-                    if (self.app and hasattr(self.app, "audio_player")
+                    if (self.app and self.app.audio_player
                             and self.app.audio_player.is_playing()):
                         await asyncio.sleep(0.2)
                         self._requeue_front(item, from_priority)
@@ -339,7 +339,7 @@ class OutputCoordinator(Service):
         This is the single place that drives ai_speaking state.
         """
         try:
-            if self.app and hasattr(self.app, "state"):
+            if self.app:
                 self.app.state.ai_speaking.set()
 
             if self.enable_subtitles and self.obs_handler:
@@ -352,7 +352,7 @@ class OutputCoordinator(Service):
                 await self.tts_handler.speak(text)
 
         finally:
-            if self.app and hasattr(self.app, "state"):
+            if self.app:
                 self.app.state.ai_speaking.clear()
 
             if self.vtube_studio_handler:
@@ -368,7 +368,7 @@ class OutputCoordinator(Service):
             await self.vtube_studio_handler.start_speaking()
 
     async def _get_visual_mode(self) -> None:
-        if not getattr(self.app, "state", None):
+        if not self.app or not self.app.state:
             self.logger.info("[_get_visual_mode] No visual output mode enabled.")
             return
 

@@ -85,19 +85,19 @@ class WebSocketServerService(Service):
 
         elif action == "play_audio":
             file_path = data.get("file_path")
-            if file_path and hasattr(self.app, "audio_player"):
+            if file_path and self.app.audio_player:
                 await self.app.audio_player.play_file(file_path)
                 self.logger.info("[_handle_message] Playing audio: %s", file_path)
             else:
                 self.logger.warning("[_handle_message] play_audio: no file_path or audio_player")
 
         elif action == "stop_audio":
-            if hasattr(self.app, "audio_player"):
+            if self.app.audio_player:
                 await self.app.audio_player.stop_playback()
                 self.logger.info("[_handle_message] Stop audio requested")
 
         elif action == "list_audio_files":
-            if hasattr(self.app, "audio_player"):
+            if self.app.audio_player:
                 directory = self.app.audio_player.audio_directory
                 files = []
                 if directory.exists():

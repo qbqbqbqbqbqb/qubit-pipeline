@@ -39,7 +39,7 @@ class AudioFilePlayer(Service):
 
         self._playing = True
         self._current_file = str(full_path)
-        if self.app and hasattr(self.app, "state"):
+        if self.app and self.app.state:
             self.app.state.ai_speaking.set()
 
         self.logger.info("[AudioFilePlayer] Playing: %s", full_path.name)
@@ -51,7 +51,7 @@ class AudioFilePlayer(Service):
         finally:
             self._playing = False
             self._current_file = None
-            if self.app and hasattr(self.app, "state"):
+            if self.app and self.app.state:
                 self.app.state.ai_speaking.clear()
             self.logger.info("[AudioFilePlayer] Finished: %s", full_path.name)
 
@@ -90,6 +90,6 @@ class AudioFilePlayer(Service):
     async def stop_playback(self):
         if self._playing:
             self._playing = False
-            if self.app and hasattr(self.app, "state"):
+            if self.app and self.app.state:
                 self.app.state.ai_speaking.clear()
             self.logger.info("[AudioFilePlayer] Stop requested")
