@@ -37,8 +37,6 @@ class DecisionEngine:
         self.executor = DecisionExecutor(tracker, event_bus)
 
     async def run_decision_cycle(self) -> None:
-        self.tracker.apply_time_decay()
-
         idle_catchup = self.idle_quota.is_under_quota()
         context = self._build_context(idle_catchup)
         self._log_cycle_start(context)

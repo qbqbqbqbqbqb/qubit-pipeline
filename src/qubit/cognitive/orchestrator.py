@@ -68,8 +68,16 @@ class CognitiveOrchestrator(Service):
         self.logger.info("[Cognitive] Frontend command received -> %s", command)
 
     async def _run(self) -> None:
-        """The decision loop: every DECISION_INTERVAL_SECONDS, run one decision cycle."""
+        """The decision loop: every DECISION_INTERVAL_SECONDS, run one decision cycle.
+
+        Time decay is applied unconditionally each tick so the activity score
+        relaxes correctly even while output is busy and decision cycles are
+        gated. Without this, a chat burst followed by a long TTS response
+        would leave the busyness score frozen at its peak for the entire
+        duration of the speech.
+        """
         while not self.app.state.shutdown.is_set():
+            self.tracker.apply_time_decay()
             if self._should_run_cycle():
                 await self.engine.run_decision_cycle()
             await asyncio.sleep(self.DECISION_INTERVAL_SECONDS)
