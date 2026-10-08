@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     active_model: str = "stheno"
     main_formatter: str | None = None
     reflection_formatter: str | None = None
+    reflection_model: str | None = None
 
     # Per-profile generation overrides (optional - higher precedence than model defaults)
     main_temperature: float | None = None
