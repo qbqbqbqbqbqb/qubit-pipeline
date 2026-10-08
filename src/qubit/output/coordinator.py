@@ -104,13 +104,13 @@ class OutputCoordinator(Service):
         self.priority_max_age = timedelta(seconds=priority_max_age_seconds)
         self.enable_subtitles = enable_subtitles
 
-    async def start(self: Any, app: Any) -> None:
+    def attach(self, app) -> None:
         """Start the output handler service.
 
         Args:
             app (Any): Reference to the application instance.
         """
-        await super().start(app)
+        super().attach(app)
 
         # Block startup until VTube Studio auth succeeds or times out
         if self.vtube_studio_handler and self.app.state.features.vtube_studio:

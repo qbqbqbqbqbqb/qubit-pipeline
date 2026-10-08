@@ -1,37 +1,47 @@
 """WebSocket server service for frontend communication and state broadcasting."""
 
 import asyncio
+import dataclasses
 import json
+
 import websockets
+
 from src.qubit.core.service import Service
 
-class WebSocketServerService(Service):
-    """Manages WebSocket connections and routes frontend commands."""
 
-    def __init__(self, host="0.0.0.0", port=8765):
-        """Bind to the given host/port and initialise the client set."""
+class WebSocketServerService(Service):
+    """
+    Manages WebSocket connections and routes frontend commands.
+
+    WAIT_FOR_START = False because this service must be running before
+    the frontend can send the start command — it cannot wait for the
+    signal it is responsible for delivering.
+    """
+
+    WAIT_FOR_START = False
+
+    def __init__(self, host: str = "0.0.0.0", port: int = 8765) -> None:
         super().__init__("websocket_server")
         self.host = host
         self.port = port
-        self.connected_clients = set()
+        self.connected_clients: set = set()
         self.server = None
-        self.app = None
-        self.event_bus = None
 
-    async def start(self, app) -> None:
-        """Start the WebSocket server."""
-        self.app = app
-        self.event_bus = app.event_bus
-        self.server = await websockets.serve(self.websocket_handler, self.host, self.port)
-        self.logger.info("[start] WebSocketServer started on %s:%s", self.host, self.port)
-    
+    async def _run(self) -> None:
+        """Start the WebSocket server and serve until cancelled."""
+        self.server = await websockets.serve(
+            self.websocket_handler, self.host, self.port
+        )
+        self.logger.info("[_run] WebSocketServer listening on %s:%s", self.host, self.port)
+        await self.server.wait_closed()
+
     async def stop(self) -> None:
-        """Gracefully close the server."""
-        self.logger.info("[stop] Stopping WebSocketServer...")
+        """Gracefully close the server then cancel the worker task."""
+        self.logger.info("[stop] Stopping WebSocketServer")
         if self.server:
             self.server.close()
             await self.server.wait_closed()
-        self.logger.info("[stop] WebSocketServer stopped.")
+        await super().stop()
 
     async def websocket_handler(self, websocket) -> None:
         """Handle messages from a single connected client."""
@@ -39,70 +49,86 @@ class WebSocketServerService(Service):
         try:
             await self.send_states(websocket)
             async for message in websocket:
-                data = json.loads(message)
-                action = data.get("action")
-                if action == "toggle":
-                    input_type = data.get("input")
-                    state = data.get("state")
-                    if input_type in self.app.state.features:
-                        self.app.state.features[input_type] = (state == "on")
-                        self.logger.info("[webSocketHandler] Toggled %s %s", input_type, state)
-                        await self.broadcast_states()
-                    else:
-                        self.logger.warning("[webSocketHandler] Unknown input type: %s", input_type)
-                elif action == "terminate":
-                    self.logger.info("[webSocketHandler] terminate")
-                    self.app.state.shutdown.set()
-                elif action == 'start':
-                    self.logger.info("[webSocketHandler] Start command from frontend")
-                    if 'features' in data:
-                        for k, v in data.get('features', {}).items():
-                            if k in self.app.state.features:
-                                self.app.state.features[k] = bool(v)
-                                self.logger.info("[webSocketHandler] Set feature %s = %s from start config", k, v)
-                    self.app.state.start.set()
-                    await self.broadcast_states()
-
-                elif action == 'play_audio':
-                    file_path = data.get("file_path")
-                    if file_path and hasattr(self.app, 'audio_player'):
-                        await self.app.audio_player.play_file(file_path)
-                        self.logger.info("[webSocketHandler] Playing audio: %s", file_path)
-                    else:
-                        self.logger.warning("[webSocketHandler] play_audio failed")
-
-                elif action == 'stop_audio':
-                    if hasattr(self.app, 'audio_player'):
-                        await self.app.audio_player.stop_playback()
-                        self.logger.info("[webSocketHandler] Stop audio requested")
-
-                elif action == 'list_audio_files':
-                    if hasattr(self.app, 'audio_player'):
-                        directory = self.app.audio_player.audio_directory
-                        files = []
-                        if directory.exists():
-                            for f in sorted(directory.glob("*.wav")):
-                                files.append(str(f.relative_to(directory)))
-                        await websocket.send(json.dumps({"type": "audio_files", "data": files}))
+                await self._handle_message(websocket, json.loads(message))
         except Exception as e:
-            self.logger.error(e)
+            self.logger.error("[websocket_handler] %s", e)
         finally:
-            self.connected_clients.remove(websocket)
+            self.connected_clients.discard(websocket)
+
+    async def _handle_message(self, websocket, data: dict) -> None:
+        action = data.get("action")
+
+        if action == "toggle":
+            flag = data.get("input")
+            state = data.get("state") == "on"
+            features = self.app.state.features
+            if hasattr(features, flag):
+                setattr(features, flag, state)
+                self.logger.info("[_handle_message] Toggled %s -> %s", flag, state)
+                await self.broadcast_states()
+            else:
+                self.logger.warning("[_handle_message] Unknown feature flag: %s", flag)
+
+        elif action == "start":
+            self.logger.info("[_handle_message] Start command from frontend")
+            for k, v in data.get("features", {}).items():
+                features = self.app.state.features
+                if hasattr(features, k):
+                    setattr(features, k, bool(v))
+                    self.logger.info("[_handle_message] Set feature %s = %s", k, v)
+            self.app.state.start.set()
+            await self.broadcast_states()
+
+        elif action == "terminate":
+            self.logger.info("[_handle_message] Terminate command from frontend")
+            self.app.state.shutdown.set()
+
+        elif action == "play_audio":
+            file_path = data.get("file_path")
+            if file_path and hasattr(self.app, "audio_player"):
+                await self.app.audio_player.play_file(file_path)
+                self.logger.info("[_handle_message] Playing audio: %s", file_path)
+            else:
+                self.logger.warning("[_handle_message] play_audio: no file_path or audio_player")
+
+        elif action == "stop_audio":
+            if hasattr(self.app, "audio_player"):
+                await self.app.audio_player.stop_playback()
+                self.logger.info("[_handle_message] Stop audio requested")
+
+        elif action == "list_audio_files":
+            if hasattr(self.app, "audio_player"):
+                directory = self.app.audio_player.audio_directory
+                files = []
+                if directory.exists():
+                    files = [
+                        str(f.relative_to(directory))
+                        for f in sorted(directory.glob("*.wav"))
+                    ]
+                await websocket.send(json.dumps({"type": "audio_files", "data": files}))
+
+    def _features_as_dict(self) -> dict:
+        """Serialize FeatureFlags dataclass to a plain dict for JSON broadcast."""
+        return dataclasses.asdict(self.app.state.features)
 
     async def send_states(self, websocket) -> None:
         """Push current feature states to a newly connected client."""
-        states_message = json.dumps({"type": "states", "data": self.app.state.features})
-        await websocket.send(states_message)
+        await websocket.send(json.dumps({
+            "type": "states",
+            "data": self._features_as_dict(),
+        }))
 
     async def broadcast_states(self) -> None:
         """Push current feature states to all connected clients."""
         if self.connected_clients:
-            message = json.dumps({"type": "states", "data": self.app.state.features})
-            await asyncio.gather(*(client.send(message) for client in self.connected_clients))
+            message = json.dumps({
+                "type": "states",
+                "data": self._features_as_dict(),
+            })
+            await asyncio.gather(*(c.send(message) for c in self.connected_clients))
 
-    async def forward_event(self, event_type, data) -> None:
+    async def forward_event(self, event_type: str, data: dict) -> None:
         """Forward an internal event to all connected clients."""
         if self.connected_clients:
             message = json.dumps({"type": event_type, "data": data})
-            await asyncio.gather(*(client.send(message) for client in self.connected_clients))
-            
+            await asyncio.gather(*(c.send(message) for c in self.connected_clients))

@@ -95,8 +95,8 @@ class MemoryService(Service):
             self.conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_timestamp ON memory_index (collection, timestamp)")
             self.conn.commit()
 
-    async def start(self, app) -> None:
-        await super().start(app)
+    def attach(self, app) -> None:
+        super().attach(app)
 
     async def _run(self) -> None:
         await super()._run()

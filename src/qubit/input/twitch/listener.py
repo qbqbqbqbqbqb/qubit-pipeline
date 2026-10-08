@@ -56,8 +56,8 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
         self.connected = False
 
 
-    async def start(self, app) -> None:
-        await super().start(app)
+    def attach(self, app) -> None:
+        super().attach(app)
 
 
     async def _run(self: Any) -> None:

@@ -72,8 +72,8 @@ class GenerationCoordinator(Service):
         self.system_interaction = "high"
         self.max_age = timedelta(seconds=max_age_seconds)
 
-    async def start(self, app):
-        await super().start(app)
+    def attach(self, app) -> None:
+        super().attach(app)
 
     async def _run(self) -> None:
         await super()._run()

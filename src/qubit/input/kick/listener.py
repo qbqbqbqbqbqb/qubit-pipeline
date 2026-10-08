@@ -36,8 +36,8 @@ class KickListener(Service, KickAuthMixin, KickEventsMixin):
         self.connected = False
         self.chatroom_id = None
 
-    async def start(self, app) -> None:
-        await super().start(app)
+    def attach(self, app) -> None:
+        super().attach(app)
 
     async def _run(self: Any) -> None:
         await super()._run()

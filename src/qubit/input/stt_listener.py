@@ -49,8 +49,8 @@ class SpeechToTextListener(Service):
         self._worker_thread: threading.Thread | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
 
-    async def start(self, app) -> None:
-        await super().start(app)
+    def attach(self, app) -> None:
+        super().attach(app)
         self._loop = asyncio.get_running_loop()
 
     async def _run(self: Any) -> None:

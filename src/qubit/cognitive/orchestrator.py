@@ -52,8 +52,8 @@ class CognitiveOrchestrator(Service):
         self.tracker: ActivityTracker | None = None
         self.engine: DecisionEngine | None = None
 
-    async def start(self, app) -> None:
-        await super().start(app)
+    def attach(self, app) -> None:
+        super().attach(app)
         self.tracker = ActivityTracker(mention_whitelist=self._build_mention_whitelist())
         self.engine = DecisionEngine(self.tracker, self.event_bus)
         self.tracker.features = self.app.state.features
