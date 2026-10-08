@@ -17,10 +17,16 @@ class Settings(BaseSettings):
     Includes Twitch and Kick API credentials, OBS connection details, and authentication tokens.
     """
     # ===================== MODEL SELECTION =====================
+    # Primary model used for chat responses and monologues.
     active_model: str = "stheno"
+
+    # Optional separate model for the reflection profile.
+    # Must be a key in MODEL_REGISTRY. If unset (or set to the same value as
+    # active_model), no second model is loaded — the main executor is reused.
+    reflection_model: str | None = None
+
     main_formatter: str | None = None
     reflection_formatter: str | None = None
-    reflection_model: str | None = None
 
     # Per-profile generation overrides (optional - higher precedence than model defaults)
     main_temperature: float | None = None
@@ -75,7 +81,7 @@ class Settings(BaseSettings):
         """
         env_path = Path(self.model_config['env_file'])
         env_vars = env_path.read_text().splitlines()
- 
+
         new_env = {}
         for line in env_vars:
             if line.strip() == "" or line.strip().startswith("#"):
@@ -83,7 +89,7 @@ class Settings(BaseSettings):
             if "=" in line:
                 k, v = line.split("=", 1)
                 new_env[k.strip()] = v.strip()
- 
+
         new_env["BOT_OAUTH_TOKEN"] = self.bot_oauth_token
         new_env["BOT_REFRESH_TOKEN"] = self.bot_refresh_token
         new_env["STREAMER_OAUTH_TOKEN"] = self.streamer_oauth_token
