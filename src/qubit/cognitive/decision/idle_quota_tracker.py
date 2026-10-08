@@ -39,8 +39,8 @@ class IdleQuotaTracker:
         share = relevant.count("monologue") / len(relevant)
         return share < self.TARGET_SHARE
 
-    def catchup_bonus(self) -> float:
-        return self.CATCHUP_BONUS if self.is_under_quota() else 0.0
+    def catchup_bonus(self, under_quota: bool) -> float:
+        return self.CATCHUP_BONUS if under_quota else 0.0
 
     def record(self, reason: str) -> None:
         # Only chat_response vs idle_monologue feed the ratio — frontend

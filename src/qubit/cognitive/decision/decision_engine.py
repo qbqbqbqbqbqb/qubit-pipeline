@@ -47,7 +47,7 @@ class DecisionEngine:
 
         winner = self.arbiter.select_winner(
             proposals,
-            extra_bonus_by_reason={"idle_monologue": self.idle_quota.catchup_bonus()},
+            extra_bonus_by_reason={"idle_monologue": self.idle_quota.catchup_bonus(idle_catchup)},
         )
         self._log_winner(winner)
         await self._execute_decision(winner)
