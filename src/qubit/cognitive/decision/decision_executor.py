@@ -37,14 +37,14 @@ class DecisionExecutor:
             await self._execute_community_event(decision, now)
 
     async def _execute_monologue(self, decision: dict, now: datetime) -> None:
-        topic = decision["topic"]
-        prompt = f"Monologue about {topic}, in character as Qubit."
+        prompt = decision["prompt"]
+        label = decision.get("label", "unknown")
 
         event = MonologueEvent(
             type="monologue_prompt",
             user="system",
             timestamp=now.isoformat(),
-            data={"user": "system", "topic": topic, "prompt": prompt},
+            data={"user": "system", "label": label, "prompt": prompt},
             prompt=prompt,
         )
         await self.event_bus.publish(event)

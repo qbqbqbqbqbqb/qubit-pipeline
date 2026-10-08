@@ -23,7 +23,8 @@ class Behavior(ABC):
                                              # their weights also match.
             "reason": str,
             "best_message": dict | None,    # only for "response"
-            "topic": str | None,            # only for "monologue"
+            "prompt": str | None,           # only for "monologue" — full LLM instruction
+            "label": str | None,            # only for "monologue" — human-readable log label
         }
     - Stateful only in two ways, both owned by DecisionEngine rather than the
       behavior itself:

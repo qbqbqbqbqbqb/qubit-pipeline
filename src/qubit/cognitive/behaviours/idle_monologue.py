@@ -12,6 +12,7 @@ Goals:
 import random
 
 from src.qubit.cognitive.behaviours.base import Behavior
+from src.qubit.cognitive.behaviours.topic_selector import TopicSelector
 from src.utils.log_utils import get_logger
 
 
@@ -55,17 +56,10 @@ class IdleMonologueBehavior(Behavior):
     SCORE_FLOOR = 0.05
     SCORE_CEILING = 1.35
 
-    TOPICS = [
-        "a funny story about AI",
-        "an interesting Twitch fact",
-        "a quirky joke",
-        "something weird that happened in the code today",
-        "a random observation about streaming",
-    ]
-
     def __init__(self):
         super().__init__("IdleMonologue")
         self.logger = get_logger("IdleMonologueBehavior")
+        self._selector = TopicSelector()
 
     async def tick(self, context: dict) -> dict | None:
         if not context.get("features", {}).get("monologue", True):
@@ -93,10 +87,11 @@ class IdleMonologueBehavior(Behavior):
                 return None
 
         clamped_score = self._final_score(eagerness, activity)
-        topic = self._get_topic()
+        topic = self._selector.pick(context)
 
         self.logger.info(
-            "[IdleMonologue] PROPOSAL | score=%.3f | activity=%.1f | topic=%s", clamped_score, activity, topic
+            "[IdleMonologue] PROPOSAL | score=%.3f | activity=%.1f | label=%s | fixed=%s",
+            clamped_score, activity, topic.label, topic.is_fixed,
         )
 
         # Normalized to 0-1: SCORE_CEILING here only bounds this behavior's own
@@ -108,7 +103,10 @@ class IdleMonologueBehavior(Behavior):
             "type": "monologue",
             "score": normalized_score,
             "reason": "idle_monologue",
-            "topic": topic,
+            # The full prompt instruction goes through so the executor can
+            # pass it straight to the LLM without constructing it itself.
+            "prompt": topic.prompt,
+            "label": topic.label,
         }
 
     def _eagerness_for_activity(self, activity: float) -> tuple[float, float]:
@@ -153,5 +151,3 @@ class IdleMonologueBehavior(Behavior):
         score += random.uniform(*self.SCORE_JITTER_RANGE)
         return max(self.SCORE_FLOOR, min(self.SCORE_CEILING, score))
 
-    def _get_topic(self) -> str:
-        return random.choice(self.TOPICS)

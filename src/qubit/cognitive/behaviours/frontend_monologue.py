@@ -21,11 +21,19 @@ class FrontendTriggeredMonologueBehavior(Behavior):
     RAW_PRIORITY = 1.35
     NORMALIZED_SCORE = 1.0
 
-    TOPIC_MAP = {
-        "start": "welcome to the stream",
-        "random_fact": "a random fun fact about Qubit",
+    PROMPT_MAP = {
+        "start": (
+            "Welcome viewers to the stream. Be warm, energetic, and a little self-aware "
+            "about being an AI VTuber. Keep it short — this is an opener, not a speech."
+        ),
+        "random_fact": (
+            "Share a random fun fact about yourself as an AI, about streaming, or about "
+            "something genuinely interesting. Keep it snappy."
+        ),
     }
-    DEFAULT_TOPIC = "a random fun fact about Qubit"
+    DEFAULT_PROMPT = (
+        "Say something interesting or fun — your choice. Keep it natural and in character."
+    )
 
     def __init__(self):
         super().__init__("FrontendMonologue")
@@ -36,19 +44,17 @@ class FrontendTriggeredMonologueBehavior(Behavior):
         if not command:
             return None
 
-        topic = self._get_topic_for_command(command)
+        prompt = self.PROMPT_MAP.get(command.lower(), self.DEFAULT_PROMPT)
 
         self.logger.info(
-            "[FrontendMonologue] PROPOSAL | score=%.2f | command='%s' -> %s",
-            self.NORMALIZED_SCORE, command, topic,
+            "[FrontendMonologue] PROPOSAL | score=%.2f | command='%s'",
+            self.NORMALIZED_SCORE, command,
         )
 
         return {
             "type": "monologue",
             "score": self.NORMALIZED_SCORE,
             "reason": f"frontend_{command}",
-            "topic": topic,
+            "prompt": prompt,
+            "label": f"frontend_{command}",
         }
-
-    def _get_topic_for_command(self, command: str) -> str:
-        return self.TOPIC_MAP.get(command.lower(), self.DEFAULT_TOPIC)
