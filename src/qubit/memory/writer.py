@@ -69,11 +69,11 @@ class MemoryWriter(EventProcessor):
 
         handler = self.routes.get(event_type)
         if handler:
-            handler(event)
+            await handler(event)
         else:
             self.logger.info("[handle_event] Can't convert %s to memory", event)
 
-    def _chat_memory(self, event):
+    async def _chat_memory(self, event):
         """Store viewer chat"""
         self.logger.info("[_chat_memory] Handling chat memory event")
         await self.memory_service.add_conversation_item(
@@ -83,7 +83,7 @@ class MemoryWriter(EventProcessor):
             metadata={"source": "chat", "timestamp": getattr(event, "timestamp", None)}
         )
 
-    def _stt_memory(self, event):
+    async def _stt_memory(self, event):
         """Store voice input from STT"""
         self.logger.info("[_stt_memory] Handling STT memory event")
         await self.memory_service.add_conversation_item(
@@ -93,7 +93,7 @@ class MemoryWriter(EventProcessor):
             metadata={"source": "stt", "timestamp": getattr(event, "timestamp", None)}
         )
 
-    def _response_memory(self, event):
+    async def _response_memory(self, event):
         """Store AI responses"""
         self.logger.info("[_response_memory] Handling response memory event")
         await self.memory_service.add_conversation_item(
@@ -102,7 +102,7 @@ class MemoryWriter(EventProcessor):
             metadata={"source": "response", "timestamp": getattr(event, "timestamp", None)}
         )
 
-    def _event_memory(self, event):
+    async def _event_memory(self, event):
         """Store notable viewer events"""
         self.logger.info("[_event_memory] Handling input event memory event")
         text = f"{event.user} triggered {event.type}"
@@ -114,7 +114,7 @@ class MemoryWriter(EventProcessor):
             metadata={"source": "event", "timestamp": getattr(event, "timestamp", None)}
         )
 
-    def _monologue_memory(self, event):
+    async def _monologue_memory(self, event):
         """AI thoughts / system monologues"""
         self.logger.info("[_monologue_memory] Handling monologue memory event")
         await self.memory_service.add_conversation_item(
