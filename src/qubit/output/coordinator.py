@@ -105,28 +105,8 @@ class OutputCoordinator(Service):
         self.enable_subtitles = enable_subtitles
 
     def attach(self, app) -> None:
-        """Start the output handler service.
-
-        Args:
-            app (Any): Reference to the application instance.
-        """
+        """Bind to the app. VTube Studio connection happens in _run() on first tick."""
         super().attach(app)
-
-        # Block startup until VTube Studio auth succeeds or times out
-        if self.vtube_studio_handler and self.app.state.features.vtube_studio:
-            print("[OutputCoordinator] Waiting for VTube Studio connection (up to 30s)...")
-            try:
-                await asyncio.wait_for(
-                    self.vtube_studio_handler.ensure_connected(),
-                    timeout=30.0
-                )
-                # Once connected, start idle animation automatically
-                await self.vtube_studio_handler.start_idle()
-                print("[OutputCoordinator] VTube Studio idle animation started.")
-            except asyncio.TimeoutError:
-                print("[OutputCoordinator] VTube Studio connection timed out after 30s. Continuing without it.")
-            except Exception as e:
-                print(f"[OutputCoordinator] VTube Studio connection failed: {e}")
 
     async def stop(self: Any) -> None:
         """Stop the output handler service."""
@@ -266,7 +246,20 @@ class OutputCoordinator(Service):
 
     async def _run(self: Any) -> None:
         """Main loop processing the output queues asynchronously."""
-        await super()._run()
+        if self.vtube_studio_handler and self.app.state.features.vtube_studio:
+            self.logger.info("[_run] Connecting to VTube Studio (up to 30s)...")
+            try:
+                await asyncio.wait_for(
+                    self.vtube_studio_handler.ensure_connected(),
+                    timeout=30.0,
+                )
+                await self.vtube_studio_handler.start_idle()
+                self.logger.info("[_run] VTube Studio idle animation started.")
+            except asyncio.TimeoutError:
+                self.logger.warning("[_run] VTube Studio connection timed out after 30s. Continuing without it.")
+            except Exception as e:
+                self.logger.error("[_run] VTube Studio connection failed: %s", e)
+
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
