@@ -25,7 +25,7 @@ It replaced the older transitional PromptRequestBuilder logic during the 2026 So
 from datetime import datetime, timedelta, timezone
 
 from src.qubit.core.event_processor import EventProcessor
-from src.qubit.processing.common import is_stale, forward_to_memory
+from src.qubit.processing.common import is_stale
 from src.qubit.core.events import ResponsePromptEvent
 
 
@@ -35,7 +35,7 @@ class AutonomousPromptProcessor(EventProcessor):
 
     It performs three mechanical steps for events that the Cognitive layer has
     already decided should trigger autonomous speech:
-    1. Staleness check (drop old monologue_prompt / start_message events).
+    1. Staleness check (drop old monologue_prompt events).
     2. Forward the raw event to MemoryWriter (monologues must be remembered).
     3. Emit a ResponsePromptEvent so GenerationCoordinator can produce speech.
 
@@ -47,15 +47,12 @@ class AutonomousPromptProcessor(EventProcessor):
 
     SUBSCRIPTIONS = {
         "monologue_prompt": "handle_event",
-        "start_message": "handle_event",
     }
 
-    def __init__(self, max_age_seconds: int = 30, memory_writer=None):
+    def __init__(self, max_age_seconds: int = 30):
         """
         Args:
             max_age_seconds: Events older than this are dropped as stale.
-            memory_writer: Optional MemoryWriter (EventProcessor) for persistence.
-
         event_bus is not taken as a constructor argument — it is set by
         EventProcessor.register_subscriptions() when the processor is wired
         to the bus in bootstrap.py, matching the construction contract of
@@ -63,7 +60,6 @@ class AutonomousPromptProcessor(EventProcessor):
         """
         super().__init__("autonomous prompt processor")
         self.max_age = timedelta(seconds=max_age_seconds)
-        self.memory_writer = memory_writer
 
     async def handle_event(self, event) -> None:
         """
@@ -75,7 +71,6 @@ class AutonomousPromptProcessor(EventProcessor):
         if await is_stale(event, self.max_age, self.logger, context="monologue"):
             return
 
-        await forward_to_memory(event, self.memory_writer, self.logger)
         await self._emit_prompt_request(event)
 
     async def _emit_prompt_request(self, event) -> None:

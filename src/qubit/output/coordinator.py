@@ -84,14 +84,12 @@ class OutputCoordinator(Service):
                  priority_max_age_seconds:int=DEFAULT_PRIORITY_MAX_AGE_SECONDS,
                  queue_maxlen:int=DEFAULT_QUEUE_MAXLEN,
                  priority_queue_maxlen:int=DEFAULT_PRIORITY_QUEUE_MAXLEN,
-                 enable_subtitles:bool=False,
-                 memory_writer=None):
+                 enable_subtitles:bool=False):
         super().__init__("output_coordinator")
         self.tts_handler = tts_handler
         self.obs_handler = obs_handler
         self.vtube_studio_handler = vtube_studio_handler
         self.png_handler: PNGOutputHandler = None
-        self.memory_writer = memory_writer
         self.dialogue_sanitiser = DialogueSanitiser(blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
 
         # Normal-priority items (chat responses, idle monologues, frontend
@@ -121,7 +119,7 @@ class OutputCoordinator(Service):
         Args:
             event (ResponseGeneratedEvent): Event containing the generated response.
         """
-        prompt, response, source = await self._get_event_attributes(event)
+        prompt, response, source = self._get_event_attributes(event)
 
         if not response:
             self.logger.warning("[handle_response] No response generated for %s", prompt)
@@ -147,12 +145,12 @@ class OutputCoordinator(Service):
         response_clean = self.dialogue_sanitiser.strip_leading_punctuation(after_trailing)
         _log_mutation("strip_leading_punctuation", after_trailing, response_clean)
 
-        event = await self._set_event_attributes(event, prompt, source, response_clean)
+        event = self._set_event_attributes(event, prompt, source, response_clean)
         await self._handle_memory_event(event)
 
         await self._append_to_queue(event)
 
-    async def _get_event_attributes(self: Any, event: ResponseGeneratedEvent) -> tuple:
+    def _get_event_attributes(self: Any, event: ResponseGeneratedEvent) -> tuple:
         """Retrieve key attributes from a response event.
 
         Args:
@@ -163,7 +161,7 @@ class OutputCoordinator(Service):
         """
         return event.prompt, event.response, event.source
 
-    async def _set_event_attributes(self: Any, event: ResponseGeneratedEvent, prompt: str, source: str, response_clean: str) -> Any:
+    def _set_event_attributes(self: Any, event: ResponseGeneratedEvent, prompt: str, source: str, response_clean: str) -> Any:
         """Update event attributes after sanitisation.
 
         Args:
@@ -186,8 +184,6 @@ class OutputCoordinator(Service):
         Args:
             event (ResponseGeneratedEvent): Event to store in memory.
         """
-        if self.memory_writer:
-            await self.memory_writer.handle_event(event)
 
     def _is_priority_event(self: Any, event: ResponseGeneratedEvent) -> bool:
         """

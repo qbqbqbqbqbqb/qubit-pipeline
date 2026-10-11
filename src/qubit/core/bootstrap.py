@@ -59,14 +59,8 @@ async def create_app() -> App:
     # because processors are not long-lived services; they are stateless
     # event handlers that run synchronously on the bus.
     moderation_processor = ModerationProcessor()
-    conversation_processor = ConversationProcessor(
-        max_age_seconds=30,
-        memory_writer=memory_writer,
-    )
-    autonomous_prompt_processor = AutonomousPromptProcessor(
-        max_age_seconds=30,
-        memory_writer=memory_writer,
-    )
+    conversation_processor = ConversationProcessor(max_age_seconds=30)
+    autonomous_prompt_processor = AutonomousPromptProcessor(max_age_seconds=30)
     frontend_command_processor = FrontendCommandProcessor()
 
     for processor in (
@@ -74,6 +68,7 @@ async def create_app() -> App:
         conversation_processor,
         autonomous_prompt_processor,
         frontend_command_processor,
+        memory_writer,
     ):
         processor.register_subscriptions(app.event_bus)
 
@@ -87,7 +82,6 @@ async def create_app() -> App:
         tts_handler=TTSHandler(),
         obs_handler=OBSHandler(settings=settings),
         vtube_studio_handler=vtube_handler,
-        memory_writer=memory_writer,
     )
 
     audio_player = AudioFilePlayer(audio_directory=settings.audio_directory)

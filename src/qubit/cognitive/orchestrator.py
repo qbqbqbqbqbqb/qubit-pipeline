@@ -69,14 +69,14 @@ class CognitiveOrchestrator(Service):
         CHAT_MENTION_WHITELIST as a comma-separated string.
         """
         names: set[str] = set()
-        for field in (
+        for name_field in (
             settings.twitch_bot_name,
             settings.twitch_streamer_name,
             settings.kick_bot_name,
             settings.kick_streamer_name,
         ):
-            if field:
-                names.add(field.lower())
+            if name_field:
+                names.add(name_field.lower())
         for extra in (settings.chat_mention_whitelist or "").split(","):
             extra = extra.strip().lower()
             if extra:

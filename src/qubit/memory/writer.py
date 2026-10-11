@@ -42,7 +42,7 @@ class MemoryWriter(EventProcessor):
         "kick_follow_processed": "handle_event",
         "stt_processed": "handle_event",
         "monologue_prompt": "handle_event",
-        "start_message": "handle_event",
+
         "response_generated": "handle_event",
     }
 
@@ -60,7 +60,6 @@ class MemoryWriter(EventProcessor):
             "kick_follow_processed": self._event_memory,
             "stt_processed": self._stt_memory,
             "monologue_prompt": self._monologue_memory,
-            "start_message": self._monologue_memory,
             "response_generated": self._response_memory,
         }
 

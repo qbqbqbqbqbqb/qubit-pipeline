@@ -12,7 +12,7 @@ Organised into:
 """
 
 from twitchAPI.type import AuthScope
-from src.utils.file_utills import load_text_file, get_root, get_file_path, load_word_list, load_phrases, load_json_file
+from src.qubit.utils.file_utils import load_text_file, get_root, get_file_path, load_word_list, load_phrases, load_json_file
 
 
 # === Twitch Authentication Scopes ===

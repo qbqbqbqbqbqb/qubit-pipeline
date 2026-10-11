@@ -17,11 +17,10 @@ class EventProcessor(ABC):
 
     def register_subscriptions(self, event_bus) -> None:
         """Bind configured event types to local handler methods on the bus."""
-        self.event_bus = event_bus
-
-        if not self.event_bus:
-            self.logger.warning("[%s] No event_bus provided", self.name)
+        if not event_bus:
+            self.logger.warning("[%s] No event_bus provided — subscriptions not registered", self.name)
             return
+        self.event_bus = event_bus
 
         for event_type, handler_name in self.SUBSCRIPTIONS.items():
             handler = getattr(self, handler_name, None)

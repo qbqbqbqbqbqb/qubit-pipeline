@@ -52,6 +52,6 @@ class Behavior(ABC):
         Evaluate context and return a scored proposal or None.
 
         The returned dict MUST contain at minimum: "type", "score", "reason".
-        Optional keys: "best_message", "topic" depending on type.
+        Optional keys: "best_message", "prompt", "label" depending on type.
         """
         raise NotImplementedError

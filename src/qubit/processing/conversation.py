@@ -19,7 +19,7 @@ input. It has no involvement in prompt building.
 from datetime import timedelta
 
 from src.qubit.core.event_processor import EventProcessor
-from src.qubit.processing.common import is_stale, forward_to_memory
+from src.qubit.processing.common import is_stale
 from src.qubit.utils.message_tracker import MessageTracker
 
 
@@ -42,26 +42,18 @@ class ConversationProcessor(EventProcessor):
 
     SUBSCRIPTIONS = {
         "twitch_chat_processed": "handle_event",
-        "twitch_subscription_processed": "handle_event",
-        "twitch_raid_processed": "handle_event",
-        "twitch_follow_processed": "handle_event",
         "kick_chat_processed": "handle_event",
-        "kick_subscription_processed": "handle_event",
-        "kick_raid_processed": "handle_event",
-        "kick_follow_processed": "handle_event",
         "stt_processed": "handle_event",
     }
 
-    def __init__(self, max_age_seconds=30, memory_writer=None):
+    def __init__(self, max_age_seconds=30):
         """
         Args:
             max_age_seconds: Events older than this are dropped as stale.
-            memory_writer: Optional MemoryWriter to forward events for long-term storage.
         """
         super().__init__("conversation processor")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.message_tracker = MessageTracker()
-        self.memory_writer = memory_writer
 
     async def handle_event(self, event) -> None:
         """
@@ -82,7 +74,6 @@ class ConversationProcessor(EventProcessor):
         if await is_stale(event, self.max_age, self.logger, context="chat"):
             return
 
-        await forward_to_memory(event, self.memory_writer, self.logger)
 
     def _is_repeated(self, text: str) -> bool:
         """Returns True if this exact text was seen recently (anti-spam)."""

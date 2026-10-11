@@ -66,7 +66,7 @@ class ModerationProcessor(EventProcessor):
         Each moderated event is published as a clean *_processed variant.
         """
         if isinstance(event, TwitchChatEvent):
-            self.logger.info("[handle_event] Moderating twitch chat event: %s", event)
+            self.logger.debug("[handle_event] Moderating twitch chat event: %s", event)
             await self._moderate_chat(event)
         elif isinstance(event, TwitchSubscriptionEvent):
             self.logger.info("[handle_event] Moderating twitch subscription event: %s", event)
@@ -78,7 +78,7 @@ class ModerationProcessor(EventProcessor):
             self.logger.info("[handle_event] Moderating twitch follow event: %s", event)
             await self._moderate_follow(event)
         elif isinstance(event, KickChatEvent):
-            self.logger.info("[handle_event] Moderating kick chat event: %s", event)
+            self.logger.debug("[handle_event] Moderating kick chat event: %s", event)
             await self._moderate_kick_chat(event)
         elif isinstance(event, KickSubscriptionEvent):
             self.logger.info("[handle_event] Moderating kick subscription event: %s", event)
