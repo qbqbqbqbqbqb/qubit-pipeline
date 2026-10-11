@@ -99,7 +99,6 @@ class MemoryService(Service):
         super().attach(app)
 
     async def _run(self) -> None:
-        await super()._run()
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)

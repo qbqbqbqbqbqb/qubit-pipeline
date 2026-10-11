@@ -72,7 +72,6 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
         This loop runs at low frequency (hourly refresh) because the actual
         chat and EventSub traffic is handled asynchronously via the mixins.
         """
-        await super()._run()
         while not self.app.state.shutdown.is_set():
             twitch_enabled = self.app.state.features.twitch
 

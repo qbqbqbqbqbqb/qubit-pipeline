@@ -54,7 +54,6 @@ class SpeechToTextListener(Service):
         self._loop = asyncio.get_running_loop()
 
     async def _run(self: Any) -> None:
-        await super()._run()
         while not self.app.state.shutdown.is_set():
             stt_enabled = self.app.state.features.stt
 
