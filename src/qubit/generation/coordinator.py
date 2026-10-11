@@ -81,16 +81,16 @@ class GenerationCoordinator(Service):
                 await asyncio.sleep(1)
                 continue
 
-            while True:
+            while not self.app.state.shutdown.is_set():
                 event: ResponsePromptEvent = await self.queue.get()
                 try:
                     if self._is_stale(event):
-                        self.logger.info("[_run]Dropping stale prompt for %s: %s", event.data.get('user'), event.prompt)
+                        self.logger.info("[_run] Dropping stale prompt for %s: %s", event.data.get("user"), event.prompt)
                         continue
 
                     response = await self._generate_response(event)
 
-                    self.logger.info("[_run]Response generated. Publishing: %s", response)
+                    self.logger.info("[_run] Response generated. Publishing: %s", response)
                     await self._publish_response(event, response)
 
                 except Exception as e:

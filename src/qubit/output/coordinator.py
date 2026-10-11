@@ -265,8 +265,7 @@ class OutputCoordinator(Service):
                 await asyncio.sleep(1)
                 continue
 
-            self.logger.info("[_run] OutputCoordinator started")
-            while True:
+            while not self.app.state.shutdown.is_set():
                 try:
                     item, from_priority = self._pop_next_item()
                     if item is None:

@@ -104,9 +104,11 @@ class MemoryService(Service):
                 await asyncio.sleep(1)
                 continue
 
-            while True:
-                await asyncio.sleep(60)
+            while not self.app.state.shutdown.is_set():
                 self.logger.info("[_run] MemoryService worker checking for reflections...")
+                # Check first, then sleep — so reflections fire immediately on
+                # startup rather than waiting 60s for the first opportunity.
+                # Short streams would otherwise never generate reflections.
                 recent_chats = self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
                 self.logger.info("[_run] Found %s recent chat items for reflection check", len(recent_chats))
                 unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
@@ -120,6 +122,8 @@ class MemoryService(Service):
                     ids_to_update = [chat["id"] for chat in unreflected]
                     self.logger.info("[_run] Marking %s chat items as reflected", len(ids_to_update))
                     self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
+
+                await asyncio.sleep(60)
 
     async def stop(self) -> None:
         await super().stop()
