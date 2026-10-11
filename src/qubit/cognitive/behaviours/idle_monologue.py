@@ -62,7 +62,7 @@ class IdleMonologueBehavior(Behavior):
         self._selector = TopicSelector()
 
     async def tick(self, context: dict) -> dict | None:
-        if not context.get("features", {}).get("monologue", True):
+        if not getattr(context.get("features"), "monologue", True):
             return None
 
         activity = float(context.get("activity_score", 0.0))

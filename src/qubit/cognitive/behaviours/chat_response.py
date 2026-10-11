@@ -80,12 +80,11 @@ class ChatResponseBehavior(Behavior):
         }
 
     def _has_live_stt(self, context: dict, queue) -> bool:
-        stt_enabled = context.get("features", {}).get("stt", True)
+        stt_enabled = getattr(context.get("features"), "stt", True)
         return queue.has_source("user_input_stt") if stt_enabled else False
 
     def _base_willingness(self, context: dict, activity: float, has_live_stt: bool) -> float:
-        features = context.get("features", {})
-        monologue_enabled = features.monologue
+        monologue_enabled = getattr(context.get("features"), "monologue", True)
         pure_chat_mode = not monologue_enabled and not has_live_stt
 
         if pure_chat_mode or has_live_stt:

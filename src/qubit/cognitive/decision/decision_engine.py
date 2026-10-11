@@ -71,7 +71,7 @@ class DecisionEngine:
             "activity_score": self.tracker.activity_score,
             "queue": self.tracker.queue,
             "pending_events": self.tracker.peek_pending_events(),
-            "features": getattr(self.tracker, "features", {}),
+            "features": self.tracker.features,
             # Tells IdleMonologueBehavior to bypass its own cooldown/spark
             # gates this cycle — see IdleQuotaTracker's docstring for why.
             "idle_quota_catchup": idle_catchup,
