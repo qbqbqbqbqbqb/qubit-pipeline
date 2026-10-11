@@ -9,7 +9,7 @@ def load_text_file(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except Exception as e:
-        logger.error(f"Could not load file {path}: {e}")
+        logger.error("Could not load file %s: %s", path, e)
         raise
 
 def load_json_file(path: str) -> dict:
@@ -18,7 +18,7 @@ def load_json_file(path: str) -> dict:
 
 def check_file_exists(path: Path) -> bool:
     if not path or not path.exists():
-        logger.warning(f"File {path} does not exist or is None")
+        logger.warning("File %s does not exist or is None", path)
         return False
     return True
 
@@ -46,7 +46,7 @@ def load_word_list(path: Path) -> list[str]:
                     cleaned_words.append(cleaned)
         return cleaned_words
     except Exception as e:
-        logger.error(f"Error loading word list from {path}: {e}")
+        logger.error("Error loading word list from %s: %s", path, e)
         return []
     
 def load_phrases(path: Path) -> list[str]:
@@ -57,8 +57,8 @@ def load_phrases(path: Path) -> list[str]:
         content = load_text_file(path)
         lines = content.splitlines()
         phrases = [line.strip() for line in lines if line.strip()]
-        logger.info(f"Loaded {len(phrases)} phrases from {path}")
+        logger.info("Loaded %s phrases from %s", len(phrases), path)
         return phrases
     except Exception as e:
-        logger.error(f"Error loading phrases from {path}: {e}")
+        logger.error("Error loading phrases from %s: %s", path, e)
         return []

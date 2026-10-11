@@ -37,5 +37,5 @@ class FrontendCommandProcessor(EventProcessor):
             }
         )
 
-        self.logger.info(f"[FrontendCommandProcessor] Received frontend command → {command}")
+        logger.info("[FrontendCommandProcessor] Received frontend command → %s", command)
         await self.event_bus.publish(standardised_event)
