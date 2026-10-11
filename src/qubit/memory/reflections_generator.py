@@ -72,7 +72,7 @@ Return ONLY valid JSON in this exact shape (no other text):
         Perform reflection on recent messages and return up to 3 (q, a) tuples.
         Returns [] if there are not enough messages or the model fails entirely.
         """
-        recent_messages = memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
+        recent_messages = await memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
 
         if len(recent_messages) < 10:
             self.logger.info("[perform_reflection] Not enough messages for reflection (%d)", len(recent_messages))

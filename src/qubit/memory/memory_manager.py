@@ -16,13 +16,17 @@ It must remain free of:
 - Write routing (that lives in MemoryWriter)
 - Prompt assembly (MemoryService contributes injections via the bus)
 
-In the 2026 SoC refactor this replaced the old monolithic MemoryHandler.
+SQLite calls are all wrapped in run_in_executor so they do not block the
+asyncio event loop. The lock (threading.Lock) is held inside the executor
+thread, not on the async side.
 """
 
+import asyncio
 import threading
 from datetime import datetime, timedelta, timezone
+from functools import partial
 import uuid
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import chromadb
 
@@ -42,44 +46,42 @@ class MemoryManager:
     - Delegate reflection generation to ReflectionGenerator
     - Maintain a fast SQLite index for "recent items" queries
 
-    It is the only component allowed to call chromadb.Client directly for writes/reads.
+    It is the only component allowed to call chromadb.Client directly.
     Higher layers (MemoryService, MemoryWriter) talk to this class only.
-
-    The 2026 refactor split the old MemoryHandler into:
-    - MemoryWriter (pure EventProcessor for writes)
-    - MemoryService (Service + background jobs + RAG accessors)
-    - MemoryManager (this class: the actual store owner)
-
-    TODO (still present): Consider injecting pre-created collections or using a factory
-    for better testability / separation.
     """
 
-    # TODO: Consider injecting pre-created collections or using a factory for better testability / separation.
     def __init__(
         self,
         chroma_client: chromadb.Client,
-        reflections_generator: ReflectionGenerator = None,
-        conn = None,
-        llm_service: LLMService = None,
+        reflections_generator: Optional[ReflectionGenerator] = None,
+        conn=None,
+        llm_service: Optional[LLMService] = None,
     ):
         self.logger = get_logger("MemoryManager")
         self.chroma_client = chroma_client
         self.llm_service = llm_service
 
         self.collections = {
-            "chat": self.chroma_client.get_or_create_collection(name="conversation_collection", metadata={"hnsw:space": "l2"}),
-            "reflections": self.chroma_client.get_or_create_collection(name="reflections_collection", metadata={"hnsw:space": "l2"})
+            "chat": self.chroma_client.get_or_create_collection(
+                name="conversation_collection", metadata={"hnsw:space": "l2"}
+            ),
+            "reflections": self.chroma_client.get_or_create_collection(
+                name="reflections_collection", metadata={"hnsw:space": "l2"}
+            ),
         }
         self.reflections_generator = reflections_generator
         self.conn = conn
         self.lock = threading.Lock()
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
     def _to_unix_ts(self, ts: Any) -> float:
         """
         Normalize any timestamp representation to a UTC unix float.
 
-        Accepts: None, int/float seconds, datetime (naive or aware), ISO string (with or without Z).
-        Always returns a float suitable for Chroma metadata and SQLite.
+        Accepts: None, int/float seconds, datetime (naive or aware), ISO string.
         Falls back to now() on any parse failure.
         """
         if ts is None:
@@ -92,9 +94,7 @@ class MemoryManager:
             return ts.timestamp()
         if isinstance(ts, str):
             try:
-                s = ts
-                if s.endswith("Z"):
-                    s = s[:-1] + "+00:00"
+                s = ts.rstrip("Z") + ("+00:00" if ts.endswith("Z") else "")
                 dt = datetime.fromisoformat(s)
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=timezone.utc)
@@ -103,195 +103,190 @@ class MemoryManager:
                 pass
         return datetime.now(timezone.utc).timestamp()
 
-    def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
-        """
-        Persist a single conversation turn (chat, response, event, or monologue).
+    async def _run_db(self, fn, *args, **kwargs):
+        """Run a blocking SQLite call in the default thread pool executor."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
 
-        Writes to both:
-        - Chroma "conversation_collection" (for semantic search / future RAG)
-        - SQLite memory_index (for fast recency + filtering queries)
+    def _sqlite_insert(self, item_id: str, timestamp: float, user_id: str, type_: str, collection: str) -> None:
+        """Blocking SQLite insert — must be called via _run_db."""
+        with self.lock:
+            self.conn.execute(
+                "INSERT INTO memory_index (id, timestamp, user_id, type, collection) VALUES (?, ?, ?, ?, ?)",
+                (item_id, timestamp, user_id, type_, collection),
+            )
+            self.conn.commit()
 
-        All writes are performed under self.lock.
-        The "reflected" flag starts False; MemoryService flips it after reflections are generated.
+    def _sqlite_query_ids(self, collection_name: str, cutoff: float, limit: int) -> list:
+        """Blocking SQLite SELECT — must be called via _run_db."""
+        with self.lock:
+            cursor = self.conn.execute(
+                """
+                SELECT id
+                FROM memory_index
+                WHERE collection = ?
+                AND timestamp >= ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (collection_name, cutoff, limit),
+            )
+            return [row[0] for row in cursor.fetchall()]
+
+    # ------------------------------------------------------------------
+    # Public async API
+    # ------------------------------------------------------------------
+
+    async def add_conversation_item(
+        self,
+        role: str,
+        content: str,
+        user_id: str = None,
+        metadata: dict = None,
+    ) -> None:
         """
-        self.logger.info("[add_conversation_item] adding message: %s from %s %s", content, role, user_id)
+        Persist a single conversation turn to Chroma + SQLite.
+
+        The "reflected" flag starts False; MemoryService flips it after
+        reflections are generated.
+        """
+        self.logger.info("[add_conversation_item] role=%s user=%s", role, user_id)
 
         coll = self.collections["chat"]
-
         try:
             item_id = str(uuid.uuid4())
-
-            raw_ts = metadata.get("timestamp") if metadata and "timestamp" in metadata else None
+            raw_ts = (metadata or {}).get("timestamp")
             timestamp = self._to_unix_ts(raw_ts)
+            source = (metadata or {}).get("source", "Unknown")
 
-            source = (
-                metadata.get("source")
-                if metadata and "source" in metadata
-                else "Unknown"
-            )
-
-            chromadb_metadata = {
+            chroma_meta = {
                 "user_id": user_id or "Unknown",
                 "role": role,
                 "timestamp": timestamp,
                 "type": source,
-                "reflected": False
+                "reflected": False,
             }
 
             with self.lock:
-                coll.upsert(
-                    ids=[item_id],
-                    documents=[content],
-                    metadatas=[chromadb_metadata]
-                )
+                coll.upsert(ids=[item_id], documents=[content], metadatas=[chroma_meta])
 
-                self.conn.execute(
-                    "INSERT INTO memory_index (id, timestamp, user_id, type, collection) VALUES (?, ?, ?, ?, ?)",
-                    (item_id, timestamp, user_id or "Unknown", "chat", "conversation_collection")
-                )
-                self.conn.commit()
+            await self._run_db(
+                self._sqlite_insert,
+                item_id, timestamp, user_id or "Unknown", "chat", "conversation_collection",
+            )
 
         except Exception as e:
-            self.logger.error("[add_conversation_item] Error adding chat message: %s", e)
+            self.logger.error("[add_conversation_item] Error: %s", e)
 
-
-    def add_reflection_item(self, content: str) -> None:
-        """
-        Persist a generated reflection (Q&A pair) into the dedicated reflections collection.
-
-        Used exclusively by MemoryService after ReflectionGenerator produces items.
-        Reflections are stored with type="reflection" and user_id="system".
-        """
-        self.logger.info("[add_reflection_item] adding reflection item: %s", content)
+    async def add_reflection_item(self, content: str) -> None:
+        """Persist a generated reflection Q&A pair into the reflections collection."""
+        self.logger.info("[add_reflection_item] adding reflection")
         coll = self.collections["reflections"]
-
         try:
             item_id = str(uuid.uuid4())
             timestamp = datetime.now(timezone.utc).timestamp()
 
-            chromadb_metadata = {
-                "timestamp": timestamp,
-                "type": "reflection"
-            }
-
             with self.lock:
                 coll.upsert(
                     ids=[item_id],
                     documents=[content],
-                    metadatas=[chromadb_metadata]
+                    metadatas=[{"timestamp": timestamp, "type": "reflection"}],
                 )
 
-                self.conn.execute(
-                    "INSERT INTO memory_index (id, timestamp, user_id, type, collection) VALUES (?, ?, ?, ?, ?)",
-                    (item_id, timestamp, "system", "reflection", "reflections_collection")
-                )
-                self.conn.commit()
+            await self._run_db(
+                self._sqlite_insert,
+                item_id, timestamp, "system", "reflection", "reflections_collection",
+            )
 
         except Exception as e:
-            self.logger.error("[add_reflection_item] Error adding reflection item: %s", e)
+            self.logger.error("[add_reflection_item] Error: %s", e)
 
-    def get_recent_items(
+    async def get_recent_items(
         self,
         collection_type: str,
         limit: int = 20,
-        max_age_minutes: int = 120
+        max_age_minutes: int = 120,
     ) -> List[Dict]:
         """
-        Return the most recent items from either "chat" or "reflections" collection.
+        Return the most recent items from either "chat" or "reflections".
 
-        Uses the SQLite memory_index for fast ID selection (recency + age filter),
-        then fetches full documents from Chroma. Results are re-filtered and sorted
-        defensively.
-
-        This is the primary method used by MemoryService for RAG injections and
-        by ReflectionGenerator for input to the reflection LLM call.
+        Uses SQLite for fast ID selection, then fetches documents from Chroma.
         """
         if collection_type not in self.collections:
-            raise ValueError(f"Invalid collection: {collection_type}")
+            raise ValueError("Invalid collection: %s" % collection_type)
 
         coll = self.collections[collection_type]
-        coll_name = "conversation_collection" if collection_type == "chat" else "reflections_collection"
+        coll_name = (
+            "conversation_collection" if collection_type == "chat" else "reflections_collection"
+        )
 
         try:
-            cutoff = (datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)).timestamp()
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)
+            ).timestamp()
+
+            ids = await self._run_db(self._sqlite_query_ids, coll_name, cutoff, limit)
+
+            if not ids:
+                return []
 
             with self.lock:
-                cursor = self.conn.execute(
-                    """
-                    SELECT id
-                    FROM memory_index
-                    WHERE collection = ?
-                    AND timestamp >= ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                    """,
-                    (coll_name, cutoff, limit)
-                )
-                ids = [row[0] for row in cursor.fetchall()]
-
-                if not ids:
-                    return []
-
                 results = coll.get(ids=ids)
 
             items = []
-
             for i in range(len(results["ids"])):
                 meta = results["metadatas"][i]
-                raw_ts = meta.get("timestamp", 0.0)
-                ts = self._to_unix_ts(raw_ts)
+                ts = self._to_unix_ts(meta.get("timestamp", 0.0))
                 items.append({
                     "id": results["ids"][i],
                     "timestamp": ts,
                     "role": meta.get("role", "Unknown"),
                     "content": results["documents"][i],
                     "user_id": meta.get("user_id", "Unknown"),
-                    "reflected": meta.get("reflected", False)
+                    "reflected": meta.get("reflected", False),
                 })
 
-            cutoff = (datetime.now(timezone.utc) - timedelta(minutes=max_age_minutes)).timestamp()
             items = [it for it in items if it["timestamp"] >= cutoff]
             items.sort(key=lambda x: x["timestamp"], reverse=True)
-
             return items[:limit]
 
         except Exception as e:
-            self.logger.error("[get_recent_items] Error retrieving from %s: %s", collection_type, e)
+            self.logger.error("[get_recent_items] Error retrieving %s: %s", collection_type, e)
             return []
 
-    def update_items_metadata(self, item_ids: List[str], new_metadata: Dict) -> None:
+    async def update_items_metadata(self, item_ids: List[str], new_metadata: Dict) -> None:
         """
-        Patch metadata (e.g. {"reflected": True}) on a batch of chat items.
+        Patch metadata on a batch of chat items in Chroma.
 
-        Called by MemoryService after successful reflection generation to prevent
-        the same messages from being re-reflected.
+        Called by MemoryService after reflection generation to mark items as
+        reflected so they are not processed again.
         """
         coll = self.collections["chat"]
         try:
-            with self.lock:
-                for item_id in item_ids:
-                    existing = coll.get(ids=[item_id])
-                    if existing['metadatas']:
-                        updated_meta = {**existing['metadatas'][0], **new_metadata}
-                        coll.update(ids=[item_id], metadatas=[updated_meta])
+            def _update():
+                with self.lock:
+                    for item_id in item_ids:
+                        existing = coll.get(ids=[item_id])
+                        if existing["metadatas"]:
+                            updated = {**existing["metadatas"][0], **new_metadata}
+                            coll.update(ids=[item_id], metadatas=[updated])
+            await self._run_db(_update)
         except Exception as e:
-            self.logger.error("[update_items_metadata] Error updating metadata for items: %s", e)
+            self.logger.error("[update_items_metadata] Error: %s", e)
 
     async def generate_reflections(self) -> List[Tuple[str, str]]:
         """
-        Trigger ReflectionGenerator to produce Q&A pairs from recent unreflected chat.
+        Trigger ReflectionGenerator to produce Q&A pairs from recent chat.
 
-        This is the bridge method called from MemoryService's background worker.
-        It passes self (the manager) so the generator can call get_recent_items.
+        Called from MemoryService's background worker.
         """
         self.logger.info("[generate_reflections] Generating reflections")
-        self.logger.info("[generate_reflections] Reflections generator: %s", self.reflections_generator)
         if self.reflections_generator is None:
             raise ValueError("Reflections generator not set")
         try:
             reflections = await self.reflections_generator.perform_reflection(self)
-            self.logger.info("[generate_reflections] Generated reflections: %s", reflections)
+            self.logger.info("[generate_reflections] Generated %s pairs", len(reflections))
             return reflections
         except Exception as e:
-            self.logger.error("[generate_reflections] Error generating reflections: %s", e)
+            self.logger.error("[generate_reflections] Error: %s", e)
             return []

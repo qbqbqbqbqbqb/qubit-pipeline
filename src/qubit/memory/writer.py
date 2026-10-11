@@ -77,7 +77,7 @@ class MemoryWriter(EventProcessor):
     def _chat_memory(self, event):
         """Store viewer chat"""
         self.logger.info("[_chat_memory] Handling chat memory event")
-        self.memory_service.add_conversation_item(
+        await self.memory_service.add_conversation_item(
             "User",
             event.text,
             user_id=event.user,
@@ -87,7 +87,7 @@ class MemoryWriter(EventProcessor):
     def _stt_memory(self, event):
         """Store voice input from STT"""
         self.logger.info("[_stt_memory] Handling STT memory event")
-        self.memory_service.add_conversation_item(
+        await self.memory_service.add_conversation_item(
             "User",
             event.text,
             user_id=self.stt_speaker_name,
@@ -97,7 +97,7 @@ class MemoryWriter(EventProcessor):
     def _response_memory(self, event):
         """Store AI responses"""
         self.logger.info("[_response_memory] Handling response memory event")
-        self.memory_service.add_conversation_item(
+        await self.memory_service.add_conversation_item(
             "Qubit",
             event.response,
             metadata={"source": "response", "timestamp": getattr(event, "timestamp", None)}
@@ -108,7 +108,7 @@ class MemoryWriter(EventProcessor):
         self.logger.info("[_event_memory] Handling input event memory event")
         text = f"{event.user} triggered {event.type}"
 
-        self.memory_service.add_conversation_item(
+        await self.memory_service.add_conversation_item(
             "User",
             text,
             user_id=event.user,
@@ -118,7 +118,7 @@ class MemoryWriter(EventProcessor):
     def _monologue_memory(self, event):
         """AI thoughts / system monologues"""
         self.logger.info("[_monologue_memory] Handling monologue memory event")
-        self.memory_service.add_conversation_item(
+        await self.memory_service.add_conversation_item(
             "System",
             event.prompt,
             metadata={"source": "monologue", "timestamp": getattr(event, "timestamp", None)}

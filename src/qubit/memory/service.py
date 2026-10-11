@@ -109,7 +109,7 @@ class MemoryService(Service):
                 # Check first, then sleep — so reflections fire immediately on
                 # startup rather than waiting 60s for the first opportunity.
                 # Short streams would otherwise never generate reflections.
-                recent_chats = self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
+                recent_chats = await self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
                 self.logger.info("[_run] Found %s recent chat items for reflection check", len(recent_chats))
                 unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
                 self.logger.info("[_run] Found %s unreflected chat items", len(unreflected))
@@ -118,27 +118,25 @@ class MemoryService(Service):
                     reflections = await self.memory_manager.generate_reflections()
                     self.logger.info("[_run] Generated %s reflections", len(reflections))
                     for q, a in reflections:
-                        self.memory_manager.add_reflection_item(f"Q: {q}\nA: {a}")
+                        await self.memory_manager.add_reflection_item(f"Q: {q}\nA: {a}")
                     ids_to_update = [chat["id"] for chat in unreflected]
                     self.logger.info("[_run] Marking %s chat items as reflected", len(ids_to_update))
-                    self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
+                    await self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
 
                 await asyncio.sleep(60)
 
     async def stop(self) -> None:
         await super().stop()
 
-    def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
-        """
-        Add a conversation item to the chat history.
-        """
-        self.memory_manager.add_conversation_item(role, content, user_id, metadata=metadata)
+    async def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
+        """Add a conversation item to the chat history."""
+        await self.memory_manager.add_conversation_item(role, content, user_id, metadata=metadata)
 
-    def get_recent_chat_history(self) -> List[Dict]:
-        return self.memory_manager.get_recent_items("chat", limit=20)
+    async def get_recent_chat_history(self) -> List[Dict]:
+        return await self.memory_manager.get_recent_items("chat", limit=20)
 
-    def get_recent_reflections(self) -> List[Dict]:
-        return self.memory_manager.get_recent_items("reflections", limit=3)
+    async def get_recent_reflections(self) -> List[Dict]:
+        return await self.memory_manager.get_recent_items("reflections", limit=3)
 
     # ------------------------------------------------------------------
     # RAG injection support (narrow, explicit interface for prompt assembly)
