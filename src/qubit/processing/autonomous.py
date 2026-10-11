@@ -50,17 +50,20 @@ class AutonomousPromptProcessor(EventProcessor):
         "start_message": "handle_event",
     }
 
-    def __init__(self, max_age_seconds: int = 30, memory_writer=None, event_bus=None):
+    def __init__(self, max_age_seconds: int = 30, memory_writer=None):
         """
         Args:
             max_age_seconds: Events older than this are dropped as stale.
             memory_writer: Optional MemoryWriter (EventProcessor) for persistence.
-            event_bus: The global EventBus used to publish the resulting ResponsePromptEvent.
+
+        event_bus is not taken as a constructor argument — it is set by
+        EventProcessor.register_subscriptions() when the processor is wired
+        to the bus in bootstrap.py, matching the construction contract of
+        every other processor.
         """
         super().__init__("autonomous prompt processor")
         self.max_age = timedelta(seconds=max_age_seconds)
         self.memory_writer = memory_writer
-        self.event_bus = event_bus
 
     async def handle_event(self, event) -> None:
         """
@@ -93,7 +96,4 @@ class AutonomousPromptProcessor(EventProcessor):
             prompt=prompt
         )
 
-        if self.event_bus:
-            await self.event_bus.publish(prompt_event)
-        else:
-            self.logger.warning("[AutonomousPromptProcessor] No event_bus - cannot emit monologue prompt")
+        await self.event_bus.publish(prompt_event)

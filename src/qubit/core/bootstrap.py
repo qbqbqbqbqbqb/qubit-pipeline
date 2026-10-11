@@ -66,7 +66,6 @@ async def create_app() -> App:
     autonomous_prompt_processor = AutonomousPromptProcessor(
         max_age_seconds=30,
         memory_writer=memory_writer,
-        event_bus=app.event_bus,
     )
     frontend_command_processor = FrontendCommandProcessor()
 
