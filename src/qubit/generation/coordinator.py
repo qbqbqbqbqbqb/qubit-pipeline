@@ -144,10 +144,9 @@ class GenerationCoordinator(Service):
             self.logger.info("[_generate_with_retries][Attempt %s] prompt: %s", attempt, prompt)
             try:
                 self.logger.info("[_generate_with_retries] Generating response")
-                response = await self.llm_service.generate_with_retries(
+                response = await self.llm_service.generate(
                     profile=self.main_profile,
                     input=prompt,
-                    max_attempts=1,  # we handle retries here
                 )
                 if response and response.strip():
                     self.logger.info("[_generate_with_retries][Attempt %s] response: %s", attempt, response)

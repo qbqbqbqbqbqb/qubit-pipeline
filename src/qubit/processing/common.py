@@ -44,7 +44,7 @@ async def is_stale(event: Any, max_age: timedelta, logger: Any, context: str = "
         ts = datetime.fromisoformat(ts)
 
     if datetime.now(timezone.utc) - ts > max_age:
-        prefix = f"[{context}] " if context else ""
+        prefix = context or "unknown"
         logger.debug("[%s] Dropping stale message: %s", prefix, event.data.get("text", "")[:80])
         return True
     return False
