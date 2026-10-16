@@ -52,4 +52,7 @@ class ProposalArbiter:
             score += extra_bonus_by_reason.get(reason, 0.0)
             return score
 
-        return max(proposals, key=proposal_key)
+        valid = [p for p in proposals if p is not None]
+        if not valid:
+            return None
+        return max(valid, key=proposal_key)

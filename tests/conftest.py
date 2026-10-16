@@ -1,108 +1,96 @@
-"""
-Root conftest.py for the entire test suite.
+"""Shared pytest fixtures for the qubit-pipeline test suite."""
 
-See tests/AGENTS.md for the full testing & mocking strategy.
+import sys
+import os
+from datetime import datetime, timezone
+from types import ModuleType
+from unittest.mock import AsyncMock, MagicMock
 
-Key fixtures:
-- mock_heavy_stack: The main tool for isolating tests from torch, transformers, chromadb, twitchAPI, audio libs, etc.
-- mock_app, event_bus, sample_event: Common core fixtures.
-
-Subdirectories (models/, memory/, core/, cognitive/, etc.) have their own conftest.py files
-that apply directory-level markers and fixtures.
-"""
-
-import asyncio
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-from src.qubit.core.event_bus import EventBus
-from src.qubit.core.events import Event
+
+# Ensure project root is on sys.path and is the working directory so
+# config.config can resolve data file paths via get_root().
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+os.chdir(PROJECT_ROOT)
+sys.path.insert(0, PROJECT_ROOT)
 
 
-# =============================================================================
-# Custom Markers
-# =============================================================================
-def pytest_configure(config):
-    """Register custom markers so we don't get PytestUnknownMarkWarning."""
-    config.addinivalue_line(
-        "markers", "heavy: tests that require heavy mocking of ML/external services"
-    )
+def _stub_module(name: str, **attrs) -> ModuleType:
+    """Create a minimal stub module so heavy imports don't crash in CI."""
+    mod = ModuleType(name)
+    for k, v in attrs.items():
+        setattr(mod, k, v)
+    return mod
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    yield loop
-    loop.close()
+# Stub torch and transformers so model_config.py can be imported without a GPU.
+if "torch" not in sys.modules:
+    torch_stub = _stub_module("torch")
+    torch_stub.cuda = _stub_module("torch.cuda", is_available=lambda: False)
+    # Sentinel dtype values used as dataclass field defaults in model_config.py
+    torch_stub.dtype = type("dtype", (), {})
+    torch_stub.float16 = object()
+    torch_stub.bfloat16 = object()
+    torch_stub.float32 = object()
+    sys.modules["torch"] = torch_stub
+    sys.modules["torch.cuda"] = torch_stub.cuda
+
+for _name in (
+    "transformers",
+    "transformers.AutoModelForCausalLM",
+    "transformers.AutoTokenizer",
+    "transformers.BitsAndBytesConfig",
+    "peft",
+    "peft.PeftModel",
+    "bitsandbytes",
+):
+    if _name not in sys.modules:
+        sys.modules[_name] = _stub_module(_name)
 
 
-@pytest.fixture
-def event_bus():
-    return EventBus()
+def make_event(type_="twitch_chat_processed", text="hello", user="viewer1", **kwargs):
+    event = MagicMock()
+    event.type = type_
+    event.text = text
+    event.user = user
+    event.timestamp = datetime.now(timezone.utc).isoformat()
+    event.data = {"text": text, "user": user}
+    for k, v in kwargs.items():
+        setattr(event, k, v)
+    return event
 
 
-@pytest.fixture
-def sample_event():
-    return Event(
-        type="test_event",
-        timestamp="2025-05-24T12:00:00Z",
-        data={"key": "value", "source": "test"}
-    )
+def make_feature_flags(**overrides):
+    from src.qubit.core.runtime_state import FeatureFlags
+    flags = FeatureFlags()
+    for k, v in overrides.items():
+        setattr(flags, k, v)
+    return flags
 
 
-@pytest.fixture
-def mock_app():
+def make_app(features=None):
+    from src.qubit.core.runtime_state import RuntimeState
+    from src.qubit.core.event_bus import EventBus
     app = MagicMock()
+    app.state = RuntimeState()
     app.event_bus = EventBus()
-    app.state = MagicMock()
-    app.state.start = asyncio.Event()
-    app.state.shutdown = asyncio.Event()
-    app.logger = MagicMock()
+    if features:
+        for k, v in features.items():
+            setattr(app.state.features, k, v)
     return app
 
 
 @pytest.fixture
-def mock_heavy_stack(mocker):
-    """
-    Opt-in fixture that heavily mocks the ML / external service stack.
+def app():
+    return make_app()
 
-    Recommended usage in any test involving:
-        - LLM / model loading
-        - ChromaDB / long-term memory
-        - Twitch / external realtime APIs
-        - Audio synthesis or device I/O
-        - OBS / VTube / side-effecty output handlers
 
-    Add `mock_heavy_stack` to your test signature (or use it via
-    `pytest.mark.usefixtures`) to keep tests fast, deterministic,
-    and runnable in minimal environments.
+@pytest.fixture
+def event_bus():
+    from src.qubit.core.event_bus import EventBus
+    return EventBus()
 
-    Example:
-        def test_something(mock_heavy_stack):
-            ...
-    """
-    targets = [
-        # Our internal heavy classes (safe to patch)
-        "src.qubit.models._executor._HuggingFaceExecutor",
-        "src.qubit.memory.memory_service.chromadb",
-        "src.qubit.input.twitch.listener.TwitchListener",
-        "src.qubit.input.kick.listener.KickListener",
-        "src.qubit.input.stt_listener.SpeechToTextListener",
-        "src.qubit.output.handlers.tts.TTSHandler",
-        "src.qubit.output.handlers.obs.OBSHandler",
-    ]
-    for target in targets:
-        try:
-            mocker.patch(target, create=True)
-        except Exception:
-            # Some dotted paths may not be importable yet; safe to skip in broad mocking
-            pass
 
-    # For top-level heavy packages, pre-populate in sys.modules if not present
-    # (this is safer than patch on bare module names)
-    import sys
-    for mod_name in ["torch", "transformers", "chromadb", "twitchAPI", "numpy", "pyaudio", "piper", "RealtimeSTT"]:
-        if mod_name not in sys.modules:
-            sys.modules[mod_name] = MagicMock(name=mod_name)
-
-    return None
+@pytest.fixture
+def feature_flags():
+    return make_feature_flags()

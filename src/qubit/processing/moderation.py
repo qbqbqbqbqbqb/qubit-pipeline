@@ -93,16 +93,24 @@ class ModerationProcessor(EventProcessor):
             self.logger.warning("[ModerationProcessor] Unknown event type: %s", event.type)
 
     async def _moderate_chat(self, event: TwitchChatEvent) -> None:
-        """Sanitise username and message text, then publish a clean processed event."""
+        """Sanitise username and message text, then publish a clean processed event.
+
+        Drops the event entirely if the message text is blacklisted — publishing
+        a blank message downstream is confusing and wastes a generation cycle.
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg = self._sanitise(event.text, default="")
+        sanitised_msg = self._sanitise(event.text, default=None)
+
+        if not sanitised_msg:
+            self.logger.debug("[_moderate_chat] Dropping blacklisted message from %s", sanitised_user)
+            return
 
         sanitised_event = TwitchChatEvent(
             type="twitch_chat_processed",
             data={**event.data, "user": sanitised_user, "text": sanitised_msg},
             user=sanitised_user,
             text=sanitised_msg,
-            timestamp=event.timestamp
+            timestamp=event.timestamp,
         )
         await self.event_bus.publish(sanitised_event)
 
@@ -149,16 +157,20 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_kick_chat(self, event: KickChatEvent) -> None:
-        """Sanitise kick chat (username + text)."""
+        """Sanitise kick chat (username + text). Drops event if text is blacklisted."""
         sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg = self._sanitise(event.text, default="")
+        sanitised_msg = self._sanitise(event.text, default=None)
+
+        if not sanitised_msg:
+            self.logger.debug("[_moderate_kick_chat] Dropping blacklisted message from %s", sanitised_user)
+            return
 
         sanitised_event = KickChatEvent(
             type="kick_chat_processed",
             data={**event.data, "user": sanitised_user, "text": sanitised_msg},
             user=sanitised_user,
             text=sanitised_msg,
-            timestamp=event.timestamp
+            timestamp=event.timestamp,
         )
         await self.event_bus.publish(sanitised_event)
 
