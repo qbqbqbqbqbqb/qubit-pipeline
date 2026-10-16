@@ -1,4 +1,8 @@
-"""Application startup, signal handling, and shutdown coordination."""
+"""
+<summary>
+Application startup, signal handling, and shutdown coordination.
+</summary>
+"""
 
 import asyncio
 import signal
@@ -12,16 +16,19 @@ logger = get_logger(__name__)
 
 async def run_app(app) -> None:
     """
-    Drive the full application lifecycle.
-
+    <summary>
+    Drive the full application lifecycle from startup through shutdown.
+    </summary>
+    <remarks>
     Startup order:
     1. Attach all services (bind app, register subscriptions).
-    2. Launch services that do not wait for the start signal immediately
-       (e.g. WebSocketServer needs to be running to receive the signal).
+    2. Launch services that do not wait for the start signal (e.g. WebSocketServer).
     3. Wait for the frontend start command.
     4. Launch all remaining services.
-    5. Publish bot_started so processors and behaviours know we're live.
+    5. Publish bot_started so processors and behaviours know the system is live.
     6. Wait for shutdown signal, then tear everything down in reverse order.
+    </remarks>
+    <param name="app">The fully constructed App instance.</param>
     """
     # Phase 1 — attach every service so subscriptions are live.
     for service in app.services:

@@ -1,53 +1,47 @@
-from collections import deque
-from datetime import datetime, timedelta, timezone
+"""
+<summary>
+MessageTracker — short-term deduplication utility for input messages.
+</summary>
+<remarks>
+Used by ConversationProcessor to avoid reacting to the same chat or STT message
+more than once within a configurable time window.
+</remarks>
+"""
+
+from datetime import datetime, timezone
 
 
 class MessageTracker:
     """
-    Utility for short-term deduplication of input messages.
-
-    Used by cognitive/processing layers to avoid reacting to the same
-    chat/STT message multiple times within a configurable window.
-
-    Responsibilities:
-    - Track last-seen time per message text
-    - Report whether a message is a recent repeat (is_repeated)
-    - (Future) track which messages have already received a response
-
-    Part of the 2026 refactor: extracted as a pure utility so that
-    decision logic in ActivityTracker / DecisionEngine stays clean.
+    <summary>
+    Tracks the last-seen timestamp per message text and reports whether a
+    message is a recent repeat within the configured expiry window.
+    </summary>
     """
 
-    def __init__(self, maxlen=100, recent_expiry=60, response_expiry=60):
+    def __init__(self, maxlen: int = 100, recent_expiry: int = 60, response_expiry: int = 60):
         """
-        Initialize the MessageTracker.
-
-        Args:
-            maxlen (int): Maximum number of recent messages to keep (currently unused; reserved for future queue).
-            recent_expiry (int): Seconds after which a message is no longer considered "recent" for dedup.
-            response_expiry (int): Seconds after which a responded-to message can be forgotten.
+        <summary>Initialise the tracker with expiry windows.</summary>
+        <param name="maxlen">Reserved for future bounded-queue support. Currently unused.</param>
+        <param name="recent_expiry">Seconds after which a message is no longer considered recent for deduplication.</param>
+        <param name="response_expiry">Seconds after which a responded-to message can be forgotten.</param>
         """
-        self.last_seen = {}
+        self.last_seen: dict = {}
         self.recent_expiry = recent_expiry
         self.response_expiry = response_expiry
 
-    def add_message(self, text):
-        """Add a message to the recent messages queue and update last seen time.
-
-        Args:
-            text (str): The message text to add.
+    def add_message(self, text: str) -> None:
         """
-        now = datetime.now(timezone.utc)
-        self.last_seen[text] = now
+        <summary>Record the current time as the last-seen timestamp for this message text.</summary>
+        <param name="text">The message text to record.</param>
+        """
+        self.last_seen[text] = datetime.now(timezone.utc)
 
-    def is_repeated(self, text) -> bool:
-        """Check if the given message text is a recent repetition.
-
-        Args:
-            text (str): The message text to check.
-
-        Returns:
-            bool: True if the message is considered a repetition, False otherwise.
+    def is_repeated(self, text: str) -> bool:
+        """
+        <summary>Return True if this message text was seen within the recent_expiry window.</summary>
+        <param name="text">The message text to check.</param>
+        <returns>True if the message is a recent duplicate.</returns>
         """
         now = datetime.now(timezone.utc)
         return text in self.last_seen and (now - self.last_seen[text]).total_seconds() < self.recent_expiry

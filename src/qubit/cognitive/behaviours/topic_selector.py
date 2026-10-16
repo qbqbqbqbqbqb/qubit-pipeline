@@ -1,40 +1,35 @@
 """
-TopicSelector - picks what Qubit talks about during idle monologue cycles.
-
+<summary>
+TopicSelector — picks what Qubit talks about during idle monologue cycles.
+</summary>
+<remarks>
 Two pools compete each cycle:
 
 FIXED PROMPTS
-    Specific recurring bits you've authored. Each has a minimum cooldown so
-    it doesn't repeat too soon. The selector draws from whichever fixed
-    prompts are currently off cooldown, weighted by their individual weight.
-    If none are off cooldown, or the category draw doesn't pick fixed, this
-    pool is skipped.
+    Specific recurring bits with individual cooldowns and draw weights.
+    The selector draws from whichever fixed prompts are currently off cooldown.
+    If none are available, or the category draw wins, this pool is skipped.
 
 CATEGORY PROMPTS
-    Topic categories, each containing several prompt instructions. The
-    selector picks a category based on context weights (activity level, time
-    since last response, time since last monologue), then samples a prompt
-    from that category. Prompts within a category track their own recency so
-    the same line doesn't repeat until the rest of the category has cycled
-    through.
+    Themed groups of prompt instructions. The selector picks a category using
+    context-weighted random sampling, then draws a prompt from within it.
+    Prompts within a category track their own recency so the same line does
+    not repeat until the rest of the category has cycled through.
 
-DECISION TREE (top level)
-    1. Fixed prompts have a base draw chance. If no fixed prompt is off
-       cooldown, the draw chance is 0.
-    2. A weighted random draw decides fixed vs category this cycle.
-    3. Within category: weights shift based on context.
-       - Very low activity, long silence  -> introspective / tangent
-       - Recent user response, low-mid    -> conversational follow-up
-       - High activity spark              -> punchy / reactive
-       - Otherwise                        -> even spread
+DECISION TREE
+    1. Fixed prompts have a base draw chance (FIXED_DRAW_CHANCE). If none
+       are off cooldown, draw chance is effectively 0.
+    2. A weighted draw decides fixed vs category for this cycle.
+    3. Within category, weights shift based on context:
+       - Very low activity + long silence  -> introspective / tangent
+       - Recent user response, low-mid     -> conversational follow-up
+       - High activity spark               -> punchy / reactive
+       - Otherwise                         -> even spread
 
 To add content: append to FIXED_PROMPTS or to any category's prompts list.
 To add a category: add an entry to CATEGORIES and a weight row in
-_category_weights(). No other changes needed.
-
-Stream title / current game is not wired up yet. When it is, add a "game"
-key to DecisionEngine._build_context() and read it here — it would unlock
-a game_aware category and let fixed prompts reference the title.
+_category_weights(). No other changes are needed.
+</remarks>
 """
 
 import random
@@ -44,57 +39,61 @@ from dataclasses import dataclass, field
 
 @dataclass
 class FixedPrompt:
-    """A specific authored prompt with its own cooldown and draw weight."""
+    """<summary>A specific authored prompt with its own cooldown and draw weight.</summary>"""
     prompt: str
-    # Human-readable label used in logs and recency tracking.
     label: str
-    # Minimum seconds before this prompt can fire again.
     cooldown_seconds: float = 1200.0
-    # Relative draw weight among available fixed prompts.
     weight: float = 1.0
-    # Epoch timestamp of last use; 0.0 = never used.
     _last_used: float = field(default=0.0, init=False, repr=False)
 
     def is_available(self) -> bool:
+        """<summary>Return True if this prompt's cooldown has elapsed.</summary>"""
         return (time.monotonic() - self._last_used) >= self.cooldown_seconds
 
     def mark_used(self) -> None:
+        """<summary>Record the current time as the last use timestamp.</summary>"""
         self._last_used = time.monotonic()
 
 
 @dataclass
 class CategoryPrompt:
-    """One prompt instruction within a category."""
+    """<summary>One prompt instruction within a category, with its own recency tracking.</summary>"""
     prompt: str
     _last_used: float = field(default=0.0, init=False, repr=False)
 
     def mark_used(self) -> None:
+        """<summary>Record the current time as the last use timestamp.</summary>"""
         self._last_used = time.monotonic()
 
 
 @dataclass
 class Category:
-    """A themed group of prompt instructions."""
+    """<summary>A themed group of prompt instructions with a shared per-prompt cooldown.</summary>"""
     name: str
     prompts: list[CategoryPrompt]
-    # Minimum seconds before the same prompt within this category repeats.
-    # Other prompts in the category are still eligible.
     prompt_cooldown_seconds: float = 300.0
 
     def available_prompts(self) -> list[CategoryPrompt]:
+        """
+        <summary>
+        Return prompts whose individual cooldown has elapsed. Falls back to the
+        least-recently-used prompt when all are on cooldown.
+        </summary>
+        """
         now = time.monotonic()
         available = [
             p for p in self.prompts
             if (now - p._last_used) >= self.prompt_cooldown_seconds
         ]
-        # If everything is on cooldown (small category, high fire rate),
-        # fall back to the least-recently-used prompt rather than returning
-        # nothing.
         if not available:
             return [min(self.prompts, key=lambda p: p._last_used)]
         return available
 
     def pick(self) -> CategoryPrompt:
+        """
+        <summary>Draw a random available prompt and mark it used.</summary>
+        <returns>The selected CategoryPrompt.</returns>
+        """
         chosen = random.choice(self.available_prompts())
         chosen.mark_used()
         return chosen
@@ -222,25 +221,26 @@ CATEGORIES: list[Category] = [
     ),
 ]
 
-# Name -> Category for O(1) lookup
 _CATEGORY_MAP: dict[str, Category] = {c.name: c for c in CATEGORIES}
 
-# Base draw chance for the fixed pool each cycle (0.0 - 1.0).
-# If no fixed prompt is available this is effectively 0.
 FIXED_DRAW_CHANCE = 0.22
 
 
 class TopicSelector:
     """
-    Picks a prompt for an idle monologue cycle.
-
-    Returns a MonologueTopic with:
-        prompt   - the actual instruction string sent to the LLM
-        label    - human-readable label for logs (category name or fixed label)
-        is_fixed - True if this came from the fixed pool
+    <summary>
+    Picks a prompt for an idle monologue cycle from either the fixed pool or a
+    context-weighted category. Returns a MonologueTopic with the prompt text,
+    a log label, and whether it came from the fixed pool.
+    </summary>
     """
 
     def pick(self, context: dict) -> "MonologueTopic":
+        """
+        <summary>Select a prompt for this cycle and return it as a MonologueTopic.</summary>
+        <param name="context">The cycle context dict from DecisionEngine.</param>
+        <returns>A MonologueTopic with prompt, label, and is_fixed fields.</returns>
+        """
         available_fixed = [p for p in FIXED_PROMPTS if p.is_available()]
         use_fixed = bool(available_fixed) and random.random() < FIXED_DRAW_CHANCE
 
@@ -273,43 +273,48 @@ class TopicSelector:
         return _CATEGORY_MAP[chosen_name]
 
     def _category_weights(self, context: dict) -> dict[str, float]:
+        """
+        <summary>
+        Compute context-adjusted draw weights for all categories. Shifts toward
+        conversational follow-up after recent user interaction, toward introspection
+        after long silence, and toward reactive at high activity.
+        </summary>
+        <param name="context">The cycle context dict.</param>
+        <returns>A dict mapping category name to draw weight.</returns>
+        """
         activity = float(context.get("activity_score", 0.0))
         time_since_response = float(context.get("time_since_last_user_response", 999.0))
         time_since_mono = float(context.get("time_since_last_autonomous", 999.0))
 
-        # Base weights — roughly equal spread by default.
         weights: dict[str, float] = {
-            "self_aware":             1.0,
-            "chat_meta":              1.0,
-            "streamer_life":          1.0,
-            "random_tangent":         1.0,
+            "self_aware":              1.0,
+            "chat_meta":               1.0,
+            "streamer_life":           1.0,
+            "random_tangent":          1.0,
             "conversational_followup": 0.5,
-            "reactive":               0.5,
+            "reactive":                0.5,
         }
 
-        # Recent user conversation — lean into the follow-up.
         if time_since_response < 30.0 and activity < 5.0:
             weights["conversational_followup"] += 2.0
             weights["chat_meta"] += 0.5
 
-        # Long silence — more introspective, more random.
         if time_since_mono > 120.0 and activity < 2.0:
             weights["self_aware"] += 1.5
             weights["random_tangent"] += 1.5
             weights["streamer_life"] += 0.5
 
-        # High activity spark — be reactive, not introspective.
         if activity >= 4.0:
             weights["reactive"] += 2.5
             weights["self_aware"] -= 0.5
             weights["streamer_life"] -= 0.5
 
-        # Clamp negatives.
         return {k: max(0.1, v) for k, v in weights.items()}
 
 
 @dataclass
 class MonologueTopic:
+    """<summary>Result of a TopicSelector.pick() call.</summary>"""
     prompt: str
     label: str
     is_fixed: bool

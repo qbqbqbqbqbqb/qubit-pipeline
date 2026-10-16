@@ -1,23 +1,25 @@
 """
-CognitiveOrchestrator (Service) - the narrow brain of the system.
-
+<summary>
+CognitiveOrchestrator — the single authority on Qubit's next high-level action.
+</summary>
+<remarks>
 LAYER: Cognitive / Decision
 
-The single place in the entire architecture that is allowed to decide the
-bot's next high-level action: respond to chat/STT, emit an autonomous
-monologue, or stay silent.
+The only component in the architecture permitted to decide what the bot does next:
+respond to chat or STT input, emit an autonomous monologue, or stay silent.
 
-It owns exactly three things:
-1. A decision ticker (_run loop inherited from Service)
-2. An ActivityTracker that maintains activity scores and priority queue
-3. A DecisionEngine that runs behaviours and picks the winner
+Owns exactly three things:
+  1. A decision ticker (_run loop inherited from Service)
+  2. An ActivityTracker that maintains activity scores and the priority queue
+  3. A DecisionEngine that runs behaviours and selects a winner
 
 All other layers are strictly downstream:
-- Generation layer only executes intents received via ResponsePromptEvent
-- Output layer only speaks what it receives via ResponseGeneratedEvent
-- Input Processing only filters and forwards raw events
+  - Generation layer executes intents received via ResponsePromptEvent
+  - Output layer speaks what it receives via ResponseGeneratedEvent
+  - Input Processing only filters and forwards raw events
 
 This component must remain thin. Any decision logic belongs in behaviours.
+</remarks>
 """
 
 import asyncio
@@ -29,12 +31,17 @@ from src.qubit.cognitive.decision.decision_engine import DecisionEngine
 
 
 class CognitiveOrchestrator(Service):
+    """
+    <summary>
+    Service that runs the cognitive decision loop and coordinates ActivityTracker
+    and DecisionEngine.
+    </summary>
+    """
+
     SUBSCRIPTIONS = {
         "twitch_chat_processed": "_handle_input",
         "kick_chat_processed": "_handle_input",
         "stt_processed": "_handle_input",
-        # Community events arrive after moderation, using the *_processed
-        # naming convention that ModerationProcessor publishes.
         "twitch_raid_processed": "_handle_input",
         "twitch_subscription_processed": "_handle_input",
         "twitch_follow_processed": "_handle_input",
@@ -48,11 +55,17 @@ class CognitiveOrchestrator(Service):
 
     def __init__(self):
         super().__init__("CognitiveOrchestrator")
-        # Tracker is built in start() once settings are available for the whitelist.
         self.tracker: ActivityTracker | None = None
         self.engine: DecisionEngine | None = None
 
     def attach(self, app) -> None:
+        """
+        <summary>
+        Bind to the app, then construct ActivityTracker and DecisionEngine
+        with the configured mention whitelist.
+        </summary>
+        <param name="app">The root App instance.</param>
+        """
         super().attach(app)
         self.tracker = ActivityTracker(mention_whitelist=self._build_mention_whitelist())
         self.engine = DecisionEngine(self.tracker, self.event_bus)
@@ -62,11 +75,12 @@ class CognitiveOrchestrator(Service):
     @staticmethod
     def _build_mention_whitelist() -> frozenset[str]:
         """
+        <summary>
         Build the set of lowercased names that count as a directed mention.
-
-        Seeded from the four name fields already in settings so users don't
-        have to re-enter names they've already configured. Any extras go in
-        CHAT_MENTION_WHITELIST as a comma-separated string.
+        Seeded from the four name fields in settings plus any extras in
+        CHAT_MENTION_WHITELIST (comma-separated).
+        </summary>
+        <returns>A frozenset of lowercased name strings.</returns>
         """
         names: set[str] = set()
         for name_field in (
@@ -84,23 +98,28 @@ class CognitiveOrchestrator(Service):
         return frozenset(names)
 
     async def _handle_input(self, event) -> None:
-        """Forward every processed input event to the ActivityTracker for scoring."""
+        """
+        <summary>Forward every processed input event to the ActivityTracker for scoring.</summary>
+        <param name="event">The processed input event from the bus.</param>
+        """
         await self.tracker.handle_input(event, self.app.state.features)
 
     async def _handle_frontend_command(self, event) -> None:
-        """Update the tracker with the latest frontend command (e.g. 'monologue')."""
+        """
+        <summary>Update the tracker with the latest frontend command (e.g. 'monologue').</summary>
+        <param name="event">The frontend_command event from the bus.</param>
+        """
         command = event.data.get("command")
         self.tracker.set_frontend_command(command)
         self.logger.info("[Cognitive] Frontend command received -> %s", command)
 
     async def _run(self) -> None:
-        """The decision loop: every DECISION_INTERVAL_SECONDS, run one decision cycle.
-
-        Time decay is applied unconditionally each tick so the activity score
-        relaxes correctly even while output is busy and decision cycles are
-        gated. Without this, a chat burst followed by a long TTS response
-        would leave the busyness score frozen at its peak for the entire
-        duration of the speech.
+        """
+        <summary>
+        Decision loop: every DECISION_INTERVAL_SECONDS, apply time decay and
+        optionally run one decision cycle. Time decay runs unconditionally each
+        tick so the activity score relaxes correctly even while output is busy.
+        </summary>
         """
         while not self.app.state.shutdown.is_set():
             self.tracker.apply_time_decay()
@@ -109,16 +128,25 @@ class CognitiveOrchestrator(Service):
             await asyncio.sleep(self.DECISION_INTERVAL_SECONDS)
 
     def _should_run_cycle(self) -> bool:
-        """Gate on whether the app has started AND output isn't currently speaking."""
+        """
+        <summary>Return True if the app has started and output is not currently speaking.</summary>
+        <returns>True when a decision cycle should execute.</returns>
+        """
         if not self.app.state.start.is_set():
             return False
         return not self._is_output_busy()
 
     def _is_output_busy(self) -> bool:
-        """Return True while OutputCoordinator is actively speaking (TTS running)."""
+        """
+        <summary>Return True while OutputCoordinator is actively speaking (TTS running).</summary>
+        <returns>True if ai_speaking is set on RuntimeState.</returns>
+        """
         return self.app.state.ai_speaking.is_set()
 
     def toggle_monologue(self, enabled: bool) -> None:
-        """Convenience toggle for the monologue feature flag (used by frontend/tests)."""
+        """
+        <summary>Enable or disable the monologue feature flag at runtime.</summary>
+        <param name="enabled">True to enable autonomous monologue, False to disable.</param>
+        """
         self.app.state.features.monologue = enabled
         self.logger.info("[Cognitive] Monologue feature toggled -> %s", enabled)

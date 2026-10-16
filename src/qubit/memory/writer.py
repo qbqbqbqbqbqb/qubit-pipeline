@@ -1,23 +1,18 @@
 """
-Memory Writer (pure EventProcessor).
+<summary>
+MemoryWriter — pure EventProcessor responsible for writing qualifying events to long-term memory.
+</summary>
+<remarks>
+LAYER: Memory
 
-LAYER: Memory (see ARCHITECTURE.md)
+Single place that decides "this event should become a stored memory item."
+Routes specific event types to the correct MemoryService storage method.
 
-This is the dedicated pure reactor responsible for writing events to long-term memory.
-It subscribes to processed events that should be persisted and normalizes them
-before calling into MemoryService.
-
-Responsibilities (strictly limited to writing):
-- Route specific event types to the correct memory storage method
-- Normalize chat, responses, viewer events, and monologues into conversation items
-- Forward to MemoryService.add_conversation_item
-
-It must remain free of:
-- Reading memory for RAG
-- Background reflection logic
-- Any Service lifecycle (_run loop)
-
-This replaces the old MemoryHandler router as the clean boundary for writes.
+Must remain free of:
+  - Reading memory for RAG (that is MemoryService's responsibility)
+  - Background reflection logic
+  - Any Service lifecycle (_run loop)
+</remarks>
 """
 
 from typing import Any
@@ -28,9 +23,9 @@ from src.qubit.utils.log_utils import get_logger
 
 class MemoryWriter(EventProcessor):
     """
-    Pure EventProcessor that writes qualifying events to the memory subsystem.
-
-    It is the single place that decides "this event should become a stored memory item".
+    <summary>
+    Pure EventProcessor that normalises and writes qualifying events into MemoryService.
+    </summary>
     """
 
     SUBSCRIPTIONS = {
@@ -42,11 +37,15 @@ class MemoryWriter(EventProcessor):
         "kick_follow_processed": "handle_event",
         "stt_processed": "handle_event",
         "monologue_prompt": "handle_event",
-
         "response_generated": "handle_event",
     }
 
     def __init__(self, memory_service: Any, stt_speaker_name: str = "Speaker"):
+        """
+        <summary>Initialise the writer with its target memory service and STT speaker name.</summary>
+        <param name="memory_service">The MemoryService instance to write to.</param>
+        <param name="stt_speaker_name">Display name used as user_id for STT items.</param>
+        """
         super().__init__("memory writer")
         self.memory_service = memory_service
         self.stt_speaker_name = stt_speaker_name
@@ -63,7 +62,11 @@ class MemoryWriter(EventProcessor):
             "response_generated": self._response_memory,
         }
 
-    async def handle_event(self, event):
+    async def handle_event(self, event) -> None:
+        """
+        <summary>Route an incoming event to the appropriate memory storage method.</summary>
+        <param name="event">The event to store.</param>
+        """
         self.logger.info("[handle_event] Handling memory event %s", event)
         event_type = getattr(event, "type", None)
 
@@ -71,54 +74,68 @@ class MemoryWriter(EventProcessor):
         if handler:
             await handler(event)
         else:
-            self.logger.info("[handle_event] Can't convert %s to memory", event)
+            self.logger.info("[handle_event] No memory route for %s", event_type)
 
-    async def _chat_memory(self, event):
-        """Store viewer chat"""
-        self.logger.info("[_chat_memory] Handling chat memory event")
+    async def _chat_memory(self, event) -> None:
+        """
+        <summary>Store a viewer chat message as a User conversation item.</summary>
+        <param name="event">The processed chat event (TwitchChatEvent or KickChatEvent).</param>
+        """
+        self.logger.info("[_chat_memory] Storing chat from %s", event.user)
         await self.memory_service.add_conversation_item(
             "User",
             event.text,
             user_id=event.user,
-            metadata={"source": "chat", "timestamp": getattr(event, "timestamp", None)}
+            metadata={"source": "chat", "timestamp": getattr(event, "timestamp", None)},
         )
 
-    async def _stt_memory(self, event):
-        """Store voice input from STT"""
-        self.logger.info("[_stt_memory] Handling STT memory event")
+    async def _stt_memory(self, event) -> None:
+        """
+        <summary>Store voice input from the streamer as a User conversation item.</summary>
+        <param name="event">The stt_processed event containing the transcribed text.</param>
+        """
+        self.logger.info("[_stt_memory] Storing STT input")
         await self.memory_service.add_conversation_item(
             "User",
             event.text,
             user_id=self.stt_speaker_name,
-            metadata={"source": "stt", "timestamp": getattr(event, "timestamp", None)}
+            metadata={"source": "stt", "timestamp": getattr(event, "timestamp", None)},
         )
 
-    async def _response_memory(self, event):
-        """Store AI responses"""
-        self.logger.info("[_response_memory] Handling response memory event")
+    async def _response_memory(self, event) -> None:
+        """
+        <summary>Store Qubit's generated response as a Qubit conversation item.</summary>
+        <param name="event">The response_generated event containing the response text.</param>
+        """
+        self.logger.info("[_response_memory] Storing generated response")
         await self.memory_service.add_conversation_item(
             "Qubit",
             event.response,
-            metadata={"source": "response", "timestamp": getattr(event, "timestamp", None)}
+            metadata={"source": "response", "timestamp": getattr(event, "timestamp", None)},
         )
 
-    async def _event_memory(self, event):
-        """Store notable viewer events"""
-        self.logger.info("[_event_memory] Handling input event memory event")
+    async def _event_memory(self, event) -> None:
+        """
+        <summary>Store a notable viewer event (subscription, follow) as a User conversation item.</summary>
+        <param name="event">The processed platform event.</param>
+        """
+        self.logger.info("[_event_memory] Storing viewer event %s", event.type)
         text = f"{event.user} triggered {event.type}"
-
         await self.memory_service.add_conversation_item(
             "User",
             text,
             user_id=event.user,
-            metadata={"source": "event", "timestamp": getattr(event, "timestamp", None)}
+            metadata={"source": "event", "timestamp": getattr(event, "timestamp", None)},
         )
 
-    async def _monologue_memory(self, event):
-        """AI thoughts / system monologues"""
-        self.logger.info("[_monologue_memory] Handling monologue memory event")
+    async def _monologue_memory(self, event) -> None:
+        """
+        <summary>Store an autonomous monologue prompt as a System conversation item.</summary>
+        <param name="event">The monologue_prompt event containing the prompt text.</param>
+        """
+        self.logger.info("[_monologue_memory] Storing monologue prompt")
         await self.memory_service.add_conversation_item(
             "System",
             event.prompt,
-            metadata={"source": "monologue", "timestamp": getattr(event, "timestamp", None)}
+            metadata={"source": "monologue", "timestamp": getattr(event, "timestamp", None)},
         )

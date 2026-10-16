@@ -1,4 +1,8 @@
-"""Runtime state flags and async events for the application lifecycle."""
+"""
+<summary>
+Runtime state flags and async events for the application lifecycle.
+</summary>
+"""
 
 import asyncio
 from dataclasses import dataclass
@@ -7,12 +11,12 @@ from dataclasses import dataclass
 @dataclass
 class FeatureFlags:
     """
+    <summary>
     Boolean feature toggles for the application.
-
-    Using a typed dataclass instead of a plain dict means a typo in a flag
-    name is an AttributeError immediately rather than a silent True/False
-    default that bypasses the gate. Add new flags here when new features
-    are gated — never use ad-hoc string keys on RuntimeState.features.
+    Using a typed dataclass ensures a typo in a flag name raises an AttributeError
+    immediately rather than silently defaulting to True or False.
+    Add new flags here when gating new features — never use ad-hoc string keys.
+    </summary>
     """
     twitch: bool = True
     kick: bool = True
@@ -28,7 +32,12 @@ class FeatureFlags:
 
 
 class RuntimeState:
-    """Shared mutable state for the running application."""
+    """
+    <summary>
+    Shared mutable state for the running application. Holds lifecycle events
+    and the feature flag set.
+    </summary>
+    """
 
     def __init__(self):
         self.shutdown = asyncio.Event()

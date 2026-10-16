@@ -1,4 +1,8 @@
-"""Top-level application container holding services, state, and the event bus."""
+"""
+<summary>
+Top-level application container. Holds all services, shared state, and the event bus.
+</summary>
+"""
 
 from __future__ import annotations
 
@@ -13,12 +17,11 @@ if TYPE_CHECKING:
 
 class App:
     """
+    <summary>
     Root application object that owns all services and shared state.
-
     Constructed in bootstrap.py and passed to every service via attach(app).
-    All fields are declared here so readers can see the full contract without
-    grepping the codebase.
-
+    </summary>
+    <remarks>
     Fields set by bootstrap:
         state        RuntimeState — lifecycle events and feature flags
         event_bus    EventBus — the single internal pub/sub bus
@@ -27,6 +30,7 @@ class App:
 
     Fields managed internally:
         services     ordered list of registered Service instances
+    </remarks>
     """
 
     def __init__(self) -> None:
@@ -38,5 +42,8 @@ class App:
         self.router = None
 
     def add_service(self, service: Service) -> None:
-        """Register a service. Services are started in registration order."""
+        """
+        <summary>Register a service. Services are started in registration order.</summary>
+        <param name="service">The Service instance to register.</param>
+        """
         self.services.append(service)

@@ -1,19 +1,19 @@
 """
-Conversation input processor (EventProcessor).
+<summary>
+ConversationProcessor — deduplication and staleness filter for conversational input.
+</summary>
+<remarks>
+LAYER: Input Processing
 
-LAYER: Input Processing (see ARCHITECTURE.md)
+Responsibilities:
+  - Deduplication of recent chat-style messages via MessageTracker.
+  - Staleness filtering (drop events older than max_age_seconds).
 
-Responsibilities (current transitional state):
-- Deduplication of recent chat-style messages (via MessageTracker)
-- Staleness filtering (drop events older than max_age)
-- Forwarding qualifying events to the memory writer
-- (Intentionally does NOT decide whether to respond — that is Cognitive)
-
-Prompt request creation for viewer messages is driven by the
-Cognitive layer (DecisionEngine → ResponsePromptEvent → GenerationCoordinator).
-
-This class performs only dedup + staleness + memory forwarding for conversational
-input. It has no involvement in prompt building.
+This processor does not decide whether to respond. That decision belongs
+exclusively in the Cognitive layer (DecisionEngine + Behaviours). After
+processing, eligible events are available to the Cognitive layer via the
+priority queue that ActivityTracker maintains.
+</remarks>
 """
 
 from datetime import timedelta
@@ -25,19 +25,10 @@ from src.qubit.utils.message_tracker import MessageTracker
 
 class ConversationProcessor(EventProcessor):
     """
-    Pure EventProcessor responsible for conversational input events.
-
-    Responsibilities:
-    - Deduplicates recent messages using MessageTracker (prevents repeat spam)
-    - Drops stale events older than max_age_seconds
-    - Forwards qualifying events to MemoryWriter for long-term storage
-
-    This processor deliberately does **not** decide whether to respond.
-    That decision belongs exclusively in the Cognitive layer
-    (DecisionEngine + Behaviours).
-
-    After processing, chat events may result in a ResponsePromptEvent
-    being published later by the Cognitive layer.
+    <summary>
+    Pure EventProcessor for conversational input events (chat and STT).
+    Drops duplicates and stale messages without making any response decisions.
+    </summary>
     """
 
     SUBSCRIPTIONS = {
@@ -48,8 +39,8 @@ class ConversationProcessor(EventProcessor):
 
     def __init__(self, max_age_seconds=30):
         """
-        Args:
-            max_age_seconds: Events older than this are dropped as stale.
+        <summary>Initialise the processor with a staleness window.</summary>
+        <param name="max_age_seconds">Events older than this are dropped as stale.</param>
         """
         super().__init__("conversation processor")
         self.max_age = timedelta(seconds=max_age_seconds)
@@ -57,12 +48,13 @@ class ConversationProcessor(EventProcessor):
 
     async def handle_event(self, event) -> None:
         """
-        Main entry point for conversational events.
-
-        Applies deduplication, staleness filtering, and memory forwarding.
-        Does not publish any ResponsePromptEvent — that is the Cognitive layer's job.
+        <summary>
+        Apply deduplication and staleness filtering to a conversational event.
+        Does not publish any ResponsePromptEvent — that is the Cognitive layer's responsibility.
+        </summary>
+        <param name="event">The processed conversational event from the bus.</param>
         """
-        self.logger.info("[handle_event] Handling event in ConversationProcessor (Cognitive-controlled mode)")
+        self.logger.info("[handle_event] Handling event in ConversationProcessor")
 
         text = event.data.get("text", "").lower().strip()
 
@@ -74,15 +66,21 @@ class ConversationProcessor(EventProcessor):
         if await is_stale(event, self.max_age, self.logger, context="chat"):
             return
 
-
     def _is_repeated(self, text: str) -> bool:
-        """Returns True if this exact text was seen recently (anti-spam)."""
+        """
+        <summary>Return True if this exact text was seen recently (anti-spam check).</summary>
+        <param name="text">Lowercased, stripped message text.</param>
+        <returns>True if the message is a recent duplicate.</returns>
+        """
         if self.message_tracker.is_repeated(text):
             self.logger.debug("[_is_repeated] Dropped repeated message: %s", text)
             return True
         return False
 
     def _track_message(self, text: str) -> None:
-        """Records the message text for future deduplication checks."""
+        """
+        <summary>Record the message text for future deduplication checks.</summary>
+        <param name="text">Lowercased, stripped message text to record.</param>
+        """
         if self.message_tracker:
             self.message_tracker.add_message(text)

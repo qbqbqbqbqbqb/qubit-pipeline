@@ -1,24 +1,25 @@
 """
-MemoryManager — low-level owner of ChromaDB collections + SQLite index.
+<summary>
+MemoryManager — low-level owner of ChromaDB collections and the SQLite recency index.
+</summary>
+<remarks>
+LAYER: Memory
 
-LAYER: Memory (see ARCHITECTURE.md)
+Single place that talks directly to persistent stores. Deliberately narrow:
+  - CRUD for conversation items and reflections
+  - Timestamp normalisation and threading lock for thread safety
+  - Delegation to ReflectionGenerator when asked
+  - Internal SQL index for fast recency queries
 
-This class is the single place that talks directly to the persistent stores.
-It is deliberately narrow:
-
-- CRUD for conversation items and reflections
-- Timestamp normalization + locking for thread safety
-- Delegation to ReflectionGenerator when asked
-- Internal SQL index for fast recency queries
-
-It must remain free of:
-- Decision logic or background loops (those live in MemoryService)
-- Write routing (that lives in MemoryWriter)
-- Prompt assembly (MemoryService contributes injections via the bus)
+Must remain free of:
+  - Decision logic or background loops (those live in MemoryService)
+  - Write routing (that lives in MemoryWriter)
+  - Prompt assembly (MemoryService contributes injections via the bus)
 
 SQLite calls are all wrapped in run_in_executor so they do not block the
 asyncio event loop. The lock (threading.Lock) is held inside the executor
 thread, not on the async side.
+</remarks>
 """
 
 import asyncio
@@ -37,17 +38,10 @@ from src.qubit.models.llm_service import LLMService
 
 class MemoryManager:
     """
-    Low-level manager for the two Chroma collections + SQLite recency index.
-
-    Responsibilities (strict per Memory layer):
-    - Own the raw collections ("chat", "reflections")
-    - Provide thread-safe add/get/update operations
-    - Normalize all timestamps to unix floats
-    - Delegate reflection generation to ReflectionGenerator
-    - Maintain a fast SQLite index for "recent items" queries
-
-    It is the only component allowed to call chromadb.Client directly.
-    Higher layers (MemoryService, MemoryWriter) talk to this class only.
+    <summary>
+    Low-level manager for the chat and reflections Chroma collections plus the SQLite recency index.
+    The only component permitted to call chromadb directly. Higher layers call this class only.
+    </summary>
     """
 
     def __init__(
@@ -57,6 +51,13 @@ class MemoryManager:
         conn=None,
         llm_service: Optional[LLMService] = None,
     ):
+        """
+        <summary>Initialise Chroma collections and the SQLite connection.</summary>
+        <param name="chroma_client">The persistent ChromaDB client.</param>
+        <param name="reflections_generator">Optional generator for reflection Q&A pairs.</param>
+        <param name="conn">The shared SQLite connection for the recency index.</param>
+        <param name="llm_service">LLM service, passed through to the reflections generator if needed.</param>
+        """
         self.logger = get_logger("MemoryManager")
         self.chroma_client = chroma_client
         self.llm_service = llm_service
@@ -73,16 +74,15 @@ class MemoryManager:
         self.conn = conn
         self.lock = threading.Lock()
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
     def _to_unix_ts(self, ts: Any) -> float:
         """
-        Normalize any timestamp representation to a UTC unix float.
-
-        Accepts: None, int/float seconds, datetime (naive or aware), ISO string.
+        <summary>
+        Normalise any timestamp representation to a UTC unix float.
+        Accepts None, int/float seconds, datetime (naive or aware), and ISO strings.
         Falls back to now() on any parse failure.
+        </summary>
+        <param name="ts">The timestamp value to normalise.</param>
+        <returns>UTC unix timestamp as a float.</returns>
         """
         if ts is None:
             return datetime.now(timezone.utc).timestamp()
@@ -104,12 +104,23 @@ class MemoryManager:
         return datetime.now(timezone.utc).timestamp()
 
     async def _run_db(self, fn, *args, **kwargs):
-        """Run a blocking SQLite call in the default thread pool executor."""
+        """
+        <summary>Run a blocking SQLite call in the default thread pool executor.</summary>
+        <param name="fn">The blocking function to call.</param>
+        <returns>The function's return value.</returns>
+        """
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
 
     def _sqlite_insert(self, item_id: str, timestamp: float, user_id: str, type_: str, collection: str) -> None:
-        """Blocking SQLite insert — must be called via _run_db."""
+        """
+        <summary>Blocking SQLite insert for the memory index. Must be called via _run_db.</summary>
+        <param name="item_id">UUID for the new row.</param>
+        <param name="timestamp">UTC unix float timestamp.</param>
+        <param name="user_id">User identifier string.</param>
+        <param name="type_">Item type label (e.g. 'chat', 'reflection').</param>
+        <param name="collection">Chroma collection name.</param>
+        """
         with self.lock:
             self.conn.execute(
                 "INSERT INTO memory_index (id, timestamp, user_id, type, collection) VALUES (?, ?, ?, ?, ?)",
@@ -118,7 +129,13 @@ class MemoryManager:
             self.conn.commit()
 
     def _sqlite_query_ids(self, collection_name: str, cutoff: float, limit: int) -> list:
-        """Blocking SQLite SELECT — must be called via _run_db."""
+        """
+        <summary>Blocking SQLite SELECT for recent item ids. Must be called via _run_db.</summary>
+        <param name="collection_name">Chroma collection name to query.</param>
+        <param name="cutoff">Minimum unix timestamp (items older than this are excluded).</param>
+        <param name="limit">Maximum number of ids to return.</param>
+        <returns>List of id strings ordered newest-first.</returns>
+        """
         with self.lock:
             cursor = self.conn.execute(
                 """
@@ -133,10 +150,6 @@ class MemoryManager:
             )
             return [row[0] for row in cursor.fetchall()]
 
-    # ------------------------------------------------------------------
-    # Public async API
-    # ------------------------------------------------------------------
-
     async def add_conversation_item(
         self,
         role: str,
@@ -145,10 +158,15 @@ class MemoryManager:
         metadata: dict = None,
     ) -> None:
         """
-        Persist a single conversation turn to Chroma + SQLite.
-
-        The "reflected" flag starts False; MemoryService flips it after
-        reflections are generated.
+        <summary>Persist a single conversation turn to Chroma and the SQLite index.</summary>
+        <remarks>
+        The 'reflected' flag is stored as False on creation. MemoryService flips it after
+        reflections are generated from the item.
+        </remarks>
+        <param name="role">Speaker role string (e.g. 'User', 'Qubit', 'System').</param>
+        <param name="content">The text content to store.</param>
+        <param name="user_id">Optional user identifier for the index.</param>
+        <param name="metadata">Optional metadata dict; 'timestamp' and 'source' are read if present.</param>
         """
         self.logger.info("[add_conversation_item] role=%s user=%s", role, user_id)
 
@@ -179,8 +197,11 @@ class MemoryManager:
             self.logger.error("[add_conversation_item] Error: %s", e)
 
     async def add_reflection_item(self, content: str) -> None:
-        """Persist a generated reflection Q&A pair into the reflections collection."""
-        self.logger.info("[add_reflection_item] adding reflection")
+        """
+        <summary>Persist a generated reflection Q&A pair into the reflections collection.</summary>
+        <param name="content">The formatted 'Q: ...\nA: ...' string to store.</param>
+        """
+        self.logger.info("[add_reflection_item] Adding reflection")
         coll = self.collections["reflections"]
         try:
             item_id = str(uuid.uuid4())
@@ -208,9 +229,14 @@ class MemoryManager:
         max_age_minutes: int = 120,
     ) -> List[Dict]:
         """
-        Return the most recent items from either "chat" or "reflections".
-
-        Uses SQLite for fast ID selection, then fetches documents from Chroma.
+        <summary>
+        Return the most recent items from either 'chat' or 'reflections'.
+        Uses SQLite for fast id selection, then fetches documents from Chroma.
+        </summary>
+        <param name="collection_type">Either 'chat' or 'reflections'.</param>
+        <param name="limit">Maximum number of items to return.</param>
+        <param name="max_age_minutes">Items older than this many minutes are excluded.</param>
+        <returns>List of item dicts sorted newest-first, each with id, timestamp, role, content, user_id, reflected.</returns>
         """
         if collection_type not in self.collections:
             raise ValueError("Invalid collection: %s" % collection_type)
@@ -256,10 +282,12 @@ class MemoryManager:
 
     async def update_items_metadata(self, item_ids: List[str], new_metadata: Dict) -> None:
         """
+        <summary>
         Patch metadata on a batch of chat items in Chroma.
-
-        Called by MemoryService after reflection generation to mark items as
-        reflected so they are not processed again.
+        Called by MemoryService after reflection generation to mark items as reflected.
+        </summary>
+        <param name="item_ids">List of Chroma document ids to update.</param>
+        <param name="new_metadata">Metadata fields to merge into each item's existing metadata.</param>
         """
         coll = self.collections["chat"]
         try:
@@ -276,9 +304,8 @@ class MemoryManager:
 
     async def generate_reflections(self) -> List[Tuple[str, str]]:
         """
-        Trigger ReflectionGenerator to produce Q&A pairs from recent chat.
-
-        Called from MemoryService's background worker.
+        <summary>Trigger ReflectionGenerator to produce Q&A pairs from recent chat.</summary>
+        <returns>A list of (question, answer) string tuples, or an empty list on failure.</returns>
         """
         self.logger.info("[generate_reflections] Generating reflections")
         if self.reflections_generator is None:

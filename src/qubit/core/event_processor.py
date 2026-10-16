@@ -1,22 +1,37 @@
-"""Base event processor that wires handler methods to event bus subscriptions."""
+"""
+<summary>
+Base class for components that subscribe to and handle events from the event bus.
+</summary>
+"""
 
 from abc import ABC, abstractmethod
 from src.qubit.utils.log_utils import get_logger
 
 
 class EventProcessor(ABC):
-    """Abstract base for components that consume events from the event bus."""
+    """
+    <summary>
+    Abstract base for stateless event consumers. Subclasses declare SUBSCRIPTIONS
+    mapping event type strings to handler method names, and implement handle_event.
+    </summary>
+    """
 
     SUBSCRIPTIONS = {}
 
     def __init__(self, name: str):
-        """Create a named processor with its own logger."""
+        """
+        <summary>Create a named processor with its own logger.</summary>
+        <param name="name">Human-readable name used in log output.</param>
+        """
         self.name = name
         self.logger = get_logger(name)
         self.event_bus = None
 
     def register_subscriptions(self, event_bus) -> None:
-        """Bind configured event types to local handler methods on the bus."""
+        """
+        <summary>Bind the event types declared in SUBSCRIPTIONS to local handler methods on the bus.</summary>
+        <param name="event_bus">The EventBus instance to subscribe against.</param>
+        """
         if not event_bus:
             self.logger.warning("[%s] No event_bus provided — subscriptions not registered", self.name)
             return
@@ -32,5 +47,8 @@ class EventProcessor(ABC):
 
     @abstractmethod
     async def handle_event(self, event):
-        """Process an incoming event."""
+        """
+        <summary>Process an incoming event.</summary>
+        <param name="event">The Event instance to handle.</param>
+        """
         pass

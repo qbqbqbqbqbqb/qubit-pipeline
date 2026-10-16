@@ -1,21 +1,17 @@
-"""Asynchronous text-to-speech (TTS) handler using Piper engine.
-
-This module provides TTSHandler, an asynchronous wrapper for text-to-speech
-synthesis that can be integrated with queue-based output systems such as
-OutputCoordinator. It uses the Piper TTS engine (via TTSManager) to generate
-audio from text, optionally integrates with VTube lip-sync modules, and
-supports non-blocking playback using asyncio and PyAudio.
-
-Main features:
-- Async speech synthesis for integration with event loops.
-- WAV byte generation and decoding into numpy arrays for playback.
-- Threaded playback to prevent blocking the main asyncio loop.
-- Support for multiple speakers using a JSON-based speaker ID map.
-- Optional text normalization via `normalise_text_for_tts`.
-
-Classes:
-    TTSHandler: Handles asynchronous TTS generation, decoding, and playback.
 """
+<summary>
+TTSHandler — async wrapper for Piper TTS synthesis and PyAudio playback.
+</summary>
+<remarks>
+Streams Piper synthesis chunks directly into a single PyAudio stream to avoid
+per-chunk open/close overhead. Falls back to full WAV synthesis and playback
+if the streaming generator raises.
+
+A speaking lock serialises concurrent speak() calls so they queue naturally
+rather than interleaving audio.
+</remarks>
+"""
+
 import asyncio
 import io
 from typing import Any
@@ -24,34 +20,37 @@ import json
 import numpy as np
 from piper import SynthesisConfig
 import pyaudio
+
 from config.config import TTS_SPEAKER_NAME
 from src.qubit.utils.tts_utils import normalise_text_for_tts
 from src.qubit.output.tts_manager import TTSManager
 from src.qubit.utils.log_utils import get_logger
 
+
 class TTSHandler:
     """
-    Async TTS module for speaking text with optional OBS subtitles.
-    Can be used with OutputCoordinator's queue system.
+    <summary>
+    Async TTS handler that synthesises text via Piper and plays it through PyAudio.
+    Used exclusively by OutputCoordinator.
+    </summary>
     """
 
-    def __init__(self: Any, tts_manager=TTSManager()):
+    def __init__(self: Any, tts_manager: TTSManager = None):
         """
-        Args:
-            tts_manager: Your TTSManager or Piper TTS engine instance
-            vtube_module: Optional lip-sync module
+        <summary>Initialise the handler with a TTSManager instance.</summary>
+        <param name="tts_manager">The TTSManager holding the loaded Piper voice. Defaults to a new instance.</param>
         """
-        self.tts_manager = tts_manager
+        self.tts_manager = tts_manager or TTSManager()
         self._speaking_lock = asyncio.Lock()
         self.logger = get_logger("TTSHandler")
 
     async def speak(self: Any, text: str) -> None:
         """
-        Speak the given text asynchronously.
-        Handles VTube lip-sync if available.
-
-        Args:
-            text: The text to be spoken
+        <summary>
+        Normalise the text, then synthesise and play it. Concurrent calls
+        queue behind the speaking lock.
+        </summary>
+        <param name="text">The text to synthesise and speak.</param>
         """
         if not text.strip():
             return
@@ -59,15 +58,19 @@ class TTSHandler:
         normalised_text = normalise_text_for_tts(text)
 
         if normalised_text != text:
-            self.logger.info("[TTSHandler] normalise_text_for_tts changed text (emojis/unsupported chars etc. stripped for speech): %r -> %r", text, normalised_text)
+            self.logger.info(
+                "[TTSHandler] Normalised text (emojis/unsupported chars removed): %r -> %r",
+                text, normalised_text,
+            )
 
         async with self._speaking_lock:
             await self._speak_streaming(normalised_text)
 
-
     def _generate_wav_bytes(self: Any, text: str) -> bytes:
         """
-        Synthesize WAV bytes from text using TTS engine.
+        <summary>Synthesise full WAV bytes from text using the Piper voice. Used as fallback.</summary>
+        <param name="text">Text to synthesise.</param>
+        <returns>Complete WAV file contents as bytes.</returns>
         """
         with io.BytesIO() as wav_io:
             with wave.open(wav_io, "wb") as wav_file:
@@ -78,7 +81,9 @@ class TTSHandler:
 
     def _decode_wav_bytes(self: Any, wav_data: bytes) -> tuple[int, np.ndarray]:
         """
-        Decode WAV bytes into sample rate and numpy array for playback.
+        <summary>Decode WAV bytes into a (sample_rate, audio_array) pair for playback.</summary>
+        <param name="wav_data">WAV file contents as bytes.</param>
+        <returns>A (sample_rate, audio_np) tuple.</returns>
         """
         with io.BytesIO(wav_data) as wav_io:
             with wave.open(wav_io, "rb") as wav_file:
@@ -89,7 +94,9 @@ class TTSHandler:
 
     def _play_audio(self: Any, sample_rate: int, audio_np: np.ndarray) -> None:
         """
-        Play the audio using PyAudio.
+        <summary>Play a numpy int16 audio array through PyAudio.</summary>
+        <param name="sample_rate">Sample rate in Hz.</param>
+        <param name="audio_np">Audio samples as a numpy int16 array.</param>
         """
         pa = pyaudio.PyAudio()
         stream = pa.open(
@@ -97,7 +104,7 @@ class TTSHandler:
             channels=1,
             rate=sample_rate,
             output=True,
-            frames_per_buffer=1024
+            frames_per_buffer=1024,
         )
         stream.write(audio_np.tobytes())
         stream.stop_stream()
@@ -106,8 +113,11 @@ class TTSHandler:
 
     def _get_speaker_id(self: Any) -> int:
         """
-        Retrieve speaker ID from TTS manager's model config.
-        Falls back to 0 if config can't be read (useful for testing/mocking).
+        <summary>
+        Read the speaker id from the Piper model's JSON config file.
+        Falls back to 0 if the config cannot be read.
+        </summary>
+        <returns>The integer speaker id for the configured TTS_SPEAKER_NAME.</returns>
         """
         try:
             json_path = self.tts_manager.model_path.with_suffix(".onnx.json")
@@ -119,7 +129,9 @@ class TTSHandler:
 
     def _build_synthesis_config(self: Any, speaker_id: int) -> SynthesisConfig:
         """
-        Build the synthesis configuration for Piper.
+        <summary>Build the Piper SynthesisConfig for the given speaker.</summary>
+        <param name="speaker_id">The integer speaker id.</param>
+        <returns>A configured SynthesisConfig instance.</returns>
         """
         return SynthesisConfig(
             speaker_id=speaker_id,
@@ -127,16 +139,16 @@ class TTSHandler:
             noise_scale=0.3,
             noise_w_scale=0.5,
             volume=0.8,
-            normalize_audio=True
+            normalize_audio=True,
         )
 
     async def _speak_streaming(self: Any, text: str) -> None:
         """
-            Stream synthesis and play audio concurrently.
-
-            This starts playing audio as soon as the first chunks arrive (while
-            synthesis is still running in the background). No more per-chunk
-            open/close overhead that caused word cutoffs.
+        <summary>
+        Stream Piper synthesis chunks into a single open PyAudio stream.
+        Falls back to full WAV synthesis if the streaming generator raises.
+        </summary>
+        <param name="text">Normalised text to synthesise.</param>
         """
         speaker_id = self._get_speaker_id()
         syn_config = self._build_synthesis_config(speaker_id)
@@ -144,7 +156,7 @@ class TTSHandler:
         loop = asyncio.get_running_loop()
 
         def _stream_synthesis_and_play():
-            """Runs in a thread: consumes Piper generator and feeds one stream."""
+            """Run in a thread: consume the Piper generator and feed one stream."""
             pa = pyaudio.PyAudio()
             stream = None
             try:
@@ -153,8 +165,6 @@ class TTSHandler:
                 ):
                     if stream is None:
                         sample_rate = 22050
-                        if hasattr(audio_chunk, "dtype"):
-                            pass
                         stream = pa.open(
                             format=pyaudio.paInt16,
                             channels=1,
@@ -168,7 +178,7 @@ class TTSHandler:
                     else:
                         stream.write(audio_chunk.tobytes())
 
-            except Exception as e:
+            except Exception:
                 wav_bytes = self._generate_wav_bytes(text)
                 sr, full_audio = self._decode_wav_bytes(wav_bytes)
                 if stream is None:

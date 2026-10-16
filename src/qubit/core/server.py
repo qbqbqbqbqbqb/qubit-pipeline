@@ -1,4 +1,8 @@
-"""WebSocket server service for frontend communication and state broadcasting."""
+"""
+<summary>
+WebSocket server service for frontend communication and state broadcasting.
+</summary>
+"""
 
 import asyncio
 import dataclasses
@@ -11,16 +15,24 @@ from src.qubit.core.service import Service
 
 class WebSocketServerService(Service):
     """
-    Manages WebSocket connections and routes frontend commands.
-
-    WAIT_FOR_START = False because this service must be running before
-    the frontend can send the start command — it cannot wait for the
-    signal it is responsible for delivering.
+    <summary>
+    Manages WebSocket connections and routes frontend commands to the application.
+    </summary>
+    <remarks>
+    WAIT_FOR_START is False because this service must be running before the
+    frontend can send the start command — it cannot wait for the signal it
+    is responsible for delivering.
+    </remarks>
     """
 
     WAIT_FOR_START = False
 
     def __init__(self, host: str = "0.0.0.0", port: int = 8765) -> None:
+        """
+        <summary>Initialise the WebSocket server with host and port.</summary>
+        <param name="host">Host address to bind the server to.</param>
+        <param name="port">Port number to listen on.</param>
+        """
         super().__init__("websocket_server")
         self.host = host
         self.port = port
@@ -28,7 +40,9 @@ class WebSocketServerService(Service):
         self.server = None
 
     async def _run(self) -> None:
-        """Start the WebSocket server and serve until cancelled."""
+        """
+        <summary>Start the WebSocket server and serve until cancelled.</summary>
+        """
         self.server = await websockets.serve(
             self.websocket_handler, self.host, self.port
         )
@@ -36,7 +50,9 @@ class WebSocketServerService(Service):
         await self.server.wait_closed()
 
     async def stop(self) -> None:
-        """Gracefully close the server then cancel the worker task."""
+        """
+        <summary>Gracefully close the server then cancel the worker task.</summary>
+        """
         self.logger.info("[stop] Stopping WebSocketServer")
         if self.server:
             self.server.close()
@@ -44,7 +60,10 @@ class WebSocketServerService(Service):
         await super().stop()
 
     async def websocket_handler(self, websocket) -> None:
-        """Handle messages from a single connected client."""
+        """
+        <summary>Handle the full lifecycle of a single connected client.</summary>
+        <param name="websocket">The WebSocket connection for this client.</param>
+        """
         self.connected_clients.add(websocket)
         try:
             await self.send_states(websocket)
@@ -56,6 +75,11 @@ class WebSocketServerService(Service):
             self.connected_clients.discard(websocket)
 
     async def _handle_message(self, websocket, data: dict) -> None:
+        """
+        <summary>Route an incoming frontend message to the appropriate action handler.</summary>
+        <param name="websocket">The client connection the message arrived on.</param>
+        <param name="data">Parsed JSON payload from the client.</param>
+        """
         action = data.get("action")
 
         if action == "toggle":
@@ -108,18 +132,26 @@ class WebSocketServerService(Service):
                 await websocket.send(json.dumps({"type": "audio_files", "data": files}))
 
     def _features_as_dict(self) -> dict:
-        """Serialize FeatureFlags dataclass to a plain dict for JSON broadcast."""
+        """
+        <summary>Serialize FeatureFlags to a plain dict for JSON broadcast.</summary>
+        <returns>A dict representation of the current FeatureFlags state.</returns>
+        """
         return dataclasses.asdict(self.app.state.features)
 
     async def send_states(self, websocket) -> None:
-        """Push current feature states to a newly connected client."""
+        """
+        <summary>Push current feature states to a newly connected client.</summary>
+        <param name="websocket">The client to send state to.</param>
+        """
         await websocket.send(json.dumps({
             "type": "states",
             "data": self._features_as_dict(),
         }))
 
     async def broadcast_states(self) -> None:
-        """Push current feature states to all connected clients."""
+        """
+        <summary>Push current feature states to all connected clients.</summary>
+        """
         if self.connected_clients:
             message = json.dumps({
                 "type": "states",
@@ -128,7 +160,11 @@ class WebSocketServerService(Service):
             await asyncio.gather(*(c.send(message) for c in self.connected_clients))
 
     async def forward_event(self, event_type: str, data: dict) -> None:
-        """Forward an internal event to all connected clients."""
+        """
+        <summary>Forward an internal bus event to all connected clients.</summary>
+        <param name="event_type">The event type string to forward.</param>
+        <param name="data">The event payload to include.</param>
+        """
         if self.connected_clients:
             message = json.dumps({"type": event_type, "data": data})
             await asyncio.gather(*(c.send(message) for c in self.connected_clients))

@@ -1,12 +1,15 @@
 """
-IdleMonologueBehavior - scored proposal for autonomous / idle speech.
-
-Goals:
-- Fires significantly more at low activity (the "quiet stream" feeling).
-- Still allowed to interject occasionally at medium/high activity so the bot
-  never feels like a pure reactive Q&A machine.
-- After answering a user at low activity, gets a short "follow-up" window so
-  the monologue feels like natural conversation instead of abrupt stop/start.
+<summary>
+IdleMonologueBehavior — scored proposal for autonomous idle speech.
+</summary>
+<remarks>
+Design goals:
+  - Fires significantly more at low activity (the "quiet stream" feeling).
+  - Still allowed to interject occasionally at medium/high activity so the bot
+    never feels like a pure reactive Q&A machine.
+  - After answering a user at low activity, gets a short follow-up window so
+    the monologue feels like natural conversation rather than abrupt stop/start.
+</remarks>
 """
 
 import random
@@ -17,12 +20,16 @@ from src.qubit.utils.log_utils import get_logger
 
 
 class IdleMonologueBehavior(Behavior):
+    """
+    <summary>
+    Proposes an autonomous monologue based on activity level, cooldowns, and
+    topic selection. Score is normalized to 0–1 and weighted by ProposalArbiter.
+    </summary>
+    """
+
     # Activity -> (eagerness, cooldown multiplier applied to BASE_COOLDOWN_SECONDS).
-    # Checked in ascending order of ceiling; HIGH_ACTIVITY_* below is the
-    # fallback once activity reaches the last ceiling.
     ACTIVITY_TIERS: list[tuple[float, float, float]] = [
-        # (activity_ceiling, eagerness, cooldown_multiplier)
-        (1.5, 0.88, 0.55),  # ~15s effective cooldown at very low activity
+        (1.5, 0.88, 0.55),
         (3.5, 0.72, 0.75),
         (7.0, 0.38, 1.00),
     ]
@@ -31,9 +38,8 @@ class IdleMonologueBehavior(Behavior):
 
     BASE_COOLDOWN_SECONDS = 28.0
 
-    # Follow-up bonus: right after responding to a human at low activity,
-    # briefly boost eagerness so the bot naturally keeps talking instead of
-    # going silent — the key anti-"boring" mechanism.
+    # Follow-up bonus: right after responding to a human at low activity, briefly
+    # boost eagerness so the bot naturally keeps talking instead of going silent.
     FOLLOWUP_ACTIVITY_CEILING = 4.5
     FOLLOWUP_RESPONSE_WINDOW_SECONDS = 22.0
     FOLLOWUP_MIN_GAP_SINCE_LAST_SECONDS = 8.0
@@ -41,12 +47,10 @@ class IdleMonologueBehavior(Behavior):
     FOLLOWUP_EAGERNESS_CAP = 0.95
     FOLLOWUP_COOLDOWN_CAP_SECONDS = 9.0
 
-    # Soft cooldown gate: even inside the cooldown window, allow a small
-    # random "inspiration" chance to fire anyway.
+    # Small random chance to fire even inside the cooldown window.
     COOLDOWN_BREACH_CHANCE = 0.07
 
-    # At higher activity, only let a small fraction of ticks through at all,
-    # so idle speech feels like an occasional spark, not a habit.
+    # At higher activity, only a small fraction of ticks pass the spark gate.
     HIGH_ACTIVITY_SPARK_THRESHOLD = 4.0
     HIGH_ACTIVITY_SPARK_FIRE_CHANCE = 0.17
 
@@ -62,6 +66,14 @@ class IdleMonologueBehavior(Behavior):
         self._selector = TopicSelector()
 
     async def tick(self, context: dict) -> dict | None:
+        """
+        <summary>
+        Evaluate eagerness, cooldown, and spark gates, then return a scored
+        monologue proposal or None.
+        </summary>
+        <param name="context">The cycle context dict from DecisionEngine.</param>
+        <returns>A monologue proposal dict, or None.</returns>
+        """
         if not getattr(context.get("features"), "monologue", True):
             return None
 
@@ -75,11 +87,6 @@ class IdleMonologueBehavior(Behavior):
             eagerness, effective_cooldown, activity, time_since_response, time_since_last
         )
 
-        # DecisionEngine.IDLE_TARGET_SHARE tracks our actual win rate over
-        # time and flags catchup=True when we're under quota. The whole
-        # reason we'd be under quota is these two gates suppressing most
-        # ticks at higher activity — so during catchup, skip them rather
-        # than let the same gates keep us under quota indefinitely.
         if not catchup:
             if not self._passes_cooldown_gate(time_since_last, effective_cooldown):
                 return None
@@ -94,17 +101,12 @@ class IdleMonologueBehavior(Behavior):
             clamped_score, activity, topic.label, topic.is_fixed,
         )
 
-        # Normalized to 0-1: SCORE_CEILING here only bounds this behavior's own
-        # internal eagerness math, it no longer encodes priority vs other
-        # behaviors — see DecisionEngine.BEHAVIOR_WEIGHTS for that.
         normalized_score = clamped_score / self.SCORE_CEILING
 
         return {
             "type": "monologue",
             "score": normalized_score,
             "reason": "idle_monologue",
-            # The full prompt instruction goes through so the executor can
-            # pass it straight to the LLM without constructing it itself.
             "prompt": topic.prompt,
             "label": topic.label,
         }
@@ -150,4 +152,3 @@ class IdleMonologueBehavior(Behavior):
         score = eagerness * (1.0 - decay)
         score += random.uniform(*self.SCORE_JITTER_RANGE)
         return max(self.SCORE_FLOOR, min(self.SCORE_CEILING, score))
-

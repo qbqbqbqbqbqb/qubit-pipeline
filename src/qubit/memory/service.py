@@ -1,13 +1,22 @@
 """
-MemoryService — owner of persistent memory storage and background jobs.
+<summary>
+MemoryService — owner of persistent memory storage and background reflection jobs.
+</summary>
+<remarks>
+LAYER: Memory
 
-This class is intentionally limited (see ARCHITECTURE.md Memory Layer):
-- Storage ownership (Chroma + SQLite)
-- Public history accessors for RAG
-- Background reflection generation loop
-- Narrow contribution to prompt assembly via the event bus
+Responsibilities:
+  - Owns the persistent stores (ChromaDB + SQLite index)
+  - Owns MemoryManager (CRUD) and ReflectionGenerator
+  - Runs the background reflection generation job (_run)
+  - Provides recent history for RAG via public getters
+  - Contributes memory injections when the prompt_assembly event is published
 
-Write routing now lives in MemoryWriter (pure EventProcessor).
+Must remain free of:
+  - Decision logic
+  - Prompt construction (contributions are narrow injection objects only)
+  - Write routing (that lives in MemoryWriter)
+</remarks>
 """
 
 import asyncio
@@ -21,7 +30,6 @@ from chromadb.config import Settings
 
 from src.qubit.memory.reflections_generator import ReflectionGenerator
 from src.qubit.models.llm_service import LLMService
-
 from src.qubit.core.events import PromptAssemblyEvent
 from src.qubit.prompting.modules.chat import chat_memory_module
 from src.qubit.prompting.modules.reflection import reflection_memory_module
@@ -29,24 +37,26 @@ from src.qubit.core.service import Service
 from src.qubit.memory.memory_manager import MemoryManager
 from config.config import REFLECTIONS_THRESHOLD
 
+
 class MemoryService(Service):
     """
-    Memory subsystem owner.
-
-    Responsibilities (per target architecture):
-    - Owns the persistent stores (ChromaDB + SQLite index)
-    - Owns MemoryManager (CRUD) and ReflectionsGenerator
-    - Runs the background reflection generation job (_run)
-    - Provides recent history for RAG via public getters
-    - Contributes memory injections when the prompt assembly event is published
-
-    It should NOT contain decision logic, prompt building, or write routing.
-    Writes now go through MemoryWriter (EventProcessor).
+    <summary>
+    Service that owns ChromaDB, SQLite, MemoryManager, and ReflectionGenerator.
+    Contributes RAG injections to prompt assembly events and runs periodic reflection generation.
+    </summary>
     """
 
     SUBSCRIPTIONS = {"prompt_assembly": "handle_prompt_assembly"}
 
     def __init__(self, base_path: str = ".", llm_service: LLMService = None):
+        """
+        <summary>
+        Initialise the persistent stores, index, and all collaborators.
+        Directories are created if they do not exist.
+        </summary>
+        <param name="base_path">Root path under which the memories/ directory is created.</param>
+        <param name="llm_service">The LLM service forwarded to ReflectionGenerator.</param>
+        """
         super().__init__("MemoryService")
 
         self.base_path = Path(base_path)
@@ -61,14 +71,14 @@ class MemoryService(Service):
             settings=Settings(
                 anonymized_telemetry=False,
                 chroma_server_host=None,
-                chroma_server_http_port=None
-            )
+                chroma_server_http_port=None,
+            ),
         )
         db_path = self.sql_dir / "memory_index.db"
         self.conn: Connection = sqlite3.connect(
             db_path,
             detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
-            check_same_thread=False
+            check_same_thread=False,
         )
         self.conn.row_factory = sqlite3.Row
 
@@ -92,81 +102,97 @@ class MemoryService(Service):
                     collection TEXT
                 )
             """)
-            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_collection_timestamp ON memory_index (collection, timestamp)")
+            self.conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_collection_timestamp "
+                "ON memory_index (collection, timestamp)"
+            )
             self.conn.commit()
 
-    def attach(self, app) -> None:
-        super().attach(app)
-
     async def _run(self) -> None:
+        """
+        <summary>
+        Background loop that checks for unreflected chat items every 60 seconds
+        and generates reflections when the count meets the threshold.
+        The check runs immediately on startup so short streams are not missed.
+        </summary>
+        """
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
                 continue
 
             while not self.app.state.shutdown.is_set():
-                self.logger.info("[_run] MemoryService worker checking for reflections...")
-                # Check first, then sleep — so reflections fire immediately on
-                # startup rather than waiting 60s for the first opportunity.
-                # Short streams would otherwise never generate reflections.
+                self.logger.info("[_run] Checking for reflections...")
                 recent_chats = await self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
-                self.logger.info("[_run] Found %s recent chat items for reflection check", len(recent_chats))
+                self.logger.info("[_run] Found %s recent chat items", len(recent_chats))
                 unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
-                self.logger.info("[_run] Found %s unreflected chat items", len(unreflected))
+                self.logger.info("[_run] Found %s unreflected items", len(unreflected))
+
                 if len(unreflected) >= REFLECTIONS_THRESHOLD:
-                    self.logger.info("[_run] Creating reflections")
+                    self.logger.info("[_run] Generating reflections")
                     reflections = await self.memory_manager.generate_reflections()
                     self.logger.info("[_run] Generated %s reflections", len(reflections))
                     for q, a in reflections:
                         await self.memory_manager.add_reflection_item(f"Q: {q}\nA: {a}")
                     ids_to_update = [chat["id"] for chat in unreflected]
-                    self.logger.info("[_run] Marking %s chat items as reflected", len(ids_to_update))
+                    self.logger.info("[_run] Marking %s items as reflected", len(ids_to_update))
                     await self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
 
                 await asyncio.sleep(60)
 
     async def stop(self) -> None:
+        """<summary>Stop the service worker task.</summary>"""
         await super().stop()
 
-    async def add_conversation_item(self, role: str, content: str, user_id: str = None, metadata: dict = None) -> None:
-        """Add a conversation item to the chat history."""
+    async def add_conversation_item(
+        self, role: str, content: str, user_id: str = None, metadata: dict = None
+    ) -> None:
+        """
+        <summary>Persist a conversation turn via MemoryManager.</summary>
+        <param name="role">Speaker role string.</param>
+        <param name="content">The text content.</param>
+        <param name="user_id">Optional user identifier.</param>
+        <param name="metadata">Optional metadata dict.</param>
+        """
         await self.memory_manager.add_conversation_item(role, content, user_id, metadata=metadata)
 
     async def get_recent_chat_history(self) -> List[Dict]:
+        """<summary>Return the 20 most recent chat items for RAG injection.</summary>"""
         return await self.memory_manager.get_recent_items("chat", limit=20)
 
     async def get_recent_reflections(self) -> List[Dict]:
+        """<summary>Return the 3 most recent reflection Q&A items for RAG injection.</summary>"""
         return await self.memory_manager.get_recent_items("reflections", limit=3)
 
-    # ------------------------------------------------------------------
-    # RAG injection support (narrow, explicit interface for prompt assembly)
-    # ------------------------------------------------------------------
-
     def _get_chat_memory_injection(self):
-        """Returns a PromptInjection for recent chat history, or None."""
+        """<summary>Return a PromptInjection for recent chat history, or None.</summary>"""
         history = self.get_recent_chat_history()
         return chat_memory_module(history)
 
     def _get_reflection_memory_injection(self):
-        """Returns a PromptInjection for recent reflections, or None."""
+        """<summary>Return a PromptInjection for recent reflections, or None.</summary>"""
         reflections = self.get_recent_reflections()
         return reflection_memory_module(reflections)
 
     async def handle_prompt_assembly(self, event: PromptAssemblyEvent) -> None:
         """
-        Contribute memory-based injections when the prompt is being assembled.
-
+        <summary>
+        Contribute memory-based injections to a prompt assembly event.
+        Appends at most two injections: recent chat history and recent reflections.
         This is the only place MemoryService participates in prompt construction.
-        It appends (at most) two injections: recent chat + recent reflections.
+        </summary>
+        <param name="event">The PromptAssemblyEvent to contribute injections to.</param>
         """
         if not hasattr(event, "contributions"):
             event.contributions = []
 
-        chat_inj = self._get_chat_memory_injection()
+        chat_history = await self.get_recent_chat_history()
+        chat_inj = chat_memory_module(chat_history)
         if chat_inj and chat_inj.content:
             event.contributions.append(chat_inj)
 
-        refl_inj = self._get_reflection_memory_injection()
+        reflections = await self.get_recent_reflections()
+        refl_inj = reflection_memory_module(reflections)
         if refl_inj and refl_inj.content:
             event.contributions.append(refl_inj)
 

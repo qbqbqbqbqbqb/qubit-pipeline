@@ -1,3 +1,17 @@
+"""
+<summary>
+VtubeStudioHandler — controls VTube Studio face and mouth animation via pyvts.
+</summary>
+<remarks>
+Provides speaking and idle animation loops that inject face parameters directly
+into VTube Studio. Both loops are managed as asyncio Tasks, cancelled and restarted
+when the mode switches, so there is never more than one animation loop of each kind
+running at a time.
+
+Gracefully degrades if pyvts is not installed: all methods become no-ops.
+</remarks>
+"""
+
 import asyncio
 import math
 import random
@@ -10,6 +24,13 @@ except ImportError:
 
 
 class VtubeStudioHandler:
+    """
+    <summary>
+    Manages VTube Studio connection, authentication, speaking mouth animation,
+    and idle head/eye animation via the pyvts library.
+    </summary>
+    """
+
     def __init__(
         self,
         plugin_name: str = "Qubit Pipeline",
@@ -17,6 +38,13 @@ class VtubeStudioHandler:
         port: int = 8001,
         token_path: str = "vtubeStudio_token.txt",
     ):
+        """
+        <summary>Initialise the handler with plugin identity and connection settings.</summary>
+        <param name="plugin_name">Plugin name shown in VTube Studio's permissions UI.</param>
+        <param name="developer">Developer name shown in VTube Studio's permissions UI.</param>
+        <param name="port">VTube Studio API WebSocket port.</param>
+        <param name="token_path">File path for storing the authentication token.</param>
+        """
         self.plugin_name = plugin_name
         self.developer = developer
         self.port = port
@@ -33,13 +61,21 @@ class VtubeStudioHandler:
             print("[VtubeStudioHandler] pyvts not installed. Run: pip install pyvts")
 
     async def ensure_connected(self) -> bool:
-        """Try to connect early if not already connected."""
+        """
+        <summary>Connect to VTube Studio if not already connected.</summary>
+        <returns>True if connected, False if connection failed or pyvts is unavailable.</returns>
+        """
         if self.connected:
             return True
         return await self.connect()
 
-    async def start_speaking(self):
-        """Start speaking mode: cancel idle, start mouth animation."""
+    async def start_speaking(self) -> None:
+        """
+        <summary>
+        Switch to speaking mode: cancel the idle task and start the mouth animation loop.
+        No-op if already speaking.
+        </summary>
+        """
         if self.speaking:
             return
 
@@ -56,8 +92,13 @@ class VtubeStudioHandler:
         if not self._mouth_task or self._mouth_task.done():
             self._mouth_task = asyncio.create_task(self._mouth_animation_loop())
 
-    async def stop_speaking(self):
-        """Stop speaking mode"""
+    async def stop_speaking(self) -> None:
+        """
+        <summary>
+        Switch back to idle mode: cancel the mouth animation task and restart the idle loop.
+        No-op if not currently speaking.
+        </summary>
+        """
         if not self.speaking:
             return
 
@@ -76,8 +117,10 @@ class VtubeStudioHandler:
         if not self._idle_task or self._idle_task.done():
             self._idle_task = asyncio.create_task(self.idle_animation())
 
-    async def start_idle(self):
-        """Start idle animation."""
+    async def start_idle(self) -> None:
+        """
+        <summary>Start the idle animation if not currently speaking.</summary>
+        """
         if self.speaking:
             return
 
@@ -85,6 +128,13 @@ class VtubeStudioHandler:
             self._idle_task = asyncio.create_task(self.idle_animation())
 
     async def connect(self) -> bool:
+        """
+        <summary>
+        Open a new pyvts connection, request an auth token, and authenticate.
+        Closes any existing connection before reconnecting.
+        </summary>
+        <returns>True if authentication succeeded, False on failure.</returns>
+        """
         if pyvts is None:
             return False
 
@@ -114,17 +164,22 @@ class VtubeStudioHandler:
             await self.vts.request_authenticate()
 
             self.connected = True
-            print("[VtubeStudioHandler] Successfully connected and authenticated with VTube Studio")
+            print("[VtubeStudioHandler] Connected and authenticated with VTube Studio")
             return True
 
         except Exception as e:
             print(f"[VtubeStudioHandler] Connection failed: {e}")
-            print("[VtubeStudioHandler] Make sure VTube Studio is running and you accepted the plugin permission popup!")
+            print("[VtubeStudioHandler] Ensure VTube Studio is running and the plugin permission was accepted.")
             self.connected = False
             self.vts = None
             return False
 
     async def _send_request(self, request):
+        """
+        <summary>Send a pyvts request and return the response, or None on error.</summary>
+        <param name="request">The pyvts request object to send.</param>
+        <returns>The response dict, or None if unavailable or on error.</returns>
+        """
         if not self.vts:
             return None
         try:
@@ -137,7 +192,11 @@ class VtubeStudioHandler:
             print(f"[VtubeStudioHandler] Request error: {e}")
             return None
 
-    async def _blink(self, duration: float = 0.12):
+    async def _blink(self, duration: float = 0.12) -> None:
+        """
+        <summary>Perform one blink by closing both eyes, waiting, then opening them.</summary>
+        <param name="duration">Time in seconds to keep the eyes closed.</param>
+        """
         if not self.connected or self.vts is None:
             return
         try:
@@ -150,8 +209,8 @@ class VtubeStudioHandler:
                         "parameterValues": [
                             {"id": "EyeOpenLeft", "value": 0.0},
                             {"id": "EyeOpenRight", "value": 0.0},
-                        ]
-                    }
+                        ],
+                    },
                 )
             )
             await asyncio.sleep(duration)
@@ -165,14 +224,20 @@ class VtubeStudioHandler:
                         "parameterValues": [
                             {"id": "EyeOpenLeft", "value": 1.0},
                             {"id": "EyeOpenRight", "value": 1.0},
-                        ]
-                    }
+                        ],
+                    },
                 )
             )
         except Exception:
             pass
 
     async def _mouth_animation_loop(self) -> None:
+        """
+        <summary>
+        Drive jaw, mouth, smile, and head-angle parameters in a natural speech animation loop.
+        Runs at ~30 fps until cancelled. Resets parameters on exit.
+        </summary>
+        """
         await self.ensure_connected()
         if not self.connected or self.vts is None:
             return
@@ -181,9 +246,7 @@ class VtubeStudioHandler:
         last_blink = time.time()
         last_variation = 0.0
 
-        var_smile = 0.25
-        var_face_x = var_face_y = var_face_z = 0.0
-
+        var_smile = var_face_x = var_face_y = var_face_z = 0.0
         target_smile = 0.25
         target_face_x = target_face_y = target_face_z = 0.0
 
@@ -205,9 +268,7 @@ class VtubeStudioHandler:
 
                 jaw = (math.sin(t * 8.7) + 1) / 2 * 0.92
                 mouth_open = jaw * 0.75 + (math.sin(t * 11.8) + 1) / 2 * 0.25
-
                 smile = max(0.18, 0.42 + math.sin(t * 1.65) * 0.15 + var_smile)
-
                 face_x = math.sin(t * 1.35) * 5.0 + var_face_x
                 face_y = math.sin(t * 1.8) * 4.5 + var_face_y
                 face_z = math.cos(t * 1.05) * 2.6 + var_face_z
@@ -223,7 +284,7 @@ class VtubeStudioHandler:
 
                 await self._send_request(self.vts.vts_request.BaseRequest(
                     "InjectParameterDataRequest",
-                    {"faceFound": True, "mode": "set", "parameterValues": params}
+                    {"faceFound": True, "mode": "set", "parameterValues": params},
                 ))
 
                 if time.time() - last_blink > random.uniform(3.8, 6.2):
@@ -240,7 +301,12 @@ class VtubeStudioHandler:
             await self._reset_speaking_parameters()
 
     async def idle_animation(self) -> None:
-        """Natural idle with proper smile for your model"""
+        """
+        <summary>
+        Drive head, eye, and smile parameters in a natural idle animation loop.
+        Runs at ~12 fps until cancelled or self.speaking becomes True. Resets parameters on exit.
+        </summary>
+        """
         await self.ensure_connected()
         if not self.connected or self.vts is None:
             return
@@ -254,7 +320,6 @@ class VtubeStudioHandler:
                 face_x = math.sin(t * 0.25) * 3.8
                 face_y = math.sin(t * 0.21) * 3.2 + math.cos(t * 0.15) * 1.5
                 face_z = math.cos(t * 0.18) * 2.0
-
                 eye_x = math.sin(t * 0.42) * 2.0
                 eye_y = math.sin(t * 0.33) * 1.3
 
@@ -272,8 +337,8 @@ class VtubeStudioHandler:
                             {"id": "EyeLeftY", "value": eye_y},
                             {"id": "EyeRightX", "value": eye_x},
                             {"id": "EyeRightY", "value": eye_y},
-                        ]
-                    }
+                        ],
+                    },
                 )
 
                 await self._send_request(request)
@@ -291,7 +356,8 @@ class VtubeStudioHandler:
         finally:
             await self._reset_idle_parameters()
 
-    async def _reset_speaking_parameters(self):
+    async def _reset_speaking_parameters(self) -> None:
+        """<summary>Reset all speaking-related VTS parameters to neutral values after the animation loop exits.</summary>"""
         if not self.connected or self.vts is None:
             return
         try:
@@ -310,14 +376,15 @@ class VtubeStudioHandler:
                         {"id": "FaceAngleY", "value": 0.0},
                         {"id": "FaceAngleZ", "value": 0.0},
                         {"id": "Brows", "value": 0.0},
-                    ]
-                }
+                    ],
+                },
             )
             await self._send_request(reset)
         except Exception:
             pass
 
-    async def _reset_idle_parameters(self):
+    async def _reset_idle_parameters(self) -> None:
+        """<summary>Reset all idle-related VTS parameters to neutral values after the animation loop exits.</summary>"""
         if not self.connected or self.vts is None:
             return
         try:
@@ -335,10 +402,9 @@ class VtubeStudioHandler:
                         {"id": "EyeLeftY", "value": 0.0},
                         {"id": "EyeRightX", "value": 0.0},
                         {"id": "EyeRightY", "value": 0.0},
-                    ]
-                }
+                    ],
+                },
             )
             await self._send_request(reset)
         except Exception:
             pass
-        

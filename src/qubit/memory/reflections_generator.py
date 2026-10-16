@@ -1,18 +1,22 @@
 """
-Module for generating reflections from chat history.
+<summary>
+ReflectionGenerator — produces Q&A pair reflections from recent chat history.
+</summary>
+<remarks>
+Asks the LLM via the reflection profile for a JSON array of {q, a} objects
+representing key patterns from recent conversation. These pairs are stored
+in the reflections collection and injected into future prompts as compressed
+long-term memory.
 
-Produces 3 Q&A pairs that capture key patterns from recent conversation.
-These are stored as memories and injected into future prompts.
-
-The LLM is asked for JSON output. A tolerant fallback parser handles the
-most common ways local models deviate from strict JSON (trailing commas,
-markdown fences, extra preamble) so a minor formatting slip doesn't
-silently produce zero reflections.
+A tolerant fallback parser handles the most common ways local models deviate
+from strict JSON (trailing commas, markdown fences, extra preamble) so a
+minor formatting slip does not silently produce zero reflections.
+</remarks>
 """
 
 import json
 import re
-from typing import TYPE_CHECKING, Any, List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 from src.qubit.models.llm_service import LLMService
 from src.qubit.utils.log_utils import get_logger
@@ -27,10 +31,10 @@ _TRAILING_COMMA_RE = re.compile(r",\s*([}\]])")
 
 class ReflectionGenerator:
     """
-    Generates reflective Q&A pairs from recent chat history.
-
-    Asks the reflection profile for a JSON array of {q, a} objects.
-    Falls back to a tolerant text parser if JSON cannot be decoded.
+    <summary>
+    Generates reflective Q&A pairs from recent chat history by calling the LLM
+    with a dedicated reflection profile.
+    </summary>
     """
 
     SYSTEM_PROMPT = (
@@ -60,6 +64,12 @@ Return ONLY valid JSON in this exact shape (no other text):
         reflection_profile: str = "reflection",
         reflection_threshold: int = 20,
     ):
+        """
+        <summary>Initialise the generator with an LLM service and profile settings.</summary>
+        <param name="llm_service">The LLM service used to generate reflections.</param>
+        <param name="reflection_profile">The LLM profile name for reflection calls.</param>
+        <param name="reflection_threshold">Minimum number of recent messages required before reflecting.</param>
+        """
         self.logger = get_logger("ReflectionGenerator")
         self.llm_service = llm_service
         self.reflection_profile = reflection_profile
@@ -69,8 +79,12 @@ Return ONLY valid JSON in this exact shape (no other text):
         self, memory_manager: "MemoryManager"
     ) -> List[Tuple[str, str]]:
         """
-        Perform reflection on recent messages and return up to 3 (q, a) tuples.
-        Returns [] if there are not enough messages or the model fails entirely.
+        <summary>
+        Fetch recent messages, call the LLM for Q&A pairs, and return up to 3 (q, a) tuples.
+        Returns an empty list if there are not enough messages or the model fails entirely.
+        </summary>
+        <param name="memory_manager">The MemoryManager to retrieve recent chat from.</param>
+        <returns>A list of (question, answer) string tuples, length 0–3.</returns>
         """
         recent_messages = await memory_manager.get_recent_items("chat", limit=self.reflection_threshold)
 
@@ -103,6 +117,11 @@ Return ONLY valid JSON in this exact shape (no other text):
             return []
 
     def _format_messages(self, messages: list) -> str:
+        """
+        <summary>Format a list of memory items into a plain text conversation block.</summary>
+        <param name="messages">List of item dicts from MemoryManager.get_recent_items().</param>
+        <returns>A newline-joined string of formatted conversation lines.</returns>
+        """
         lines = []
         for msg in messages:
             role = msg.get("role", "Unknown")
@@ -116,44 +135,46 @@ Return ONLY valid JSON in this exact shape (no other text):
 
     def _parse_qa_pairs(self, response: str) -> List[Tuple[str, str]]:
         """
+        <summary>
         Parse (question, answer) tuples from the model response.
-
-        Strategy (in order):
-        1. Strip markdown fences and any preamble before the first '['.
-        2. Fix common JSON errors (trailing commas).
-        3. json.loads() — ideal path.
-        4. If JSON fails, fall back to tolerant line-by-line text parser that
-           handles Q1:/A1:, Question 1:, numbered lists, and bold variants.
+        Tries JSON first, then falls back to a tolerant line-by-line text parser.
+        </summary>
+        <remarks>
+        JSON parse strategy:
+          1. Strip markdown fences and any preamble before the first '['.
+          2. Fix trailing commas before } or ].
+          3. json.loads().
+        Text fallback handles Q1:/A1:, Question 1:, numbered lists, and bold variants.
+        </remarks>
+        <param name="response">The raw LLM response string.</param>
+        <returns>A list of (question, answer) tuples, up to 3.</returns>
         """
         pairs = self._try_json_parse(response)
         if pairs:
             return pairs[:3]
 
-        self.logger.warning(
-            "[_parse_qa_pairs] JSON parse failed — falling back to text parser"
-        )
+        self.logger.warning("[_parse_qa_pairs] JSON parse failed — falling back to text parser")
         pairs = self._try_text_parse(response)
         if not pairs:
-            self.logger.error(
-                "[_parse_qa_pairs] Both parsers failed. Raw response was: %s", response
-            )
+            self.logger.error("[_parse_qa_pairs] Both parsers failed. Raw response: %s", response)
         return pairs[:3]
 
     def _try_json_parse(self, response: str) -> List[Tuple[str, str]]:
-        """Attempt to extract a JSON array from the response."""
+        """
+        <summary>Attempt to extract a JSON array from the response string.</summary>
+        <param name="response">The raw response to parse.</param>
+        <returns>A list of (q, a) tuples, or an empty list on any parse failure.</returns>
+        """
         text = response.strip()
 
-        # Strip markdown fences if present
         fence_match = _FENCE_RE.search(text)
         if fence_match:
             text = fence_match.group(1).strip()
 
-        # Find the first '[' — strip any preamble the model added before the array
         bracket = text.find("[")
         if bracket != -1:
             text = text[bracket:]
 
-        # Fix trailing commas before } or ] which are common model errors
         text = _TRAILING_COMMA_RE.sub(r"\1", text)
 
         try:
@@ -168,7 +189,6 @@ Return ONLY valid JSON in this exact shape (no other text):
         for item in data:
             if not isinstance(item, dict):
                 continue
-            # Accept "q"/"a", "question"/"answer", or "Q"/"A" as keys
             q = item.get("q") or item.get("question") or item.get("Q", "")
             a = item.get("a") or item.get("answer") or item.get("A", "")
             q, a = str(q).strip(), str(a).strip()
@@ -179,15 +199,13 @@ Return ONLY valid JSON in this exact shape (no other text):
 
     def _try_text_parse(self, response: str) -> List[Tuple[str, str]]:
         """
+        <summary>
         Tolerant text parser for when the model ignores JSON entirely.
-
-        Handles:
-          Q1: ... / A1: ...
-          Question 1: ... / Answer 1: ...
-          **Q1:** ... / **A1:** ...
-          1. ... (numbered list where odd = Q, even = A)
+        Handles Q1:/A1:, Question 1:, **Q1:** bold variants, and numbered list lines.
+        </summary>
+        <param name="response">The raw response string to parse.</param>
+        <returns>A list of (q, a) tuples extracted from the text, up to 3.</returns>
         """
-        # Normalise bold markdown: **Q1:** -> Q1:
         text = re.sub(r"\*\*([^*]+)\*\*", r"\1", response)
         lines = [l.strip() for l in text.splitlines() if l.strip()]
 

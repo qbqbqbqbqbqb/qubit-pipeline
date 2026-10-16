@@ -1,29 +1,32 @@
 """
-Moderation processor (pure EventProcessor).
-
+<summary>
+ModerationProcessor — first-pass input filter for all Twitch and Kick events.
+</summary>
+<remarks>
 LAYER: Input Processing
 
-This component is the first filter in the input pipeline. It receives raw
-Twitch events (chat, subscriptions, raids, follows) and produces sanitized
-*_processed events for downstream layers.
+Receives raw platform events (chat, subscriptions, raids, follows) and produces
+sanitised *_processed events for downstream layers. Acts as a gatekeeper: any
+event that passes through is considered safe for memory storage and for feeding
+into the decision engine.
 
 Responsibilities:
-- Detect and filter banned words using the shared filter utilities
-- Remove or sanitize problematic content before it reaches Cognitive or Memory
-- Emit clean events (twitch_chat_processed, etc.) so that the rest of the
-  system can assume input has already been moderated
+  - Detect and filter banned words using shared filter utilities.
+  - Sanitise usernames and message text.
+  - Emit clean *_processed events rather than mutating the originals.
 
 This processor is intentionally narrow. It does not make decisions about
 whether to respond — that belongs in the Cognitive layer.
+</remarks>
 """
 
 from src.qubit.core.event_processor import EventProcessor
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
 from src.qubit.core.events import (
-    TwitchChatEvent, 
+    TwitchChatEvent,
     TwitchSubscriptionEvent,
-    TwitchRaidEvent, 
-    TwitchFollowEvent, 
+    TwitchRaidEvent,
+    TwitchFollowEvent,
     KickChatEvent,
     KickSubscriptionEvent,
     KickRaidEvent,
@@ -35,13 +38,10 @@ from src.qubit.utils.filter_utils import contains_banned_words
 
 class ModerationProcessor(EventProcessor):
     """
-    Pure EventProcessor that sanitizes raw Twitch input events.
-
-    It acts as a gatekeeper: any event that passes through is considered
-    safe for storage in memory and for feeding into the decision engine.
-
-    The processor emits new events with "_processed" suffix rather than
-    mutating the originals.
+    <summary>
+    Pure EventProcessor that sanitises raw platform input events before they
+    propagate to the Cognitive and Memory layers.
+    </summary>
     """
 
     SUBSCRIPTIONS = {
@@ -60,10 +60,11 @@ class ModerationProcessor(EventProcessor):
 
     async def handle_event(self, event: Event) -> None:
         """
-        Entry point for all raw Twitch events.
-
-        Dispatches to the appropriate moderation method based on event type.
-        Each moderated event is published as a clean *_processed variant.
+        <summary>
+        Entry point for all raw platform events. Dispatches to the appropriate
+        moderation method based on event type and publishes a clean *_processed variant.
+        </summary>
+        <param name="event">The raw platform event from the bus.</param>
         """
         if isinstance(event, TwitchChatEvent):
             self.logger.debug("[handle_event] Moderating twitch chat event: %s", event)
@@ -93,10 +94,12 @@ class ModerationProcessor(EventProcessor):
             self.logger.warning("[ModerationProcessor] Unknown event type: %s", event.type)
 
     async def _moderate_chat(self, event: TwitchChatEvent) -> None:
-        """Sanitise username and message text, then publish a clean processed event.
-
-        Drops the event entirely if the message text is blacklisted — publishing
-        a blank message downstream is confusing and wastes a generation cycle.
+        """
+        <summary>
+        Sanitise username and message text, then publish a clean processed event.
+        Drops the event entirely if the message text is blacklisted.
+        </summary>
+        <param name="event">The raw TwitchChatEvent.</param>
         """
         sanitised_user = self._sanitise(event.user, default="Someone")
         sanitised_msg = self._sanitise(event.text, default=None)
@@ -115,7 +118,10 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_subscription(self, event: TwitchSubscriptionEvent) -> None:
-        """Sanitise subscription events (user + optional sub message)."""
+        """
+        <summary>Sanitise subscription events (user and optional sub message).</summary>
+        <param name="event">The raw TwitchSubscriptionEvent.</param>
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
         sanitised_msg = self._sanitise(event.sub_message, default="")
 
@@ -131,7 +137,10 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_raid(self, event: TwitchRaidEvent) -> None:
-        """Sanitise raid events (mainly the raider username)."""
+        """
+        <summary>Sanitise raid events (mainly the raider username).</summary>
+        <param name="event">The raw TwitchRaidEvent.</param>
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
 
         sanitised_event = TwitchRaidEvent(
@@ -144,7 +153,10 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_follow(self, event: TwitchFollowEvent) -> None:
-        """Sanitise follow events (mainly the follower username)."""
+        """
+        <summary>Sanitise follow events (mainly the follower username).</summary>
+        <param name="event">The raw TwitchFollowEvent.</param>
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
 
         sanitised_event = TwitchFollowEvent(
@@ -157,7 +169,10 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_kick_chat(self, event: KickChatEvent) -> None:
-        """Sanitise kick chat (username + text). Drops event if text is blacklisted."""
+        """
+        <summary>Sanitise Kick chat events (username and text). Drops event if text is blacklisted.</summary>
+        <param name="event">The raw KickChatEvent.</param>
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
         sanitised_msg = self._sanitise(event.text, default=None)
 
@@ -175,6 +190,10 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_kick_subscription(self, event: KickSubscriptionEvent) -> None:
+        """
+        <summary>Sanitise Kick subscription events (user and optional sub message).</summary>
+        <param name="event">The raw KickSubscriptionEvent.</param>
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
         sanitised_msg = self._sanitise(event.sub_message, default="")
 
@@ -190,6 +209,10 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_kick_raid(self, event: KickRaidEvent) -> None:
+        """
+        <summary>Sanitise Kick raid events (mainly the raider username).</summary>
+        <param name="event">The raw KickRaidEvent.</param>
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
 
         sanitised_event = KickRaidEvent(
@@ -202,6 +225,10 @@ class ModerationProcessor(EventProcessor):
         await self.event_bus.publish(sanitised_event)
 
     async def _moderate_kick_follow(self, event: KickFollowEvent) -> None:
+        """
+        <summary>Sanitise Kick follow events (mainly the follower username).</summary>
+        <param name="event">The raw KickFollowEvent.</param>
+        """
         sanitised_user = self._sanitise(event.user, default="Someone")
 
         sanitised_event = KickFollowEvent(
@@ -215,13 +242,15 @@ class ModerationProcessor(EventProcessor):
 
     def _sanitise(self, value: str, default: str = "") -> str:
         """
-        Generic sanitizer for usernames or text.
-        Returns `default` if `value` contains banned words, otherwise returns `value`.
+        <summary>
+        Return default if value contains banned words, otherwise return value unchanged.
+        </summary>
+        <param name="value">The string to check (username or message text).</param>
+        <param name="default">Value to return when banned content is detected.</param>
+        <returns>The sanitised string or the default.</returns>
         """
         return default if contains_banned_words(
             value,
-             BLACKLISTED_WORDS_LIST, 
-             WHITELISTED_WORDS_LIST
+            BLACKLISTED_WORDS_LIST,
+            WHITELISTED_WORDS_LIST
         ) else value
-
-

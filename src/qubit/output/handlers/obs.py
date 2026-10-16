@@ -1,8 +1,12 @@
 """
-Module for managing OBS WebSocket connections and subtitle operations.
-
-This module provides the OBSManager class to handle authentication and communication
-with OBS Studio via WebSocket, including updating subtitle text sources.
+<summary>
+OBSHandler — manages OBS WebSocket connections and subtitle text source updates.
+</summary>
+<remarks>
+Connects to OBS Studio via websocket-client, authenticates using the OBS WebSocket
+protocol HMAC-SHA256 challenge response, and sends SetInputSettings requests to
+update text sources for subtitles.
+</remarks>
 """
 
 import asyncio
@@ -13,28 +17,24 @@ from typing import Any
 import websocket
 
 from config.config import TTS_SUBTITLE_NAME
-
 from src.qubit.utils.log_utils import get_logger
+
 logger = get_logger("OBS_Websocket_Controller")
 
 
 class OBSHandler:
     """
-    Manages OBS WebSocket connections and subtitle updates.
-
-    This class handles establishing authenticated WebSocket connections to OBS Studio
-    and provides methods to update text sources for subtitles.
+    <summary>
+    Leaf handler for OBS WebSocket connections and subtitle source updates.
+    Stateless per-call: each subtitle update opens, sends, and closes its own connection.
+    </summary>
     """
 
     def __init__(self: Any, settings: Any) -> None:
         """
-        Initialize the OBSManager with settings.
-
-        Args:
-            settings: An object containing OBS configuration attributes such as
-                      obs_password, obs_host, obs_port.
+        <summary>Initialise the handler with OBS connection settings.</summary>
+        <param name="settings">Settings object providing obs_password, obs_host, and obs_port.</param>
         """
-
         self.settings = settings
         self.obs_password = self.settings.obs_password
         self.obs_host = self.settings.obs_host
@@ -43,20 +43,18 @@ class OBSHandler:
 
     def _build_auth_string(self: Any, salt: str, challenge: str) -> str:
         """
-        Build the authentication string for OBS WebSocket.
-        Args:
-            salt (str): The salt provided by OBS.
-            challenge (str): The challenge provided by OBS.
-        Returns:
-            str: The computed authentication string.
+        <summary>Compute the HMAC-SHA256 authentication string for OBS WebSocket.</summary>
+        <param name="salt">The salt from the OBS hello message.</param>
+        <param name="challenge">The challenge from the OBS hello message.</param>
+        <returns>The base64-encoded authentication string.</returns>
         """
         try:
             secret = base64.b64encode(
-                hashlib.sha256((self.obs_password + salt).encode('utf-8')).digest()
+                hashlib.sha256((self.obs_password + salt).encode("utf-8")).digest()
             )
             auth = base64.b64encode(
-                hashlib.sha256(secret + challenge.encode('utf-8')).digest()
-            ).decode('utf-8')
+                hashlib.sha256(secret + challenge.encode("utf-8")).digest()
+            ).decode("utf-8")
             return auth
         except Exception as e:
             logger.error("Error building auth string: %s", e)
@@ -64,9 +62,8 @@ class OBSHandler:
 
     def connect_to_obs(self: Any) -> websocket.WebSocket:
         """
-        Establish a WebSocket connection to OBS and authenticate.
-        Returns:
-            websocket.WebSocket: The authenticated WebSocket connection.
+        <summary>Open a WebSocket connection to OBS and complete authentication.</summary>
+        <returns>The authenticated WebSocket connection.</returns>
         """
         try:
             ws = websocket.WebSocket()
@@ -74,17 +71,17 @@ class OBSHandler:
             message = ws.recv()
             result = json.loads(message)
 
-            if 'authentication' in result['d']:
+            if "authentication" in result["d"]:
                 auth_payload = {
                     "op": 1,
                     "d": {
                         "rpcVersion": 1,
                         "authentication": self._build_auth_string(
-                            result['d']['authentication']['salt'],
-                            result['d']['authentication']['challenge']
+                            result["d"]["authentication"]["salt"],
+                            result["d"]["authentication"]["challenge"],
                         ),
-                        "eventSubscriptions": 1000
-                    }
+                        "eventSubscriptions": 1000,
+                    },
                 }
                 ws.send(json.dumps(auth_payload))
                 auth_response = ws.recv()
@@ -97,21 +94,28 @@ class OBSHandler:
 
     async def update_subtitle_text_and_style(
         self: Any,
-        source_name:str=TTS_SUBTITLE_NAME, new_text: str = "Default", font_face:str="Arial", font_size:int=50,
-        width:int=1920, height:int=400, valign:str="center", word_wrap:bool=True
+        source_name: str = TTS_SUBTITLE_NAME,
+        new_text: str = "Default",
+        font_face: str = "Arial",
+        font_size: int = 50,
+        width: int = 1920,
+        height: int = 400,
+        valign: str = "center",
+        word_wrap: bool = True,
     ) -> None:
         """
-        Update subtitle text source in OBS with wrapping, font size, vertical alignment, and custom extents.
-        
-        Args:
-            source_name (str): Name of the text source in OBS.
-            new_text (str): Text content to display.
-            font_face (str): Font face name.
-            font_size (int): Font size.
-            width (int): Width of bounding box in pixels.
-            height (int): Height of bounding box in pixels.
-            valign (str): Vertical alignment, "top", "center", or "bottom".
-            word_wrap (bool): Enable or disable word wrapping.
+        <summary>
+        Update a text source in OBS with the specified text, font, and layout settings.
+        Opens and closes the WebSocket connection per call.
+        </summary>
+        <param name="source_name">Name of the text source in OBS.</param>
+        <param name="new_text">Text content to display.</param>
+        <param name="font_face">Font face name.</param>
+        <param name="font_size">Font size in points.</param>
+        <param name="width">Bounding box width in pixels.</param>
+        <param name="height">Bounding box height in pixels.</param>
+        <param name="valign">Vertical alignment: 'top', 'center', or 'bottom'.</param>
+        <param name="word_wrap">Enable or disable word wrapping.</param>
         """
         try:
             ws = await asyncio.to_thread(self.connect_to_obs)
@@ -129,19 +133,19 @@ class OBSHandler:
                             "font": {
                                 "face": font_face,
                                 "size": font_size,
-                                "flags": font_flags
+                                "flags": font_flags,
                             },
                             "valign": valign,
                             "use_custom_extents": True,
                             "custom_width": width,
-                            "custom_height": height
-                        }
-                    }
-                }
+                            "custom_height": height,
+                        },
+                    },
+                },
             }
             ws.send(json.dumps(payload))
             response = ws.recv()
-            logger.info("Subtitle text and style updated: %s", response)
+            logger.info("Subtitle updated: %s", response)
         except Exception as e:
             logger.error("Failed to update subtitle text and style: %s", e)
         finally:

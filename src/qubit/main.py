@@ -1,4 +1,8 @@
-"""Application entry point for initializing and running the async app."""
+"""
+<summary>
+Application entry point. Initializes and runs the async application.
+</summary>
+"""
 
 import asyncio
 from src.qubit.core.bootstrap import create_app
@@ -6,13 +10,10 @@ from src.qubit.core.runtime import run_app
 
 async def main():
     """
+    <summary>
     Create and run the application.
-
-    This coroutine initializes the application using the bootstrap
-    process and then starts the runtime loop.
-
-    Returns:
-        None
+    </summary>
+    <returns>None</returns>
     """
     app = await create_app()
     await run_app(app)

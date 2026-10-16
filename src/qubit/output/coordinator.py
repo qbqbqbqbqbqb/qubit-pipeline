@@ -1,42 +1,24 @@
-"""Output Coordinator.
+"""
+<summary>
+OutputCoordinator — central coordinator for the entire output pipeline.
+</summary>
+<remarks>
+LAYER: Output
 
-LAYER: Output (see ARCHITECTURE.md)
+Owns the split output queue, staleness logic, and drives ai_speaking state on RuntimeState.
+Delegates actual implementation to leaf handlers: TTSHandler, OBSHandler, VTubeStudioHandler,
+PNGOutputHandler, and DialogueSanitiser.
 
-This is the central coordinator for all final output:
-- Receives ResponseGeneratedEvent
-- Sanitises dialogue (via DialogueSanitiser)
-- Owns the output queue + staleness handling
-- Coordinates TTS + OBS subtitles + optional VTuber mouth animation
-- Owns and drives ai_speaking / ai_thinking state in RuntimeState
+Two deques are maintained instead of one: priority_queue for community-event reactions
+(raids/gifts/follows), queue for everything else. The priority queue is always drained
+first and gets a longer staleness allowance (priority_max_age) because community events
+are rare and should not be dropped behind a chat backlog.
 
-It deliberately delegates the actual work to pure leaf handlers:
-- TTSHandler
-- OBSHandler
-- (optional) VTubeStudioHandler
-- DialogueSanitiser
-
-This class should only coordinate — it should not contain low-level synthesis,
-websocket logic, or sanitiser rules.
-
---- Priority queue (added) ---
-Two deques instead of one: `priority_queue` for community-event reactions
-(raids/gifts/follows), `queue` for everything else. The priority queue is
-always drained first, and gets a much longer staleness allowance
-(PRIORITY_MAX_AGE_SECONDS) — these are rare and shouldn't get silently
-dropped just because they waited behind a couple of chat responses.
-Detection of "is this a community event" reads event.data["kind"], set by
-Cognitive's DecisionExecutor — this only works if Generation forwards
-`data` through unchanged when constructing ResponseGeneratedEvent. If it
-doesn't, this falls back to normal-priority handling silently; worth
-confirming against the actual Generation code.
-
-Both deques are now capped (maxlen). Uncapped, a sustained output stall
-(TTS hung, audio_player busy for a long time) lets this grow without bound,
-since Cognitive isn't currently throttled by output being busy either (see
-CognitiveOrchestrator._is_output_busy(), still a placeholder as of the
-cognitive-layer refactor). The maxlen here is a backstop, not a fix for
-that — the real fix is wiring that gate so Cognitive stops proposing new
-output while a stall is ongoing.
+Both deques are capped (maxlen) to bound memory growth if output stalls.
+Detection of a community-event response reads event.data['kind'] == 'community_event',
+set by DecisionExecutor when constructing the originating MonologueEvent. Events without
+this key fall back to normal-priority handling silently.
+</remarks>
 """
 
 import asyncio
@@ -52,77 +34,85 @@ from src.qubit.output.handlers.sanitiser import DialogueSanitiser
 from src.qubit.core.events import ResponseGeneratedEvent
 from src.qubit.core.service import Service
 
+
 class OutputCoordinator(Service):
     """
-    Central coordinator for the entire output pipeline.
-
-    Responsibilities (narrowed per target architecture):
-    - Own the response queue and staleness logic
-    - Sanitise + forward to memory
-    - Drive ai_speaking / ai_thinking state on RuntimeState
-    - Coordinate the leaf implementations (TTS, OBS, VTube)
-
-    It must not contain the implementation details of speech synthesis,
-    OBS websocket commands, or banned-word lists.
+    <summary>
+    Service that owns the response queues and coordinates all output handlers.
+    The single place that sets and clears ai_speaking on RuntimeState.
+    </summary>
     """
 
     SUBSCRIPTIONS = {
         "response_generated": "handle_response"
     }
 
-    # Defaults for the split queues — see module docstring for why there
-    # are two, and why both are capped.
     DEFAULT_QUEUE_MAXLEN = 40
     DEFAULT_PRIORITY_QUEUE_MAXLEN = 20
     DEFAULT_PRIORITY_MAX_AGE_SECONDS = 120
 
-    def __init__(self: Any,
-                 tts_handler: TTSHandler,
-                 obs_handler: OBSHandler,
-                 vtube_studio_handler=None,
-                 max_age_seconds:int=30,
-                 priority_max_age_seconds:int=DEFAULT_PRIORITY_MAX_AGE_SECONDS,
-                 queue_maxlen:int=DEFAULT_QUEUE_MAXLEN,
-                 priority_queue_maxlen:int=DEFAULT_PRIORITY_QUEUE_MAXLEN,
-                 enable_subtitles:bool=False):
+    def __init__(
+        self: Any,
+        tts_handler: TTSHandler,
+        obs_handler: OBSHandler,
+        vtube_studio_handler=None,
+        max_age_seconds: int = 30,
+        priority_max_age_seconds: int = DEFAULT_PRIORITY_MAX_AGE_SECONDS,
+        queue_maxlen: int = DEFAULT_QUEUE_MAXLEN,
+        priority_queue_maxlen: int = DEFAULT_PRIORITY_QUEUE_MAXLEN,
+        enable_subtitles: bool = False,
+    ):
+        """
+        <summary>Initialise the coordinator with output handlers and queue settings.</summary>
+        <param name="tts_handler">The TTS leaf handler.</param>
+        <param name="obs_handler">The OBS subtitle leaf handler.</param>
+        <param name="vtube_studio_handler">Optional VTube Studio animation handler.</param>
+        <param name="max_age_seconds">Staleness window for normal-priority queue items.</param>
+        <param name="priority_max_age_seconds">Staleness window for priority queue items (community events).</param>
+        <param name="queue_maxlen">Maximum capacity of the normal-priority deque.</param>
+        <param name="priority_queue_maxlen">Maximum capacity of the community-event deque.</param>
+        <param name="enable_subtitles">When True, OBSHandler is called to update subtitles before each TTS call.</param>
+        """
         super().__init__("output_coordinator")
         self.tts_handler = tts_handler
         self.obs_handler = obs_handler
         self.vtube_studio_handler = vtube_studio_handler
         self.png_handler: PNGOutputHandler = None
-        self.dialogue_sanitiser = DialogueSanitiser(blacklist=BLACKLISTED_WORDS_LIST, whitelist=WHITELISTED_WORDS_LIST)
+        self.dialogue_sanitiser = DialogueSanitiser(
+            blacklist=BLACKLISTED_WORDS_LIST,
+            whitelist=WHITELISTED_WORDS_LIST,
+        )
 
-        # Normal-priority items (chat responses, idle monologues, frontend
-        # commands). Priority items (raid/gift/follow reactions) go in
-        # self.priority_queue instead and are always drained first.
-        self.queue = deque(maxlen=queue_maxlen)
-        self.priority_queue = deque(maxlen=priority_queue_maxlen)
+        self.queue: deque = deque(maxlen=queue_maxlen)
+        self.priority_queue: deque = deque(maxlen=priority_queue_maxlen)
 
         self.max_age = timedelta(seconds=max_age_seconds)
         self.priority_max_age = timedelta(seconds=priority_max_age_seconds)
         self.enable_subtitles = enable_subtitles
 
     def attach(self, app) -> None:
-        """Bind to the app. VTube Studio connection happens in _run() on first tick."""
+        """
+        <summary>Bind to the app. VTube Studio connection is deferred to _run().</summary>
+        <param name="app">The root App instance.</param>
+        """
         super().attach(app)
 
     async def stop(self: Any) -> None:
-        """Stop the output handler service."""
+        """<summary>Stop the output coordinator service.</summary>"""
         await super().stop()
 
     async def handle_response(self: Any, event: ResponseGeneratedEvent) -> None:
-        """Process a generated response event.
-
-        This includes sanitising dialogue, checking validity, updating memory,
-        and appending the event to the output queue.
-
-        Args:
-            event (ResponseGeneratedEvent): Event containing the generated response.
+        """
+        <summary>
+        Sanitise a generated response and append it to the appropriate output queue.
+        Drops the event if the response is empty or fails the banned-word check.
+        </summary>
+        <param name="event">The ResponseGeneratedEvent to process.</param>
         """
         prompt, response, source = self._get_event_attributes(event)
 
         if not response:
-            self.logger.warning("[handle_response] No response generated for %s", prompt)
+            self.logger.warning("[handle_response] No response for prompt: %s", prompt)
             return
 
         is_valid, filtered_response = self.dialogue_sanitiser.is_valid(response)
@@ -137,41 +127,33 @@ class OutputCoordinator(Service):
         after_bot = self.dialogue_sanitiser.remove_bot_name(filtered_response)
         _log_mutation("remove_bot_name", filtered_response, after_bot)
 
-        #after_trailing = self.dialogue_sanitiser.remove_trailing_text(after_bot)
-        #_log_mutation("remove_trailing_text", after_bot, after_trailing)
         after_trailing = after_bot
-        # testing keeping trailing text for now
 
         response_clean = self.dialogue_sanitiser.strip_leading_punctuation(after_trailing)
         _log_mutation("strip_leading_punctuation", after_trailing, response_clean)
 
         event = self._set_event_attributes(event, prompt, source, response_clean)
         await self._handle_memory_event(event)
-
         await self._append_to_queue(event)
 
     def _get_event_attributes(self: Any, event: ResponseGeneratedEvent) -> tuple:
-        """Retrieve key attributes from a response event.
-
-        Args:
-            event (ResponseGeneratedEvent): Event to extract attributes from.
-
-        Returns:
-            tuple: (prompt, response, source)
+        """
+        <summary>Extract prompt, response, and source from a ResponseGeneratedEvent.</summary>
+        <param name="event">The event to extract from.</param>
+        <returns>A (prompt, response, source) tuple.</returns>
         """
         return event.prompt, event.response, event.source
 
-    def _set_event_attributes(self: Any, event: ResponseGeneratedEvent, prompt: str, source: str, response_clean: str) -> Any:
-        """Update event attributes after sanitisation.
-
-        Args:
-            event (ResponseGeneratedEvent): Event to update.
-            prompt (str): Original prompt.
-            source (str): Source of the response.
-            response_clean (str): Sanitised response text.
-
-        Returns:
-            ResponseGeneratedEvent: Updated event.
+    def _set_event_attributes(
+        self: Any, event: ResponseGeneratedEvent, prompt: str, source: str, response_clean: str
+    ) -> Any:
+        """
+        <summary>Write sanitised values back onto the event in place.</summary>
+        <param name="event">The event to update.</param>
+        <param name="prompt">The original prompt.</param>
+        <param name="source">The response source string.</param>
+        <param name="response_clean">The sanitised response text.</param>
+        <returns>The updated event.</returns>
         """
         event.prompt = prompt
         event.source = source
@@ -179,30 +161,31 @@ class OutputCoordinator(Service):
         return event
 
     async def _handle_memory_event(self: Any, event: ResponseGeneratedEvent) -> None:
-        """Forward the event to the memory writer if available.
-
-        Args:
-            event (ResponseGeneratedEvent): Event to store in memory.
+        """
+        <summary>Forward the sanitised event to a memory writer if one is available.</summary>
+        <param name="event">The sanitised ResponseGeneratedEvent.</param>
         """
 
     def _is_priority_event(self: Any, event: ResponseGeneratedEvent) -> bool:
         """
-        Best-effort detection of a community-event (raid/gift/follow)
-        reaction. Depends on Generation forwarding `data` from the
-        originating MonologueEvent through to ResponseGeneratedEvent
-        unchanged — if Generation builds `data` fresh instead of passing it
-        through, this never triggers and community events silently fall
-        back to normal-priority handling. Verify against the actual
-        Generation layer.
+        <summary>
+        Return True if this event is a community-event reaction (raid, gift, follow).
+        Reads event.data['kind'] == 'community_event', written by DecisionExecutor.
+        Falls back silently to False if the field is absent.
+        </summary>
+        <param name="event">The ResponseGeneratedEvent to inspect.</param>
+        <returns>True if the event is a community-event reaction.</returns>
         """
         data = getattr(event, "data", None) or {}
         return data.get("kind") == "community_event"
 
     async def _append_to_queue(self: Any, event: ResponseGeneratedEvent) -> None:
-        """Append a response event to the appropriate output queue with timestamp.
-
-        Args:
-            event (ResponseGeneratedEvent): Event to append.
+        """
+        <summary>
+        Append the sanitised event to the priority or normal queue, timestamped now.
+        The deque's maxlen evicts the oldest item automatically when full.
+        </summary>
+        <param name="event">The event to enqueue.</param>
         """
         is_priority = self._is_priority_event(event)
         target_queue = self.priority_queue if is_priority else self.queue
@@ -224,12 +207,13 @@ class OutputCoordinator(Service):
                 "priority": is_priority,
             }
 
-        # deque(maxlen=...) evicts the oldest item automatically once full —
-        # no manual bound-checking needed here.
         target_queue.append(item)
 
     def _pop_next_item(self: Any) -> tuple:
-        """Priority queue drains first, whenever it's non-empty."""
+        """
+        <summary>Pop the next item, draining the priority queue first.</summary>
+        <returns>A (item, from_priority) tuple, or (None, False) if both queues are empty.</returns>
+        """
         if self.priority_queue:
             return self.priority_queue.popleft(), True
         if self.queue:
@@ -237,11 +221,20 @@ class OutputCoordinator(Service):
         return None, False
 
     def _requeue_front(self: Any, item: dict, from_priority: bool) -> None:
-        """Push an item back to the front of whichever queue it came from."""
+        """
+        <summary>Push an item back to the front of the queue it came from.</summary>
+        <param name="item">The item to requeue.</param>
+        <param name="from_priority">True if the item came from the priority queue.</param>
+        """
         (self.priority_queue if from_priority else self.queue).appendleft(item)
 
     async def _run(self: Any) -> None:
-        """Main loop processing the output queues asynchronously."""
+        """
+        <summary>
+        Main output loop. Connects VTube Studio if enabled, then drains the queue,
+        blocking normal output while a high-priority audio file is playing.
+        </summary>
+        """
         if self.vtube_studio_handler and self.app.state.features.vtube_studio:
             self.logger.info("[_run] Connecting to VTube Studio (up to 30s)...")
             try:
@@ -252,7 +245,7 @@ class OutputCoordinator(Service):
                 await self.vtube_studio_handler.start_idle()
                 self.logger.info("[_run] VTube Studio idle animation started.")
             except asyncio.TimeoutError:
-                self.logger.warning("[_run] VTube Studio connection timed out after 30s. Continuing without it.")
+                self.logger.warning("[_run] VTube Studio connection timed out after 30s.")
             except Exception as e:
                 self.logger.error("[_run] VTube Studio connection failed: %s", e)
 
@@ -273,7 +266,6 @@ class OutputCoordinator(Service):
                     if await self._check_if_timestamp_stale(item):
                         continue
 
-                    # Block normal output while high-priority audio file is playing
                     if (self.app and self.app.audio_player
                             and self.app.audio_player.is_playing()):
                         await asyncio.sleep(0.2)
@@ -290,22 +282,17 @@ class OutputCoordinator(Service):
                     self.logger.info("[_run] OutputCoordinator cancelled")
                     break
                 except Exception as e:
-                    self.logger.exception("[_run] Error in OutputCoordinator: %s", e)
+                    self.logger.exception("[_run] Error: %s", e)
                     await asyncio.sleep(0.1)
 
-
     async def _check_if_timestamp_stale(self: Any, item: dict) -> bool:
-        """Check if the queued item is too old and should be dropped.
-
-        Priority items (community events) get priority_max_age instead of
-        the normal max_age — they're rare enough that it's worth tolerating
-        a longer wait behind a backlog rather than dropping them.
-
-        Args:
-            item (dict): Queued output item with timestamp.
-
-        Returns:
-            bool: True if the item is stale and should be ignored.
+        """
+        <summary>
+        Return True if the queued item is older than its allowed age and should be dropped.
+        Priority items use priority_max_age; normal items use max_age.
+        </summary>
+        <param name="item">The queued output item with a 'timestamp' key.</param>
+        <returns>True if the item is stale and should be skipped.</returns>
         """
         timestamp = item.get("timestamp")
         if not timestamp:
@@ -318,12 +305,14 @@ class OutputCoordinator(Service):
             return True
         return False
 
-
     async def _handle_text_output(self: Any, text: str) -> None:
         """
-        Process a single text output.
-
-        This is the single place that drives ai_speaking state.
+        <summary>
+        Process a single text output: set ai_speaking, run the appropriate visual handler,
+        call TTS, then clear ai_speaking and reset the visual handler.
+        The only place that drives ai_speaking state.
+        </summary>
+        <param name="text">The text to speak.</param>
         """
         try:
             if self.app:
@@ -349,12 +338,20 @@ class OutputCoordinator(Service):
                 await self.png_handler.idle()
 
     async def _handle_png_output(self: Any) -> None:
-            await self.png_handler.speak()
+        """<summary>Trigger the PNG avatar speaking animation.</summary>"""
+        await self.png_handler.speak()
 
-    async def _handle_vtube_studio_output(self:Any) -> None:
-            await self.vtube_studio_handler.start_speaking()
+    async def _handle_vtube_studio_output(self: Any) -> None:
+        """<summary>Trigger the VTube Studio speaking animation.</summary>"""
+        await self.vtube_studio_handler.start_speaking()
 
     async def _get_visual_mode(self) -> None:
+        """
+        <summary>
+        Activate the appropriate visual output mode (VTube Studio or PNG) based on feature flags.
+        Logs when no visual mode is enabled.
+        </summary>
+        """
         if not self.app or not self.app.state:
             self.logger.info("[_get_visual_mode] No visual output mode enabled.")
             return
@@ -368,4 +365,4 @@ class OutputCoordinator(Service):
         elif png_enabled and self.png_handler:
             await self._handle_png_output()
         else:
-             self.logger.info("[_get_visual_mode] No visual output mode enabled.")
+            self.logger.info("[_get_visual_mode] No visual output mode enabled.")

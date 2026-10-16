@@ -1,8 +1,8 @@
-"""Event dataclasses for the application's internal pub/sub system.
-
-One dataclass per event type. Keep this file as the single source of truth
-for the bus topology — if an event type isn't defined here it shouldn't exist
-on the bus. Dead or unimplemented event classes do not belong here.
+"""
+<summary>
+Event dataclasses for the application's internal pub/sub system.
+One dataclass per event type. This file is the single source of truth for the bus topology.
+</summary>
 """
 
 from dataclasses import dataclass, field
@@ -14,7 +14,9 @@ from src.qubit.prompting.prompt_assembler import PromptAssembler
 
 @dataclass
 class Event:
-    """Base event carrying a type, timestamp, and arbitrary data payload."""
+    """
+    <summary>Base event carrying a type, timestamp, and arbitrary data payload.</summary>
+    """
     type: str
     timestamp: str
     data: Dict[str, Any]
@@ -26,45 +28,45 @@ class Event:
 
 @dataclass
 class TwitchEvent(Event):
-    """Base class for Twitch-originated events."""
+    """<summary>Base class for Twitch-originated events.</summary>"""
 
 
 @dataclass
 class KickEvent(Event):
-    """Base class for Kick-originated events."""
+    """<summary>Base class for Kick-originated events.</summary>"""
 
 
 @dataclass
 class TwitchChatEvent(TwitchEvent):
-    """Chat message received from Twitch."""
+    """<summary>Chat message received from Twitch.</summary>"""
     user: str
     text: str
 
 
 @dataclass
 class KickChatEvent(KickEvent):
-    """Chat message received from Kick."""
+    """<summary>Chat message received from Kick.</summary>"""
     user: str
     text: str
 
 
 @dataclass
 class TwitchRaidEvent(TwitchEvent):
-    """Raid incoming from Twitch."""
+    """<summary>Raid incoming from Twitch.</summary>"""
     user: str
     viewers: int
 
 
 @dataclass
 class KickRaidEvent(KickEvent):
-    """Raid incoming from Kick."""
+    """<summary>Raid incoming from Kick.</summary>"""
     user: str
     viewers: int
 
 
 @dataclass
 class TwitchSubscriptionEvent(TwitchEvent):
-    """Subscription event from Twitch."""
+    """<summary>Subscription event from Twitch.</summary>"""
     user: str
     tier: str
     sub_type: str
@@ -73,7 +75,7 @@ class TwitchSubscriptionEvent(TwitchEvent):
 
 @dataclass
 class KickSubscriptionEvent(KickEvent):
-    """Subscription event from Kick."""
+    """<summary>Subscription event from Kick.</summary>"""
     user: str
     tier: str
     sub_type: str
@@ -82,14 +84,14 @@ class KickSubscriptionEvent(KickEvent):
 
 @dataclass
 class TwitchFollowEvent(TwitchEvent):
-    """Follow event from Twitch."""
+    """<summary>Follow event from Twitch.</summary>"""
     user: str
     followed_at: str
 
 
 @dataclass
 class KickFollowEvent(KickEvent):
-    """Follow event from Kick."""
+    """<summary>Follow event from Kick.</summary>"""
     user: str
     followed_at: str
 
@@ -100,7 +102,7 @@ class KickFollowEvent(KickEvent):
 
 @dataclass
 class SpeechEvent(Event):
-    """Speech-to-text input from the streamer."""
+    """<summary>Speech-to-text input from the streamer.</summary>"""
     text: str
 
 
@@ -110,14 +112,14 @@ class SpeechEvent(Event):
 
 @dataclass
 class MonologueEvent(Event):
-    """Autonomous monologue prompt trigger from the cognitive layer."""
+    """<summary>Autonomous monologue prompt trigger from the cognitive layer.</summary>"""
     user: str
     prompt: str
 
 
 @dataclass
 class ResponsePromptEvent(Event):
-    """Prompt assembled and ready for LLM generation."""
+    """<summary>Prompt assembled and ready for LLM generation.</summary>"""
     user: str
     source: str
     prompt: str
@@ -125,7 +127,7 @@ class ResponsePromptEvent(Event):
 
 @dataclass
 class ResponseGeneratedEvent(Event):
-    """LLM response ready for output handling."""
+    """<summary>LLM response ready for output handling.</summary>"""
     prompt: str
     source: str
     response: str
@@ -133,7 +135,7 @@ class ResponseGeneratedEvent(Event):
 
 @dataclass
 class PromptAssemblyEvent(Event):
-    """Prompt assembly complete, carrying the assembler and contributions."""
+    """<summary>Prompt assembly in progress. Carries the assembler and any contributed injections.</summary>"""
     assembler: PromptAssembler
     user: str
     prompt_text: str

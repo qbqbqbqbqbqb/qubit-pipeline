@@ -1,41 +1,50 @@
 """
-ChatResponseBehavior - scored proposal for responding to chat / STT input.
-
+<summary>
+ChatResponseBehavior — scored proposal for responding to chat and STT input.
+</summary>
+<remarks>
 Design goals:
-- STT (live streamer voice) has near-absolute priority at every activity level.
-- Low activity: high willingness to answer the few messages that exist.
-- High activity: selective — only strong STT + high-quality/mentioned chat survive.
-- Cooldown is soft (score penalty), never a hard gate.
+  - STT (live streamer voice) has near-absolute priority at every activity level.
+  - Low activity:  high willingness to answer the few messages that exist.
+  - High activity: selective — only strong STT + high-quality/mentioned chat survive.
+  - Cooldown is soft (score penalty), never a hard gate.
+</remarks>
 """
 
 from src.qubit.cognitive.behaviours.base import Behavior
 
 
 class ChatResponseBehavior(Behavior):
+    """
+    <summary>
+    Proposes a response to the highest-priority pending user message.
+    Willingness scales with activity level and applies STT boosts and cooldown penalties.
+    </summary>
+    """
+
     # Activity -> base willingness, checked in ascending order of ceiling.
-    # At/above the last ceiling, willingness decays linearly instead
-    # (see HIGH_ACTIVITY_* below).
+    # At/above the last ceiling, willingness decays linearly (HIGH_ACTIVITY_* below).
     WILLINGNESS_TIERS: list[tuple[float, float]] = [
         (2.0, 0.92),
         (4.0, 0.78),
         (9.0, 0.55),
     ]
     HIGH_ACTIVITY_BASE = 0.95
-    HIGH_ACTIVITY_SELECTIVITY_SLOPE = 0.12  # willingness lost per point of activity above the top tier
+    HIGH_ACTIVITY_SELECTIVITY_SLOPE = 0.12
     HIGH_ACTIVITY_FLOOR = 0.08
 
-    STT_BOOST_LIVE = 2.8   # applied when the winning message is STT and STT is currently "live"
-    STT_BOOST_STALE = 1.6  # applied when the winning message is STT but not flagged live
+    STT_BOOST_LIVE = 2.8
+    STT_BOOST_STALE = 1.6
     WILLINGNESS_CAP = 2.5
 
     QUALITY_MULT_BASE = 0.6
-    QUALITY_MULT_SCALE = 1.1  # quality_mult ends up roughly in the 0.6-1.7 range
+    QUALITY_MULT_SCALE = 1.1
 
     COOLDOWN_SECONDS = 15.0
     COOLDOWN_MIN_PENALTY = 0.25
 
     SLAMMED_ACTIVITY_THRESHOLD = 9.5
-    SLAMMED_QUALITY_FLOOR = 1.1  # below this quality, non-STT proposals are suppressed entirely when slammed
+    SLAMMED_QUALITY_FLOOR = 1.1
 
     SCORE_FLOOR = 0.05
     SCORE_CEILING = 3.5
@@ -44,6 +53,11 @@ class ChatResponseBehavior(Behavior):
         super().__init__("ChatResponse")
 
     async def tick(self, context: dict) -> dict | None:
+        """
+        <summary>Evaluate the priority queue and return a scored response proposal, or None.</summary>
+        <param name="context">The cycle context dict from DecisionEngine.</param>
+        <returns>A response proposal dict, or None if no eligible message exists.</returns>
+        """
         queue = context["queue"]
         best = queue.get_best()
         if not best:
@@ -63,12 +77,6 @@ class ChatResponseBehavior(Behavior):
 
         raw_score = willingness * quality_mult * cooldown_penalty
         clamped_score = max(self.SCORE_FLOOR, min(self.SCORE_CEILING, raw_score))
-
-        # Normalized to 0-1: SCORE_CEILING here only bounds this behavior's own
-        # internal willingness math, it no longer encodes priority vs other
-        # behaviors. DecisionEngine.BEHAVIOR_WEIGHTS is the single place that
-        # decides how much a "maxed out" ChatResponse proposal matters relative
-        # to a "maxed out" IdleMonologue or FrontendMonologue proposal.
         normalized_score = clamped_score / self.SCORE_CEILING
 
         return {
@@ -92,8 +100,6 @@ class ChatResponseBehavior(Behavior):
         return self._willingness_for_activity(activity)
 
     def _willingness_for_activity(self, activity: float) -> float:
-        # Low activity -> more eager to talk to the sparse humans.
-        # High activity -> only answer the very best stuff.
         for ceiling, value in self.WILLINGNESS_TIERS:
             if activity < ceiling:
                 return value
@@ -115,7 +121,6 @@ class ChatResponseBehavior(Behavior):
     def _cooldown_penalty(self, time_since_response: float) -> float:
         if time_since_response >= self.COOLDOWN_SECONDS:
             return 1.0
-        # Linear penalty from 1.0 down to COOLDOWN_MIN_PENALTY over the cooldown window.
         return max(
             self.COOLDOWN_MIN_PENALTY,
             1.0 - (self.COOLDOWN_SECONDS - time_since_response) / self.COOLDOWN_SECONDS,
@@ -124,5 +129,4 @@ class ChatResponseBehavior(Behavior):
     def _is_suppressed_at_high_activity(self, activity: float, is_stt: bool, quality: float) -> bool:
         if activity <= self.SLAMMED_ACTIVITY_THRESHOLD or is_stt:
             return False
-        # Only let high-quality mentions/questions through when slammed.
         return quality < self.SLAMMED_QUALITY_FLOOR

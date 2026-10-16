@@ -1,15 +1,16 @@
 """
-Shared pure helpers for input processing (private module).
+<summary>
+Shared pure helpers for input processing.
+</summary>
+<remarks>
+Contains the only logic shared between multiple input processors:
+  - Staleness checking based on event timestamp and max_age.
+  - Forwarding events to the memory handler.
 
-These functions contain the only duplicated logic that used to live in both
-InputHandler and AutonomousInputHandler:
-
-- Staleness checking (based on event timestamp + max_age)
-- Forwarding events to the memory handler (if present)
-
-They are intentionally free functions with no side effects except logging
-and calling the provided memory_writer. This makes the two processors
-trivial and obviously correct while preserving 100% identical behavior.
+Both are intentionally free functions with no side effects beyond logging
+and calling the provided memory_writer. This keeps individual processors
+thin and obviously correct.
+</remarks>
 """
 
 from datetime import datetime, timedelta, timezone
@@ -18,26 +19,17 @@ from typing import Any
 
 async def is_stale(event: Any, max_age: timedelta, logger: Any, context: str = "") -> bool:
     """
-    Return True if the event is older than max_age.
-
-    The check is performed against the event's timestamp (or now if missing).
-    A debug log is emitted when an event is considered stale.
-
-    Parameters
-    ----------
-    event : Event
-        The event to check (must have .timestamp or .data timestamp).
-    max_age : timedelta
-        Maximum allowed age.
-    logger : logging.Logger
-        Logger to use for the debug message.
-    context : str
-        Optional prefix for the log message (e.g. "monologue" or "chat").
-
-    Returns
-    -------
-    bool
-        True if the event should be dropped as stale.
+    <summary>Return True if the event is older than max_age.</summary>
+    <remarks>
+    The check is performed against the event's timestamp field, or against
+    now() if the field is absent. A debug log is emitted when an event is
+    considered stale.
+    </remarks>
+    <param name="event">The event to check (must have .timestamp or .data timestamp).</param>
+    <param name="max_age">Maximum allowed age.</param>
+    <param name="logger">Logger for the debug message.</param>
+    <param name="context">Optional prefix for the log message (e.g. "monologue" or "chat").</param>
+    <returns>True if the event should be dropped as stale.</returns>
     """
     ts = getattr(event, "timestamp", datetime.now(timezone.utc))
     if isinstance(ts, str):
@@ -52,9 +44,13 @@ async def is_stale(event: Any, max_age: timedelta, logger: Any, context: str = "
 
 async def forward_to_memory(event: Any, memory_writer: Any, logger: Any) -> None:
     """
-    Forward the event to the memory writer (MemoryWriter) if one is configured.
-
-    This is a pure delegation with logging. No transformation is performed.
+    <summary>
+    Forward the event to the memory writer if one is configured.
+    Pure delegation with logging; no transformation is performed.
+    </summary>
+    <param name="event">The event to forward.</param>
+    <param name="memory_writer">The MemoryWriter instance, or None.</param>
+    <param name="logger">Logger for the info message.</param>
     """
     if memory_writer:
         logger.info("[forward_to_memory] Forwarding %s to memory", getattr(event, "type", "unknown"))

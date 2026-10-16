@@ -1,25 +1,23 @@
 """
-Autonomous / monologue prompt processor (pure EventProcessor).
-
+<summary>
+AutonomousPromptProcessor — emits ResponsePromptEvents for system-triggered monologue prompts.
+</summary>
+<remarks>
 LAYER: Input Processing
 
-This file implements the narrow processor responsible for turning
-system-triggered monologue events into high-level generation intents.
+The narrow processor responsible for turning monologue_prompt events into generation
+intents. It is the only component in Input Processing that emits ResponsePromptEvent
+for autonomous (non-user-triggered) speech.
 
-It is the only place in the Input Processing layer that emits
-ResponsePromptEvent objects for autonomous (non-user-triggered) speech.
+Responsibilities:
+  - Drop stale monologue prompts based on max_age_seconds.
+  - Construct and publish a ResponsePromptEvent so GenerationCoordinator can assemble
+    a full prompt and call the LLM.
 
-Key responsibilities:
-- Drop stale monologue prompts based on configurable max age.
-- Forward raw events to MemoryWriter so monologues are recorded for RAG/reflections.
-- Construct and publish a ResponsePromptEvent (type="response_prompt") so the
-  GenerationCoordinator can assemble a full prompt and call the LLM.
-
-All logic that decides *when* a monologue should happen lives exclusively in
-the Cognitive layer (behaviours + DecisionEngine). This processor only
-executes the emission step after the decision has been made.
-
-It replaced the older transitional PromptRequestBuilder logic during the 2026 SoC refactor.
+All logic deciding when a monologue should happen lives exclusively in the Cognitive
+layer (behaviours + DecisionEngine). This processor only executes the emission step
+after the decision has been made.
+</remarks>
 """
 
 from datetime import datetime, timedelta, timezone
@@ -31,18 +29,10 @@ from src.qubit.core.events import ResponsePromptEvent
 
 class AutonomousPromptProcessor(EventProcessor):
     """
-    Pure EventProcessor for system-generated monologue and startup prompts.
-
-    It performs three mechanical steps for events that the Cognitive layer has
-    already decided should trigger autonomous speech:
-    1. Staleness check (drop old monologue_prompt events).
-    2. Forward the raw event to MemoryWriter (monologues must be remembered).
-    3. Emit a ResponsePromptEvent so GenerationCoordinator can produce speech.
-
-    This class is intentionally tiny and has no decision logic whatsoever.
-    The "when" decisions live only in Cognitive (IdleMonologueBehavior etc.).
-
-    It is one of the four main EventProcessors registered in bootstrap.py.
+    <summary>
+    Pure EventProcessor for system-generated monologue prompts. Applies a
+    staleness check then publishes a ResponsePromptEvent for the Generation layer.
+    </summary>
     """
 
     SUBSCRIPTIONS = {
@@ -51,22 +41,18 @@ class AutonomousPromptProcessor(EventProcessor):
 
     def __init__(self, max_age_seconds: int = 30):
         """
-        Args:
-            max_age_seconds: Events older than this are dropped as stale.
-        event_bus is not taken as a constructor argument — it is set by
-        EventProcessor.register_subscriptions() when the processor is wired
-        to the bus in bootstrap.py, matching the construction contract of
-        every other processor.
+        <summary>Initialise the processor with a staleness window.</summary>
+        <param name="max_age_seconds">Events older than this are dropped as stale.</param>
         """
         super().__init__("autonomous prompt processor")
         self.max_age = timedelta(seconds=max_age_seconds)
 
     async def handle_event(self, event) -> None:
         """
-        Main entry point for monologue-related events.
-
-        Applies staleness filter, records the event in long-term memory,
-        then delegates to _emit_prompt_request to produce the generation intent.
+        <summary>
+        Apply the staleness filter, then delegate to _emit_prompt_request.
+        </summary>
+        <param name="event">The monologue_prompt event from the bus.</param>
         """
         if await is_stale(event, self.max_age, self.logger, context="monologue"):
             return
@@ -75,11 +61,12 @@ class AutonomousPromptProcessor(EventProcessor):
 
     async def _emit_prompt_request(self, event) -> None:
         """
+        <summary>
         Build a minimal ResponsePromptEvent from the raw monologue event and publish it.
-
-        The prompt text (if present) is passed through unchanged; actual prompt
-        assembly, RAG injection, and LLM calling happen downstream in the
+        Prompt assembly, RAG injection, and LLM calling happen downstream in the
         Generation layer.
+        </summary>
+        <param name="event">The monologue_prompt event containing the prompt text.</param>
         """
         prompt = getattr(event, "prompt", None) or ""
         prompt_event = ResponsePromptEvent(

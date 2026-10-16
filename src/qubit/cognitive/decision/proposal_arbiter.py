@@ -1,26 +1,33 @@
 """
-ProposalArbiter - decides which of a cycle's scored proposals wins.
+<summary>
+ProposalArbiter — decides which of a cycle's scored proposals wins.
+</summary>
+<remarks>
+Owns BEHAVIOR_WEIGHTS (inter-behavior priority for normal tier-0 competition) and
+PRIORITY_TIER_BONUS (priority classes that override weights for live STT and community
+events). Tuning "how much do behaviours compete with each other" belongs here, not
+scattered across behaviour files or mixed into DecisionEngine's cycle-sequencing logic.
 
-Owns BEHAVIOR_WEIGHTS (inter-behavior priority for normal, tier-0
-competition) and PRIORITY_TIER_BONUS (priority classes that override
-weights entirely — live STT, community events). Tuning "how much do
-behaviors compete with each other" lives here, not scattered across
-behavior files or mixed into DecisionEngine's cycle-sequencing logic.
+Each behaviour normalises its proposal score to roughly 0–1 on its own internal scale.
+This class decides how much a maxed-out proposal from one behaviour matters relative
+to another.
 
-Each behavior returns a proposal score normalized to roughly 0-1 — "how
-much do I want this, on my own internal scale." This class is what decides
-how much a maxed-out proposal from one behavior matters relative to
-another; a behavior's own SCORE_FLOOR/SCORE_CEILING never leaks out to
-decide priority against other behaviors.
-
-Priority tiers, on top of weighted score:
-    tier 0: chat_response (non-STT), idle_monologue, frontend_*
-    tier 1: chat_response when the winning message is live STT
-    tier 2: community_event (raids/gifts/follows) — always wins, even over STT
+Priority tiers, applied on top of weighted score:
+  tier 0: chat_response (non-STT), idle_monologue, frontend_*
+  tier 1: chat_response when the winning message is live STT
+  tier 2: community_event (raids/gifts/follows) — always wins, even over live STT
+</remarks>
 """
 
 
 class ProposalArbiter:
+    """
+    <summary>
+    Selects the winning proposal from a cycle by applying behaviour weights,
+    priority tier bonuses, and any caller-supplied one-off bonuses.
+    </summary>
+    """
+
     BEHAVIOR_WEIGHTS: dict[str, float] = {
         "chat_response": 1.0,
         "frontend_start": 0.75,
@@ -37,10 +44,17 @@ class ProposalArbiter:
         extra_bonus_by_reason: dict[str, float] | None = None,
     ) -> dict:
         """
-        extra_bonus_by_reason lets a caller inject a one-off additive bonus
-        for a specific behavior's "reason" this cycle (e.g. DecisionEngine
-        passing IdleQuotaTracker's catch-up bonus for "idle_monologue") —
-        this class doesn't need to know why, just that it should be added.
+        <summary>
+        Select the highest-scoring proposal after applying weights, tier bonuses,
+        and any caller-supplied per-reason bonuses.
+        </summary>
+        <param name="proposals">All proposals collected from enabled behaviours this cycle.</param>
+        <param name="extra_bonus_by_reason">
+        Optional one-off additive bonus keyed by reason string (e.g. IdleQuotaTracker's
+        catch-up bonus for 'idle_monologue'). This class does not need to know why —
+        it just adds it.
+        </param>
+        <returns>The proposal dict with the highest composite score.</returns>
         """
         extra_bonus_by_reason = extra_bonus_by_reason or {}
 

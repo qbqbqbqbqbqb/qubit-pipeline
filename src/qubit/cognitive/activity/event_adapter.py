@@ -1,27 +1,31 @@
 """
-EventAdapter - translates raw pipeline Event objects into the canonical
-shapes ActivityTracker and its collaborators work with.
-
+<summary>
+EventAdapter — translates raw pipeline Event objects into the canonical shapes
+that ActivityTracker and its collaborators work with.
+</summary>
+<remarks>
 Isolated here because this is the piece most likely to break when Input
-Processing's event schema shifts — it should be testable against fake
-event objects without touching ActivityTracker's state at all. (This has
-already broken twice during development: once from guessing field names
-before core/events.py was available, once from checking `.data` before the
-direct dataclass attributes. Both classes of bug live in this one file now,
-not scattered through ActivityTracker.)
+Processing's event schema changes. It is testable against fake event objects
+without touching ActivityTracker's state at all.
 
-Community events (raids, subscriptions, follows) use the *_processed
-naming convention because they arrive after ModerationProcessor, which
-sanitises usernames before forwarding them downstream. The orchestrator
-subscribes to the processed variants for the same reason chat does — so
-moderation always runs first.
+Community events (raids, subscriptions, follows) use the *_processed naming
+convention because they arrive after ModerationProcessor, which sanitises
+usernames before forwarding them downstream.
+</remarks>
 """
 
 
 class EventAdapter:
-    # Event type -> canonical source string, used for weighting and queuing.
+    """
+    <summary>
+    Stateless adapter that maps Event objects to the canonical source strings,
+    feature flags, text fields, and detail dicts that ActivityTracker expects.
+    </summary>
+    """
+
+    # Event type -> canonical source string used for weighting and queuing.
     # Community events map to their own source strings so ActivityTracker
-    # can route them to CommunityEventQueue rather than the text priority queue.
+    # routes them to CommunityEventQueue rather than the text priority queue.
     SOURCE_BY_EVENT_TYPE = {
         "stt_processed": "user_input_stt",
         "twitch_chat_processed": "user_input_chat_message",
@@ -35,41 +39,43 @@ class EventAdapter:
     }
     DEFAULT_SOURCE = "other"
 
-    # Source -> feature flag that must be True for this input to be
-    # processed at all. user_event_subscription is deliberately absent here
-    # — see feature_flag_for(), which splits gift vs non-gift subs by
-    # inspecting sub_type, since the event schema has no separate "gift
-    # event" type to route on.
-    # NOTE: follows are bundled under the "raids" toggle by default, same as
-    # non-gift subs — only four toggles (stt/chat/raids/monologue) plus the
-    # gifts split were specified. Give follows their own flag if wanted.
+    # Source -> feature flag that must be True for this input to be processed.
+    # user_event_subscription is absent here — feature_flag_for() splits gift
+    # vs non-gift subs by inspecting sub_type, since the schema has no separate
+    # gift event type to route on.
+    # Follows are bundled under the 'raids' toggle by default.
     FEATURE_FLAG_BY_SOURCE = {
         "user_input_stt": "stt",
         "user_input_chat_message": "chat",
         "user_event_raid": "raids",
         "user_event_follow": "raids",
     }
-    # sub_type values (TwitchSubscriptionEvent/KickSubscriptionEvent.sub_type)
-    # that count as a "gift" for the purposes of the gifts toggle. Adjust if
-    # the actual values used by Input Processing differ (e.g. "gift_sub").
+
+    # sub_type values that count as a gift for the purposes of the gifts toggle.
     GIFT_SUB_TYPES = {"gift"}
 
-    # Sources routed to CommunityEventQueue instead of the text-based
-    # priority queue.
+    # Sources routed to CommunityEventQueue instead of the text priority queue.
     EVENT_SOURCES = {"user_event_raid", "user_event_subscription", "user_event_follow"}
 
     @classmethod
     def get_source(cls, event) -> str:
-        """Map event type to a canonical source string used for weighting and queuing."""
+        """
+        <summary>Map an event's type to a canonical source string.</summary>
+        <param name="event">The Event instance to inspect.</param>
+        <returns>A canonical source string such as 'user_input_stt'.</returns>
+        """
         return cls.SOURCE_BY_EVENT_TYPE.get(event.type, cls.DEFAULT_SOURCE)
 
     @classmethod
     def feature_flag_for(cls, source: str, event) -> str | None:
         """
-        Resolve which feature flag gates this input. Subscriptions are split
-        by sub_type since there's no separate "gift" event type in the
-        schema — TwitchSubscriptionEvent/KickSubscriptionEvent both carry a
-        sub_type field that a gift shows up as (see GIFT_SUB_TYPES).
+        <summary>
+        Resolve which feature flag gates this input. Subscriptions are split by
+        sub_type since there is no separate gift event type in the schema.
+        </summary>
+        <param name="source">Canonical source string for the event.</param>
+        <param name="event">The Event instance, inspected for sub_type when needed.</param>
+        <returns>The feature flag name string, or None if no flag applies.</returns>
         """
         if source == "user_event_subscription":
             sub_type = getattr(event, "sub_type", None)
@@ -77,16 +83,19 @@ class EventAdapter:
                 sub_type = event.data.get("sub_type")
             if (sub_type or "").lower() in cls.GIFT_SUB_TYPES:
                 return "gifts"
-            return "raids"  # non-gift subs bundled with raids by default — split further if needed
+            return "raids"
         return cls.FEATURE_FLAG_BY_SOURCE.get(source)
 
     @classmethod
     def extract_text(cls, event) -> str:
         """
-        TwitchChatEvent/KickChatEvent/SpeechEvent all carry `text` as a
-        direct dataclass field, not inside `.data` — try that first. Falls
-        back to `.data.get("text")` for any event shaped as a generic Event
-        with the payload only in the dict.
+        <summary>
+        Extract the text payload from a chat or STT event. TwitchChatEvent,
+        KickChatEvent, and SpeechEvent all carry 'text' as a direct dataclass
+        field; generic Events fall back to data.get('text').
+        </summary>
+        <param name="event">The Event instance to extract text from.</param>
+        <returns>The text string, or an empty string if not present.</returns>
         """
         text = getattr(event, "text", None)
         if text is not None:
@@ -98,12 +107,21 @@ class EventAdapter:
     @classmethod
     def extract_event_detail(cls, event, source: str) -> dict:
         """
+        <summary>
+        Build a detail dict for a community event using the field names defined
+        in the core Event dataclasses.
+        </summary>
+        <remarks>
         Field names match the real dataclasses in core/events.py:
-        TwitchRaidEvent/KickRaidEvent -> user, viewers (direct attributes).
-        TwitchSubscriptionEvent/KickSubscriptionEvent -> user, tier,
-        sub_type, sub_message (direct attributes) — there's no numeric gift
-        count in the schema, so gifting is represented by sub_type alone.
-        TwitchFollowEvent/KickFollowEvent -> user, followed_at.
+          TwitchRaidEvent/KickRaidEvent        -> user, viewers
+          TwitchSubscriptionEvent/KickSub...   -> user, tier, sub_type, sub_message
+          TwitchFollowEvent/KickFollowEvent    -> user, followed_at
+        There is no numeric gift count in the schema; gifting is represented
+        by sub_type alone.
+        </remarks>
+        <param name="event">The Event instance to extract detail from.</param>
+        <param name="source">Canonical source string identifying the event kind.</param>
+        <returns>A detail dict suitable for CommunityEventQueue.add().</returns>
         """
         username = getattr(event, "user", None)
         if username is None and hasattr(event, "data"):

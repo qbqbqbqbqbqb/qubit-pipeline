@@ -1,17 +1,15 @@
 """
-CommunityEventBehavior - scored proposal for raids, gifted subs, and follows.
+<summary>
+CommunityEventBehavior — scored proposal for raids, gifted subs, and follows.
+</summary>
+<remarks>
+Community events are rarer than chat messages and always take priority over chat,
+monologue, and live STT — see ProposalArbiter.PRIORITY_TIER_BONUS and PRIORITY_TIER.
 
-These are rarer than an ordinary chat message and far rarer than routine
-STT, so they always take priority over both chat and monologue, and also
-over live STT — see DecisionEngine.PRIORITY_TIER_BONUS and this behavior's
-PRIORITY_TIER.
-
-If more than one event is pending when this behavior ticks (e.g. several
-gifted subs land in the same window), they're collated into a single
-acknowledgement instead of firing one response per event. There's no
-explicit "is this spam" detection — it simply reacts to whatever is
-currently pending, so a burst that lands within one decision cycle is
-naturally batched, and a lone event just gets a collation of one.
+Multiple pending events within one decision cycle are collated into a single
+acknowledgement rather than firing one response per event. A lone event produces
+a collation of one.
+</remarks>
 """
 
 from src.qubit.cognitive.behaviours.base import Behavior
@@ -19,10 +17,13 @@ from src.qubit.utils.log_utils import get_logger
 
 
 class CommunityEventBehavior(Behavior):
-    # Always wins against chat/idle/frontend, and against live STT — see
-    # DecisionEngine.PRIORITY_TIER_BONUS. The exact NORMALIZED_SCORE/weight
-    # barely matters once the tier bonus is added; kept at max (1.0) since
-    # a raid or gift genuinely warrants this behavior's full enthusiasm.
+    """
+    <summary>
+    Proposes a community event reaction when one or more pending events are queued.
+    Always wins against chat, idle, and frontend behaviours due to its priority tier.
+    </summary>
+    """
+
     PRIORITY_TIER = 2
     NORMALIZED_SCORE = 1.0
 
@@ -31,6 +32,14 @@ class CommunityEventBehavior(Behavior):
         self.logger = get_logger("CommunityEventBehavior")
 
     async def tick(self, context: dict) -> dict | None:
+        """
+        <summary>
+        Propose a community event reaction if any events are pending.
+        Multiple events are collated into a single topic string.
+        </summary>
+        <param name="context">The cycle context dict from DecisionEngine.</param>
+        <returns>A community_event proposal dict, or None if nothing is pending.</returns>
+        """
         events = context.get("pending_events") or []
         if not events:
             return None
@@ -45,7 +54,7 @@ class CommunityEventBehavior(Behavior):
             "reason": "community_event",
             "priority_tier": self.PRIORITY_TIER,
             "topic": topic,
-            "events": events,  # snapshot — DecisionEngine removes exactly these on execution
+            "events": events,
         }
 
     def _collate(self, events: list[dict]) -> str:
@@ -56,13 +65,12 @@ class CommunityEventBehavior(Behavior):
 
     def _describe(self, event: dict) -> str:
         """
-        event dicts come from ActivityTracker._extract_event_detail(), built
-        from the real TwitchRaidEvent/TwitchSubscriptionEvent (and Kick
-        equivalents) fields: raids carry viewer_count, subs carry tier and
-        sub_type. There's no numeric gift count in the schema — a gift is a
-        subscription whose sub_type is a gift value (see
-        ActivityTracker.GIFT_SUB_TYPES), so it's described qualitatively,
-        not "X gifted 3 subs".
+        <summary>
+        Produce a human-readable description of a single community event detail dict.
+        Raid events carry viewer_count; subscription events carry tier and sub_type.
+        </summary>
+        <param name="event">An event detail dict from ActivityTracker.</param>
+        <returns>A descriptive string for use in the reaction prompt topic.</returns>
         """
         kind = event.get("kind")
         username = event.get("username", "someone")
