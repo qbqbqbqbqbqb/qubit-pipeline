@@ -27,6 +27,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from config.config import MAX_GENERATION_ATTEMPTS
+from src.qubit.processing.common import is_stale
 from src.qubit.core.service import Service
 from src.qubit.models.llm_service import LLMService
 from src.qubit.core.events import PromptAssemblyEvent, ResponseGeneratedEvent, ResponsePromptEvent
@@ -79,7 +80,7 @@ class GenerationCoordinator(Service):
             while not self.app.state.shutdown.is_set():
                 event: ResponsePromptEvent = await self.queue.get()
                 try:
-                    if self._is_stale(event):
+                    if await self._is_stale(event):
                         self.logger.info(
                             "[_run] Dropping stale prompt for %s: %s",
                             event.data.get("user"), event.prompt,
@@ -144,20 +145,15 @@ class GenerationCoordinator(Service):
         if interaction_level:
             self.system_interaction = interaction_level
 
-    def _is_stale(self, event: object) -> bool:
+    async def _is_stale(self, event: object) -> bool:
         """
         <summary>Return True if the event's timestamp is older than max_age.</summary>
+        <remarks>Delegates to processing.common.is_stale — the single staleness
+        implementation shared across all processors.</remarks>
         <param name="event">The event to check.</param>
         <returns>True if the event should be dropped as stale.</returns>
         """
-        ts = getattr(event, "timestamp", None)
-        if ts is None:
-            ts_dt = datetime.now(timezone.utc)
-        elif isinstance(ts, str):
-            ts_dt = datetime.fromisoformat(ts)
-        else:
-            ts_dt = ts
-        return datetime.now(timezone.utc) - ts_dt > self.max_age
+        return await is_stale(event, self.max_age, self.logger, context="generation")
 
     async def _generate_response(self, event: ResponsePromptEvent) -> str:
         """
