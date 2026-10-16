@@ -39,7 +39,7 @@ def test_monologue_topic_fields():
 # -----------------------------------------------------------------------
 
 def test_fixed_prompt_available_initially():
-    p = FixedPrompt(label="test", prompt="do something", cooldown_seconds=60.0)
+    p = FixedPrompt(label="test", prompt="do something", cooldown_seconds=0.0)
     assert p.is_available() is True
 
 

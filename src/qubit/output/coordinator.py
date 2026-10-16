@@ -280,8 +280,10 @@ class OutputCoordinator(Service):
                         self._requeue_front(item, from_priority)
                         continue
 
-                    text = item.get("response")
-                    if text:
+                    for key in ("prompt", "response"):
+                        text = item.get(key)
+                        if not text:
+                            continue
                         await self._handle_text_output(text)
 
                 except asyncio.CancelledError:
