@@ -65,6 +65,12 @@ class GenerationCoordinator(Service):
         self.system_interaction = "high"
         self.max_age = timedelta(seconds=max_age_seconds)
 
+        # Static injections: built once at startup, reused on every generation call.
+        # personality_module and input_module are NOT cached — they depend on
+        # runtime state (mood/tone) and per-request input respectively.
+        self._core_injection = core_system_module()
+        self._stream_type_injection = stream_type_module()
+
     async def _run(self) -> None:
         """
         <summary>
@@ -169,13 +175,13 @@ class GenerationCoordinator(Service):
         self.logger.info("[_generate_response] Assembling prompt for %s", user)
 
         assembler = PromptAssembler()
-        assembler.add(core_system_module())
+        assembler.add(self._core_injection)
         assembler.add(personality_module(
             mood=self.system_mood,
             tone=self.system_tone,
             interaction_level=self.system_interaction,
         ))
-        assembler.add(stream_type_module())
+        assembler.add(self._stream_type_injection)
 
         assembly_event = PromptAssemblyEvent(
             type="prompt_assembly",
