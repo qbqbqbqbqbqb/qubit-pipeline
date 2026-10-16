@@ -185,9 +185,11 @@ class MemoryManager:
                 "reflected": False,
             }
 
-            with self.lock:
-                coll.upsert(ids=[item_id], documents=[content], metadatas=[chroma_meta])
+            def _chroma_upsert():
+                with self.lock:
+                    coll.upsert(ids=[item_id], documents=[content], metadatas=[chroma_meta])
 
+            await self._run_db(_chroma_upsert)
             await self._run_db(
                 self._sqlite_insert,
                 item_id, timestamp, user_id or "Unknown", "chat", "conversation_collection",
@@ -207,13 +209,15 @@ class MemoryManager:
             item_id = str(uuid.uuid4())
             timestamp = datetime.now(timezone.utc).timestamp()
 
-            with self.lock:
-                coll.upsert(
-                    ids=[item_id],
-                    documents=[content],
-                    metadatas=[{"timestamp": timestamp, "type": "reflection"}],
-                )
+            def _chroma_upsert():
+                with self.lock:
+                    coll.upsert(
+                        ids=[item_id],
+                        documents=[content],
+                        metadatas=[{"timestamp": timestamp, "type": "reflection"}],
+                    )
 
+            await self._run_db(_chroma_upsert)
             await self._run_db(
                 self._sqlite_insert,
                 item_id, timestamp, "system", "reflection", "reflections_collection",
@@ -256,8 +260,11 @@ class MemoryManager:
             if not ids:
                 return []
 
-            with self.lock:
-                results = coll.get(ids=ids)
+            def _chroma_get():
+                with self.lock:
+                    return coll.get(ids=ids)
+
+            results = await self._run_db(_chroma_get)
 
             items = []
             for i in range(len(results["ids"])):
