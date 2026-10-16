@@ -17,8 +17,17 @@ Responsibilities:
 
 This processor is intentionally narrow. It does not make decisions about
 whether to respond — that belongs in the Cognitive layer.
+
+Dispatch table:
+  Each entry in _EVENT_SPECS maps an event class to a (output_type,
+  sanitised_fields) descriptor. sanitised_fields is an ordered list of
+  (field_name, default) pairs. A default of None means: drop the event
+  entirely if the field is banned rather than substituting a value.
 </remarks>
 """
+
+import dataclasses
+from typing import Any
 
 from src.qubit.core.event_processor import EventProcessor
 from config.config import BLACKLISTED_WORDS_LIST, WHITELISTED_WORDS_LIST
@@ -31,9 +40,54 @@ from src.qubit.core.events import (
     KickSubscriptionEvent,
     KickRaidEvent,
     KickFollowEvent,
-    Event
+    Event,
 )
 from src.qubit.utils.filter_utils import contains_banned_words
+
+
+# ---------------------------------------------------------------------------
+# Dispatch table
+#
+# Maps each raw event class to:
+#   output_type      — the type string written onto the published event
+#   sanitised_fields — list of (field_name, default) pairs to run through
+#                      _sanitise().  default=None means drop the event when
+#                      the field is banned (used for message text).
+# ---------------------------------------------------------------------------
+_EVENT_SPECS: dict[type, tuple[str, list[tuple[str, Any]]]] = {
+    TwitchChatEvent: (
+        "twitch_chat_processed",
+        [("user", "Someone"), ("text", None)],
+    ),
+    TwitchSubscriptionEvent: (
+        "twitch_subscription_processed",
+        [("user", "Someone"), ("sub_message", "")],
+    ),
+    TwitchRaidEvent: (
+        "twitch_raid_processed",
+        [("user", "Someone")],
+    ),
+    TwitchFollowEvent: (
+        "twitch_follow_processed",
+        [("user", "Someone")],
+    ),
+    KickChatEvent: (
+        "kick_chat_processed",
+        [("user", "Someone"), ("text", None)],
+    ),
+    KickSubscriptionEvent: (
+        "kick_subscription_processed",
+        [("user", "Someone"), ("sub_message", "")],
+    ),
+    KickRaidEvent: (
+        "kick_raid_processed",
+        [("user", "Someone")],
+    ),
+    KickFollowEvent: (
+        "kick_follow_processed",
+        [("user", "Someone")],
+    ),
+}
 
 
 class ModerationProcessor(EventProcessor):
@@ -61,196 +115,77 @@ class ModerationProcessor(EventProcessor):
     async def handle_event(self, event: Event) -> None:
         """
         <summary>
-        Entry point for all raw platform events. Dispatches to the appropriate
-        moderation method based on event type and publishes a clean *_processed variant.
+        Entry point for all raw platform events. Looks up the event class in
+        _EVENT_SPECS, sanitises the declared fields, and publishes a clean
+        *_processed variant. Drops the event silently if any field with
+        default=None is banned, or if the event class is unknown.
         </summary>
         <param name="event">The raw platform event from the bus.</param>
         """
-        if isinstance(event, TwitchChatEvent):
-            self.logger.debug("[handle_event] Moderating twitch chat event: %s", event)
-            await self._moderate_chat(event)
-        elif isinstance(event, TwitchSubscriptionEvent):
-            self.logger.info("[handle_event] Moderating twitch subscription event: %s", event)
-            await self._moderate_subscription(event)
-        elif isinstance(event, TwitchRaidEvent):
-            self.logger.info("[handle_event] Moderating twitch raid event: %s", event)
-            await self._moderate_raid(event)
-        elif isinstance(event, TwitchFollowEvent):
-            self.logger.info("[handle_event] Moderating twitch follow event: %s", event)
-            await self._moderate_follow(event)
-        elif isinstance(event, KickChatEvent):
-            self.logger.debug("[handle_event] Moderating kick chat event: %s", event)
-            await self._moderate_kick_chat(event)
-        elif isinstance(event, KickSubscriptionEvent):
-            self.logger.info("[handle_event] Moderating kick subscription event: %s", event)
-            await self._moderate_kick_subscription(event)
-        elif isinstance(event, KickRaidEvent):
-            self.logger.info("[handle_event] Moderating kick raid event: %s", event)
-            await self._moderate_kick_raid(event)
-        elif isinstance(event, KickFollowEvent):
-            self.logger.info("[handle_event] Moderating kick follow event: %s", event)
-            await self._moderate_kick_follow(event)
-        else:
-            self.logger.warning("[ModerationProcessor] Unknown event type: %s", event.type)
+        spec = _EVENT_SPECS.get(type(event))
+        if spec is None:
+            self.logger.warning("[handle_event] Unknown event type: %s", event.type)
+            return
 
-    async def _moderate_chat(self, event: TwitchChatEvent) -> None:
+        output_type, sanitised_fields = spec
+        await self._moderate(event, output_type, sanitised_fields)
+
+    async def _moderate(
+        self,
+        event: Event,
+        output_type: str,
+        sanitised_fields: list[tuple[str, Any]],
+    ) -> None:
         """
         <summary>
-        Sanitise username and message text, then publish a clean processed event.
-        Drops the event entirely if the message text is blacklisted.
+        Sanitise the declared fields, build a clean copy of the event with the
+        output type, and publish it. Drops the event if any field whose default
+        is None comes back banned.
         </summary>
-        <param name="event">The raw TwitchChatEvent.</param>
+        <param name="event">The raw event to sanitise.</param>
+        <param name="output_type">The type string for the published event.</param>
+        <param name="sanitised_fields">
+            Ordered list of (field_name, default) pairs. default=None means
+            drop the event when that field is banned.
+        </param>
         """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg = self._sanitise(event.text, default=None)
+        overrides: dict[str, Any] = {}
 
-        if not sanitised_msg:
-            self.logger.debug("[_moderate_chat] Dropping blacklisted message from %s", sanitised_user)
-            return
+        for field_name, default in sanitised_fields:
+            raw_value = getattr(event, field_name, None)
+            clean = self._sanitise(raw_value, default=default)
+            if clean is None:
+                self.logger.debug(
+                    "[_moderate] Dropping event %s — banned content in field '%s'",
+                    output_type, field_name,
+                )
+                return
+            overrides[field_name] = clean
 
-        sanitised_event = TwitchChatEvent(
-            type="twitch_chat_processed",
-            data={**event.data, "user": sanitised_user, "text": sanitised_msg},
-            user=sanitised_user,
-            text=sanitised_msg,
-            timestamp=event.timestamp,
+        updated_data = {**event.data, **overrides}
+        sanitised_event = dataclasses.replace(
+            event,
+            type=output_type,
+            data=updated_data,
+            **overrides,
         )
         await self.event_bus.publish(sanitised_event)
 
-    async def _moderate_subscription(self, event: TwitchSubscriptionEvent) -> None:
-        """
-        <summary>Sanitise subscription events (user and optional sub message).</summary>
-        <param name="event">The raw TwitchSubscriptionEvent.</param>
-        """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg = self._sanitise(event.sub_message, default="")
-
-        sanitised_event = TwitchSubscriptionEvent(
-            type="twitch_subscription_processed",
-            data={**event.data, "user": sanitised_user, "sub_message": sanitised_msg},
-            user=sanitised_user,
-            tier=event.tier,
-            sub_type=event.sub_type,
-            sub_message=sanitised_msg,
-            timestamp=event.timestamp
-        )
-        await self.event_bus.publish(sanitised_event)
-
-    async def _moderate_raid(self, event: TwitchRaidEvent) -> None:
-        """
-        <summary>Sanitise raid events (mainly the raider username).</summary>
-        <param name="event">The raw TwitchRaidEvent.</param>
-        """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-
-        sanitised_event = TwitchRaidEvent(
-            type="twitch_raid_processed",
-            data={**event.data, "user": sanitised_user},
-            user=sanitised_user,
-            viewers=event.viewers,
-            timestamp=event.timestamp
-        )
-        await self.event_bus.publish(sanitised_event)
-
-    async def _moderate_follow(self, event: TwitchFollowEvent) -> None:
-        """
-        <summary>Sanitise follow events (mainly the follower username).</summary>
-        <param name="event">The raw TwitchFollowEvent.</param>
-        """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-
-        sanitised_event = TwitchFollowEvent(
-            type="twitch_follow_processed",
-            data={**event.data, "user": sanitised_user},
-            user=sanitised_user,
-            followed_at=event.followed_at,
-            timestamp=event.timestamp
-        )
-        await self.event_bus.publish(sanitised_event)
-
-    async def _moderate_kick_chat(self, event: KickChatEvent) -> None:
-        """
-        <summary>Sanitise Kick chat events (username and text). Drops event if text is blacklisted.</summary>
-        <param name="event">The raw KickChatEvent.</param>
-        """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg = self._sanitise(event.text, default=None)
-
-        if not sanitised_msg:
-            self.logger.debug("[_moderate_kick_chat] Dropping blacklisted message from %s", sanitised_user)
-            return
-
-        sanitised_event = KickChatEvent(
-            type="kick_chat_processed",
-            data={**event.data, "user": sanitised_user, "text": sanitised_msg},
-            user=sanitised_user,
-            text=sanitised_msg,
-            timestamp=event.timestamp,
-        )
-        await self.event_bus.publish(sanitised_event)
-
-    async def _moderate_kick_subscription(self, event: KickSubscriptionEvent) -> None:
-        """
-        <summary>Sanitise Kick subscription events (user and optional sub message).</summary>
-        <param name="event">The raw KickSubscriptionEvent.</param>
-        """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-        sanitised_msg = self._sanitise(event.sub_message, default="")
-
-        sanitised_event = KickSubscriptionEvent(
-            type="kick_subscription_processed",
-            data={**event.data, "user": sanitised_user, "sub_message": sanitised_msg},
-            user=sanitised_user,
-            tier=event.tier,
-            sub_type=event.sub_type,
-            sub_message=sanitised_msg,
-            timestamp=event.timestamp
-        )
-        await self.event_bus.publish(sanitised_event)
-
-    async def _moderate_kick_raid(self, event: KickRaidEvent) -> None:
-        """
-        <summary>Sanitise Kick raid events (mainly the raider username).</summary>
-        <param name="event">The raw KickRaidEvent.</param>
-        """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-
-        sanitised_event = KickRaidEvent(
-            type="kick_raid_processed",
-            data={**event.data, "user": sanitised_user},
-            user=sanitised_user,
-            viewers=event.viewers,
-            timestamp=event.timestamp
-        )
-        await self.event_bus.publish(sanitised_event)
-
-    async def _moderate_kick_follow(self, event: KickFollowEvent) -> None:
-        """
-        <summary>Sanitise Kick follow events (mainly the follower username).</summary>
-        <param name="event">The raw KickFollowEvent.</param>
-        """
-        sanitised_user = self._sanitise(event.user, default="Someone")
-
-        sanitised_event = KickFollowEvent(
-            type="kick_follow_processed",
-            data={**event.data, "user": sanitised_user},
-            user=sanitised_user,
-            followed_at=event.followed_at,
-            timestamp=event.timestamp
-        )
-        await self.event_bus.publish(sanitised_event)
-
-    def _sanitise(self, value: str, default: str = "") -> str:
+    def _sanitise(self, value: str | None, default: Any = "") -> Any:
         """
         <summary>
-        Return default if value contains banned words, otherwise return value unchanged.
+        Return default if value is None or contains banned words, otherwise
+        return value unchanged. A default of None signals drop-on-ban to the
+        caller rather than substitution.
         </summary>
         <param name="value">The string to check (username or message text).</param>
         <param name="default">Value to return when banned content is detected.</param>
         <returns>The sanitised string or the default.</returns>
         """
+        if value is None:
+            return default
         return default if contains_banned_words(
             value,
             BLACKLISTED_WORDS_LIST,
-            WHITELISTED_WORDS_LIST
+            WHITELISTED_WORDS_LIST,
         ) else value
