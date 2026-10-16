@@ -13,9 +13,10 @@ and publishes a ResponseGeneratedEvent.
 Owns:
   - Input queue for pending generation requests
   - Staleness filtering (drop prompts older than max_age_seconds)
-  - Retry logic via generate_with_retries
   - System personality state (mood, tone, interaction level)
   - Background _run loop that drains the queue
+
+Retry logic is delegated to LLMService.generate_with_retries.
 
 All other layers treat this as a black box: publish a ResponsePromptEvent,
 later receive a ResponseGeneratedEvent.
@@ -24,8 +25,8 @@ later receive a ResponseGeneratedEvent.
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
+from config.config import MAX_GENERATION_ATTEMPTS
 from src.qubit.core.service import Service
 from src.qubit.models.llm_service import LLMService
 from src.qubit.core.events import PromptAssemblyEvent, ResponseGeneratedEvent, ResponsePromptEvent
@@ -143,35 +144,7 @@ class GenerationCoordinator(Service):
         if interaction_level:
             self.system_interaction = interaction_level
 
-    async def generate_with_retries(self, prompt: str, max_attempts: int = 3) -> Any:
-        """
-        <summary>
-        Attempt to generate a non-empty response from the LLM, retrying up to max_attempts times.
-        </summary>
-        <param name="prompt">The fully assembled prompt string.</param>
-        <param name="max_attempts">Maximum number of attempts before returning a fallback string.</param>
-        <returns>The generated response string, or a fallback error string on total failure.</returns>
-        """
-        for attempt in range(1, max_attempts + 1):
-            self.logger.info("[generate_with_retries][Attempt %s] prompt: %s", attempt, prompt)
-            try:
-                response = await self.llm_service.generate(
-                    profile=self.main_profile,
-                    input=prompt,
-                )
-                if response and response.strip():
-                    self.logger.info("[generate_with_retries][Attempt %s] response: %s", attempt, response)
-                    return response
-                self.logger.warning("[generate_with_retries][Attempt %s] Empty response, retrying...", attempt)
-            except Exception as e:
-                self.logger.error("[generate_with_retries][Attempt %s] LLM error: %s", attempt, e)
-
-            await asyncio.sleep(1)
-
-        self.logger.error("[generate_with_retries] All %s attempts failed for prompt: %s", max_attempts, prompt)
-        return "Sorry, I couldn't generate a response right now."
-
-    def _is_stale(self, event: Any) -> bool:
+    def _is_stale(self, event: object) -> bool:
         """
         <summary>Return True if the event's timestamp is older than max_age.</summary>
         <param name="event">The event to check.</param>
@@ -226,7 +199,11 @@ class GenerationCoordinator(Service):
             self.logger.info("[_generate_response] Injection (%s): %s", inj.priority, inj.content[:80])
 
         final_prompt = assembler.build()
-        return await self.generate_with_retries(final_prompt, max_attempts=3)
+        return await self.llm_service.generate_with_retries(
+            profile=self.main_profile,
+            input=final_prompt,
+            max_attempts=MAX_GENERATION_ATTEMPTS,
+        )
 
     async def _publish_response(self, event: ResponsePromptEvent, response: str) -> None:
         """
