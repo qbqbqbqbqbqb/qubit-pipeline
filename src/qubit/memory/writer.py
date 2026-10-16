@@ -29,13 +29,16 @@ class MemoryWriter(EventProcessor):
     """
 
     SUBSCRIPTIONS = {
-        "twitch_chat_processed": "handle_event",
+        # Chat and STT: subscribe to filtered variants so only deduplicated,
+        # non-stale messages are written to memory.
+        "twitch_chat_filtered": "handle_event",
+        "kick_chat_filtered": "handle_event",
+        "stt_filtered": "handle_event",
+        # Community events skip ConversationProcessor and stay on *_processed.
         "twitch_subscription_processed": "handle_event",
         "twitch_follow_processed": "handle_event",
-        "kick_chat_processed": "handle_event",
         "kick_subscription_processed": "handle_event",
         "kick_follow_processed": "handle_event",
-        "stt_processed": "handle_event",
         "monologue_prompt": "handle_event",
         "response_generated": "handle_event",
     }
@@ -51,13 +54,13 @@ class MemoryWriter(EventProcessor):
         self.stt_speaker_name = stt_speaker_name
 
         self.routes = {
-            "twitch_chat_processed": self._chat_memory,
+            "twitch_chat_filtered": self._chat_memory,
+            "kick_chat_filtered": self._chat_memory,
+            "stt_filtered": self._stt_memory,
             "twitch_subscription_processed": self._event_memory,
             "twitch_follow_processed": self._event_memory,
-            "kick_chat_processed": self._chat_memory,
             "kick_subscription_processed": self._event_memory,
             "kick_follow_processed": self._event_memory,
-            "stt_processed": self._stt_memory,
             "monologue_prompt": self._monologue_memory,
             "response_generated": self._response_memory,
         }

@@ -27,9 +27,11 @@ class EventAdapter:
     # Community events map to their own source strings so ActivityTracker
     # routes them to CommunityEventQueue rather than the text priority queue.
     SOURCE_BY_EVENT_TYPE = {
-        "stt_processed": "user_input_stt",
-        "twitch_chat_processed": "user_input_chat_message",
-        "kick_chat_processed": "user_input_chat_message",
+        # Chat and STT arrive via ConversationProcessor as *_filtered events.
+        "stt_filtered": "user_input_stt",
+        "twitch_chat_filtered": "user_input_chat_message",
+        "kick_chat_filtered": "user_input_chat_message",
+        # Community events skip ConversationProcessor and stay on *_processed.
         "twitch_raid_processed": "user_event_raid",
         "twitch_subscription_processed": "user_event_subscription",
         "twitch_follow_processed": "user_event_follow",

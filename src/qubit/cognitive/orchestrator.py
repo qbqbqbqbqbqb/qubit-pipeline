@@ -39,9 +39,11 @@ class CognitiveOrchestrator(Service):
     """
 
     SUBSCRIPTIONS = {
-        "twitch_chat_processed": "_handle_input",
-        "kick_chat_processed": "_handle_input",
-        "stt_processed": "_handle_input",
+        # Chat and STT arrive after ConversationProcessor dedup/staleness filter.
+        "twitch_chat_filtered": "_handle_input",
+        "kick_chat_filtered": "_handle_input",
+        "stt_filtered": "_handle_input",
+        # Community events are not conversational and skip ConversationProcessor.
         "twitch_raid_processed": "_handle_input",
         "twitch_subscription_processed": "_handle_input",
         "twitch_follow_processed": "_handle_input",
