@@ -122,10 +122,12 @@ def test_pick_high_activity_biases_reactive(selector):
 
 
 def test_pick_recent_response_biases_followup(selector):
+    # Sample size of 100 gives a stable signal — a weight bias should consistently
+    # produce at least 10 conversational_followup picks without relying on luck.
     ctx = _context(activity=1.0, time_since_response=10.0)
-    labels = [selector.pick(ctx).label for _ in range(30)]
+    labels = [selector.pick(ctx).label for _ in range(100)]
     followup = sum(1 for l in labels if l == "conversational_followup")
-    assert followup >= 5
+    assert followup >= 10
 
 
 def test_pick_fixed_prompt_uses_is_fixed_flag(selector):

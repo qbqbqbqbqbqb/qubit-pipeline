@@ -110,6 +110,9 @@ class ModerationProcessor(EventProcessor):
     }
 
     def __init__(self):
+        """
+        <summary>Initialise the moderation processor and register it with the event bus.</summary>
+        """
         super().__init__("moderation processor")
 
     async def handle_event(self, event: Event) -> None:

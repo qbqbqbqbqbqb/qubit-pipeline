@@ -16,9 +16,10 @@ Must remain free of:
   - Write routing (that lives in MemoryWriter)
   - Prompt assembly (MemoryService contributes injections via the bus)
 
-SQLite calls are all wrapped in run_in_executor so they do not block the
-asyncio event loop. The lock (threading.Lock) is held inside the executor
-thread, not on the async side.
+All blocking I/O — both SQLite and ChromaDB — is dispatched through
+_run_db (run_in_executor) so the asyncio event loop is never stalled.
+The threading.Lock is always acquired inside the executor thread, never
+on the async side.
 </remarks>
 """
 
@@ -105,9 +106,12 @@ class MemoryManager:
 
     async def _run_db(self, fn, *args, **kwargs):
         """
-        <summary>Run a blocking SQLite call in the default thread pool executor.</summary>
-        <param name="fn">The blocking function to call.</param>
-        <returns>The function's return value.</returns>
+        <summary>
+        Run any blocking store call (SQLite or ChromaDB) in the default thread pool
+        executor so it does not stall the asyncio event loop.
+        </summary>
+        <param name="fn">The blocking callable to run off the event loop.</param>
+        <returns>The callable's return value.</returns>
         """
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, partial(fn, *args, **kwargs))
@@ -186,6 +190,12 @@ class MemoryManager:
             }
 
             def _chroma_upsert():
+                """
+                <summary>
+                Blocking ChromaDB upsert. Runs in the thread pool via _run_db
+                so it does not block the event loop.
+                </summary>
+                """
                 with self.lock:
                     coll.upsert(ids=[item_id], documents=[content], metadatas=[chroma_meta])
 
@@ -210,6 +220,12 @@ class MemoryManager:
             timestamp = datetime.now(timezone.utc).timestamp()
 
             def _chroma_upsert():
+                """
+                <summary>
+                Blocking ChromaDB upsert for the reflections collection. Runs in
+                the thread pool via _run_db so it does not block the event loop.
+                </summary>
+                """
                 with self.lock:
                     coll.upsert(
                         ids=[item_id],
@@ -261,6 +277,12 @@ class MemoryManager:
                 return []
 
             def _chroma_get():
+                """
+                <summary>
+                Blocking ChromaDB get by id list. Runs in the thread pool via
+                _run_db so it does not block the event loop.
+                </summary>
+                """
                 with self.lock:
                     return coll.get(ids=ids)
 

@@ -44,26 +44,63 @@ def wired_writer(writer, bus):
     return writer
 
 
-async def test_chat_event_calls_add_conversation_item(wired_writer, bus, memory_service):
-    await bus.publish(_event("twitch_chat_processed", user="viewer1", text="hello"))
+# -----------------------------------------------------------------------
+# Chat events — MemoryWriter now subscribes to *_filtered variants.
+# -----------------------------------------------------------------------
+
+async def test_twitch_chat_filtered_calls_add_conversation_item(wired_writer, bus, memory_service):
+    """twitch_chat_filtered (post-ConversationProcessor) must be stored."""
+    await bus.publish(_event("twitch_chat_filtered", user="viewer1", text="hello"))
     memory_service.add_conversation_item.assert_called_once()
     args = memory_service.add_conversation_item.call_args
-    assert args.kwargs.get("role") == "User" or args.args[0] == "User"
-
-
-async def test_stt_event_stored_as_user_role(wired_writer, bus, memory_service):
-    await bus.publish(_event("stt_processed", text="I said something", user="streamer"))
-    memory_service.add_conversation_item.assert_called_once()
-    call_args = memory_service.add_conversation_item.call_args
-    role = call_args.args[0] if call_args.args else call_args.kwargs.get("role")
+    role = args.args[0] if args.args else args.kwargs.get("role")
     assert role == "User"
 
+
+async def test_kick_chat_filtered_calls_add_conversation_item(wired_writer, bus, memory_service):
+    """kick_chat_filtered must be stored with User role."""
+    await bus.publish(_event("kick_chat_filtered", user="kickviewer", text="hi from kick"))
+    memory_service.add_conversation_item.assert_called_once()
+    args = memory_service.add_conversation_item.call_args
+    role = args.args[0] if args.args else args.kwargs.get("role")
+    assert role == "User"
+
+
+async def test_stt_filtered_stored_as_user_role(wired_writer, bus, memory_service):
+    """stt_filtered must be stored with User role."""
+    await bus.publish(_event("stt_filtered", text="I said something", user="streamer"))
+    memory_service.add_conversation_item.assert_called_once()
+    args = memory_service.add_conversation_item.call_args
+    role = args.args[0] if args.args else args.kwargs.get("role")
+    assert role == "User"
+
+
+# -----------------------------------------------------------------------
+# Unfiltered chat events must NOT be stored — the writer no longer listens
+# to *_processed variants for chat/stt.
+# -----------------------------------------------------------------------
+
+async def test_twitch_chat_processed_not_stored(wired_writer, bus, memory_service):
+    """twitch_chat_processed (pre-filter) must not reach MemoryWriter."""
+    await bus.publish(_event("twitch_chat_processed", user="viewer1", text="hello"))
+    memory_service.add_conversation_item.assert_not_called()
+
+
+async def test_stt_processed_not_stored(wired_writer, bus, memory_service):
+    """stt_processed (pre-filter) must not reach MemoryWriter."""
+    await bus.publish(_event("stt_processed", text="I said something", user="streamer"))
+    memory_service.add_conversation_item.assert_not_called()
+
+
+# -----------------------------------------------------------------------
+# Other event types — unchanged routing.
+# -----------------------------------------------------------------------
 
 async def test_response_event_stored_as_qubit_role(wired_writer, bus, memory_service):
     await bus.publish(_event("response_generated", response="I replied", source="chat", prompt="hello"))
     memory_service.add_conversation_item.assert_called_once()
-    call_args = memory_service.add_conversation_item.call_args
-    role = call_args.args[0] if call_args.args else call_args.kwargs.get("role")
+    args = memory_service.add_conversation_item.call_args
+    role = args.args[0] if args.args else args.kwargs.get("role")
     assert role == "Qubit"
 
 
@@ -87,13 +124,8 @@ async def test_follow_event_stored(wired_writer, bus, memory_service):
     memory_service.add_conversation_item.assert_called_once()
 
 
-async def test_kick_chat_event_stored(wired_writer, bus, memory_service):
-    await bus.publish(_event("kick_chat_processed", user="kickviewer", text="hi from kick"))
-    memory_service.add_conversation_item.assert_called_once()
-
-
-async def test_writer_without_bus_does_not_crash(writer, memory_service):
-    # Not registered on any bus — direct handle_event call should still work
-    event = _event("twitch_chat_processed", user="viewer1", text="hello")
+async def test_writer_direct_handle_filtered_event(writer, memory_service):
+    """Direct handle_event call with a *_filtered event must store it."""
+    event = _event("twitch_chat_filtered", user="viewer1", text="hello")
     await writer.handle_event(event)
     memory_service.add_conversation_item.assert_called_once()

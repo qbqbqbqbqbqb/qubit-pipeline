@@ -1,8 +1,9 @@
 """Tests for ModerationProcessor, ConversationProcessor, AutonomousPromptProcessor."""
 
 import pytest
+import dataclasses
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from src.qubit.core.event_bus import EventBus
 from src.qubit.core.events import (
     TwitchChatEvent, TwitchRaidEvent, TwitchFollowEvent, TwitchSubscriptionEvent,
@@ -45,14 +46,21 @@ def _raw_kick_raid(user="raider", viewers=50):
     )
 
 
-def _processed_chat(text="hello", user="viewer1", platform="twitch"):
-    e = MagicMock()
-    e.type = f"{platform}_chat_processed"
-    e.text = text
-    e.user = user
-    e.timestamp = _ts()
-    e.data = {"text": text, "user": user}
-    return e
+def _processed_twitch_chat(text="hello", user="viewer1"):
+    """Return a real TwitchChatEvent with *_processed type for ConversationProcessor tests."""
+    return TwitchChatEvent(
+        type="twitch_chat_processed", timestamp=_ts(),
+        data={"text": text, "user": user}, user=user, text=text,
+    )
+
+
+def _processed_stt(text="hello", user="streamer"):
+    """Return a real dataclass-based STT event mock for ConversationProcessor tests."""
+    # STT events share the same fields as TwitchChatEvent for test purposes.
+    return TwitchChatEvent(
+        type="stt_processed", timestamp=_ts(),
+        data={"text": text, "user": user}, user=user, text=text,
+    )
 
 
 def _monologue_event(prompt="talk about something"):
@@ -145,8 +153,10 @@ class TestModerationProcessor:
 
 class TestConversationProcessor:
     """
-    ConversationProcessor deduplicates and age-filters processed chat events.
-    It does NOT publish — it only gates on whether to forward to memory.
+    ConversationProcessor deduplicates and age-filters *_processed chat/stt
+    events, then re-publishes survivors as *_filtered events.
+    Downstream consumers (CognitiveOrchestrator, MemoryWriter) subscribe to
+    *_filtered, so this processor is the real gatekeeper.
     """
 
     @pytest.fixture
@@ -159,33 +169,76 @@ class TestConversationProcessor:
         p.register_subscriptions(bus)
         return p
 
-    async def test_fresh_event_passes_through(self, processor):
-        event = _processed_chat()
-        # Should not raise and should not be filtered
-        await processor.handle_event(event)
+    async def test_fresh_event_published_as_filtered(self, processor, bus):
+        """A fresh, unique event must be re-published with the *_filtered type."""
+        published = []
+        async def capture(e): published.append(e)
+        bus.subscribe("twitch_chat_filtered", capture)
 
-    async def test_stale_event_filtered(self, processor):
-        event = _processed_chat()
-        event.timestamp = "2020-01-01T00:00:00+00:00"
-        # No assertion needed — just confirm no exception and message is dropped silently
-        await processor.handle_event(event)
+        await processor.handle_event(_processed_twitch_chat())
 
-    async def test_duplicate_message_deduplicated(self, processor):
-        event = _processed_chat(text="same message here")
-        await processor.handle_event(event)
-        # Second identical message — tracker should recognise it as repeated
-        event2 = _processed_chat(text="same message here")
-        # If _is_repeated works, this returns early without processing
-        result = processor._is_repeated("same message here")
-        assert result is True
+        assert len(published) == 1
+        assert published[0].type == "twitch_chat_filtered"
+
+    async def test_stale_event_not_published(self, processor, bus):
+        """An event with an old timestamp must be dropped and nothing published."""
+        published = []
+        async def capture(e): published.append(e)
+        bus.subscribe("twitch_chat_filtered", capture)
+
+        stale = _processed_twitch_chat()
+        stale = dataclasses.replace(stale, timestamp="2020-01-01T00:00:00+00:00")
+        await processor.handle_event(stale)
+
+        assert not published
+
+    async def test_duplicate_message_not_published(self, processor, bus):
+        """A second identical message must be dropped by the dedup filter."""
+        published = []
+        async def capture(e): published.append(e)
+        bus.subscribe("twitch_chat_filtered", capture)
+
+        await processor.handle_event(_processed_twitch_chat(text="same message here"))
+        published.clear()
+        await processor.handle_event(_processed_twitch_chat(text="same message here"))
+
+        assert not published
 
     async def test_fresh_unique_message_not_repeated(self, processor):
-        result = processor._is_repeated("brand new message")
-        assert result is False
+        """A message that has never been seen must not be flagged as repeated."""
+        assert processor._is_repeated("brand new message") is False
 
-    async def test_empty_text_handled(self, processor):
-        event = _processed_chat(text="")
-        await processor.handle_event(event)
+    async def test_empty_text_published(self, processor, bus):
+        """An empty-text event is not a duplicate and should still be published."""
+        published = []
+        async def capture(e): published.append(e)
+        bus.subscribe("twitch_chat_filtered", capture)
+
+        await processor.handle_event(_processed_twitch_chat(text=""))
+
+        assert len(published) == 1
+
+    async def test_stt_event_published_as_stt_filtered(self, processor, bus):
+        """stt_processed must map to stt_filtered, not twitch_chat_filtered."""
+        published = []
+        async def capture(e): published.append(e)
+        bus.subscribe("stt_filtered", capture)
+
+        await processor.handle_event(_processed_stt())
+
+        assert len(published) == 1
+        assert published[0].type == "stt_filtered"
+
+    async def test_filtered_event_preserves_user_and_text(self, processor, bus):
+        """The *_filtered event must carry the same user and text as the input."""
+        published = []
+        async def capture(e): published.append(e)
+        bus.subscribe("twitch_chat_filtered", capture)
+
+        await processor.handle_event(_processed_twitch_chat(text="hi there", user="alice"))
+
+        assert published[0].user == "alice"
+        assert published[0].text == "hi there"
 
 
 # -----------------------------------------------------------------------

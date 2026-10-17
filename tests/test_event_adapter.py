@@ -17,18 +17,25 @@ def _event(type_, **attrs):
 # --- get_source ---
 
 def test_get_source_twitch_chat():
-    e = _event("twitch_chat_processed")
+    # EventAdapter receives *_filtered events — chat/stt arrive post-ConversationProcessor.
+    e = _event("twitch_chat_filtered")
     assert EventAdapter.get_source(e) == "user_input_chat_message"
 
 
 def test_get_source_kick_chat():
-    e = _event("kick_chat_processed")
+    e = _event("kick_chat_filtered")
     assert EventAdapter.get_source(e) == "user_input_chat_message"
 
 
 def test_get_source_stt():
-    e = _event("stt_processed")
+    e = _event("stt_filtered")
     assert EventAdapter.get_source(e) == "user_input_stt"
+
+
+def test_get_source_twitch_chat_processed_is_unknown():
+    # *_processed chat events no longer reach EventAdapter — confirm they resolve to DEFAULT_SOURCE.
+    e = _event("twitch_chat_processed")
+    assert EventAdapter.get_source(e) == EventAdapter.DEFAULT_SOURCE
 
 
 def test_get_source_twitch_raid():

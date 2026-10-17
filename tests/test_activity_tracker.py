@@ -7,8 +7,9 @@ from src.qubit.core.runtime_state import FeatureFlags
 
 
 def _chat_event(text="hello", user="viewer1"):
+    # ActivityTracker receives *_filtered events — chat arrives post-ConversationProcessor.
     e = MagicMock()
-    e.type = "twitch_chat_processed"
+    e.type = "twitch_chat_filtered"
     e.text = text
     e.user = user
     e.data = {"text": text, "user": user}
@@ -16,8 +17,9 @@ def _chat_event(text="hello", user="viewer1"):
 
 
 def _stt_event(text="streamer talking"):
+    # ActivityTracker receives *_filtered events — STT arrives post-ConversationProcessor.
     e = MagicMock()
-    e.type = "stt_processed"
+    e.type = "stt_filtered"
     e.text = text
     e.data = {"text": text}
     return e
