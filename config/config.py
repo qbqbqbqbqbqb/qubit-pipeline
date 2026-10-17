@@ -43,6 +43,9 @@ TTS_SUBTITLE_NAME = "TTS_Subtitles"
 
 # === Project Root & External Data Files ===
 ROOT = get_root()
+# The TTS model lives at the project root, one level above src/.
+# ROOT resolves to src/, so the model path goes up one directory.
+TTS_MODEL_PATH = get_file_path(ROOT.parent, TTS_MODEL_NAME)
 
 # Instructions (unused)
 INSTRUCTIONS_FILENAME = "instructions.txt"
