@@ -103,7 +103,7 @@ class TwitchEventsMixin:
             await self.event_bus.publish(event)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("[_on_subscription] Error handling subscription event: %s", e)
+            self.logger.error("[_on_subscription] Error handling subscription event: %s", e)
 
     async def _on_raid(self: Any, event: EventData) -> None:
         raid_enabled = self.app.state.features.raids
@@ -151,7 +151,7 @@ class TwitchEventsMixin:
             await self.event_bus.publish(event)
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("[_on_follow] Error handling follow event: %s", e)
+            self.logger.error("[_on_follow] Error handling follow event: %s", e)
 
     async def _on_ready(self: Any, event: EventData) -> None:
         """
@@ -171,9 +171,9 @@ class TwitchEventsMixin:
         try:
             self.logger.info("[_on_ready] Bot ready, joining channel...")
             await event.chat.join_room(self.settings.twitch_channel)
-            logger.info("[_on_ready] Joined channel: %s", self.settings.twitch_channel)
+            self.logger.info("[_on_ready] Joined channel: %s", self.settings.twitch_channel)
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("[_on_ready] Failed to join channel: %s", e)
+            self.logger.error("[_on_ready] Failed to join channel: %s", e)
 
     async def _on_message(self: Any, msg: ChatMessage) -> None:
         """
@@ -198,7 +198,7 @@ class TwitchEventsMixin:
             user = msg.user.name
             message = msg.text.strip()
 
-            logger.debug("[_on_message] Message from %s: %s", user, message)
+            self.logger.debug("[_on_message] Message from %s: %s", user, message)
 
             source = "twitch"
 
@@ -213,4 +213,4 @@ class TwitchEventsMixin:
             self.logger.info("[_on_message] Chat message published to broker")
 
         except Exception as e:  # pylint: disable=broad-exception-caught
-            logger.error("[_on_message] Error handling message: %s", e)
+            self.logger.error("[_on_message] Error handling message: %s", e)

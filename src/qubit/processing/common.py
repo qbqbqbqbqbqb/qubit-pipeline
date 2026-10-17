@@ -16,6 +16,10 @@ thin and obviously correct.
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from src.qubit.utils.log_utils import get_logger
+
+logger = get_logger(__name__)
+
 
 async def is_stale(event: Any, max_age: timedelta, logger: Any, context: str = "") -> bool:
     """

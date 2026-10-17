@@ -58,9 +58,20 @@ async def run_app(app) -> None:
     ))
 
     # Phase 6 — wait for shutdown.
+    # loop.add_signal_handler is not available on Windows (raises NotImplementedError).
+    # Fall back to signal.signal with call_soon_threadsafe so the asyncio Event
+    # is set safely from the signal handler thread.
     loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, app.state.shutdown.set)
-    loop.add_signal_handler(signal.SIGTERM, app.state.shutdown.set)
+    def _request_shutdown(*_):
+        loop.call_soon_threadsafe(app.state.shutdown.set)
+
+    try:
+        loop.add_signal_handler(signal.SIGINT, _request_shutdown)
+        loop.add_signal_handler(signal.SIGTERM, _request_shutdown)
+    except NotImplementedError:
+        # Windows — use the stdlib signal module instead.
+        signal.signal(signal.SIGINT, _request_shutdown)
+        signal.signal(signal.SIGTERM, _request_shutdown)
 
     await app.state.shutdown.wait()
     logger.info("[run_app] Shutdown signal received — stopping services.")
