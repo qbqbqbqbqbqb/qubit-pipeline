@@ -48,7 +48,7 @@ class MemoryService(Service):
 
     SUBSCRIPTIONS = {"prompt_assembly": "handle_prompt_assembly"}
 
-    def __init__(self, base_path: str = ".", llm_service: LLMService = None):
+    def __init__(self, base_path: str = ".", llm_service: LLMService = None, runtime_state=None):
         """
         <summary>
         Initialise the persistent stores, index, and all collaborators.
@@ -59,6 +59,7 @@ class MemoryService(Service):
         """
         super().__init__("MemoryService")
 
+        self.runtime_state = runtime_state
         self.base_path = Path(base_path)
         self.memories_dir = self.base_path / "memories"
         self.memories_dir.mkdir(exist_ok=True)
@@ -180,11 +181,17 @@ class MemoryService(Service):
         Contribute memory-based injections to a prompt assembly event.
         Appends at most two injections: recent chat history and recent reflections.
         This is the only place MemoryService participates in prompt construction.
+        When the memory_read feature flag is disabled, no injections are added so
+        the LLM generates without any stored context.
         </summary>
         <param name="event">The PromptAssemblyEvent to contribute injections to.</param>
         """
         if not hasattr(event, "contributions"):
             event.contributions = []
+
+        if self.runtime_state and not self.runtime_state.features.memory_read:
+            self.logger.debug("[handle_prompt_assembly] memory_read disabled — skipping RAG injection")
+            return
 
         chat_history = await self.get_recent_chat_history()
         chat_inj = chat_memory_module(chat_history)

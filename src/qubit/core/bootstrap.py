@@ -49,10 +49,11 @@ async def create_app() -> App:
     app.state.llm_service = llm_service
 
     # Memory
-    memory_service = MemoryService(llm_service=llm_service)
+    memory_service = MemoryService(llm_service=llm_service, runtime_state=app.state)
     memory_writer = MemoryWriter(
         memory_service,
         stt_speaker_name=settings.stt_speaker_name,
+        runtime_state=app.state,
     )
 
     # Processing — register subscriptions here, not in service.start(),
@@ -61,7 +62,7 @@ async def create_app() -> App:
     moderation_processor = ModerationProcessor()
     conversation_processor = ConversationProcessor(max_age_seconds=30)
     autonomous_prompt_processor = AutonomousPromptProcessor(max_age_seconds=30)
-    frontend_command_processor = FrontendCommandProcessor()
+    frontend_command_processor = FrontendCommandProcessor(runtime_state=app.state)
 
     for processor in (
         moderation_processor,

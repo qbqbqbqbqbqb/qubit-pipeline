@@ -29,6 +29,8 @@ class FeatureFlags:
     monologue: bool = True
     vtube_studio: bool = True
     png_output: bool = False
+    memory_read: bool = True
+    memory_write: bool = True
 
 
 class RuntimeState:

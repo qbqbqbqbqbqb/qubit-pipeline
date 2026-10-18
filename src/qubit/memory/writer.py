@@ -43,7 +43,7 @@ class MemoryWriter(EventProcessor):
         "response_generated": "handle_event",
     }
 
-    def __init__(self, memory_service: Any, stt_speaker_name: str = "Speaker"):
+    def __init__(self, memory_service: Any, stt_speaker_name: str = "Speaker", runtime_state=None):
         """
         <summary>Initialise the writer with its target memory service and STT speaker name.</summary>
         <param name="memory_service">The MemoryService instance to write to.</param>
@@ -52,6 +52,7 @@ class MemoryWriter(EventProcessor):
         super().__init__("memory writer")
         self.memory_service = memory_service
         self.stt_speaker_name = stt_speaker_name
+        self.runtime_state = runtime_state
 
         self.routes = {
             "twitch_chat_filtered": self._chat_memory,
@@ -67,10 +68,19 @@ class MemoryWriter(EventProcessor):
 
     async def handle_event(self, event) -> None:
         """
-        <summary>Route an incoming event to the appropriate memory storage method.</summary>
+        <summary>
+        Route an incoming event to the appropriate memory storage method.
+        When the memory_write feature flag is disabled, the event is acknowledged
+        but not persisted — the LLM still responds, but nothing is stored.
+        </summary>
         <param name="event">The event to store.</param>
         """
         self.logger.info("[handle_event] Handling memory event %s", event)
+
+        if self.runtime_state and not self.runtime_state.features.memory_write:
+            self.logger.debug("[handle_event] memory_write disabled — skipping write for %s", getattr(event, "type", None))
+            return
+
         event_type = getattr(event, "type", None)
 
         handler = self.routes.get(event_type)
