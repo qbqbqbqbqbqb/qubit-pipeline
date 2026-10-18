@@ -190,7 +190,7 @@ class OutputCoordinator(Service):
         is_priority = self._is_priority_event(event)
         target_queue = self.priority_queue if is_priority else self.queue
 
-        if event.source in ("twitch_chat_processed", "kick_chat_processed") and event.prompt:
+        if event.source in ("twitch_chat_filtered", "kick_chat_filtered") and event.prompt:
             item = {
                 "prompt": event.prompt,
                 "response": event.response,

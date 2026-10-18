@@ -76,13 +76,20 @@ class DialogueSanitiser:
                 response = response[len(f"{prefix}:"):].lstrip()
         return response
 
+    # Punctuation characters that are safe to strip from the start of a response.
+    # < and > are excluded so emoticons like <3, <333, </3 are preserved.
+    _STRIPPABLE_LEADING = set(string.punctuation + " ") - {"<", ">"}
+
     def strip_leading_punctuation(self: Any, text: str) -> str:
         """
-        <summary>Remove leading punctuation characters and whitespace from text.</summary>
+        <summary>
+        Remove leading punctuation characters and whitespace from text.
+        Preserves leading angle brackets so emoticons like &lt;3 and &lt;/3 are not eaten.
+        </summary>
         <param name="text">Input text to clean.</param>
         <returns>Text with leading punctuation and spaces removed.</returns>
         """
         i = 0
-        while i < len(text) and text[i] in string.punctuation + " ":
+        while i < len(text) and text[i] in self._STRIPPABLE_LEADING:
             i += 1
         return text[i:]
