@@ -29,6 +29,7 @@ MODEL_REGISTRY: dict[str, ModelConfig] = {
         load_in_4bit=True,
         trust_remote_code=False,
         use_chat_template=True,
+        default_prompt_formatter="chat_template",
         extra_eos_tokens=["<|eot_id|>", "<|end_of_text|>"],
         generation_config=GenerationConfig(
             temperature=1.14,

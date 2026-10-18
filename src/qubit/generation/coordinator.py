@@ -200,10 +200,20 @@ class GenerationCoordinator(Service):
         for inj in assembly_event.contributions:
             self.logger.info("[_generate_response] Injection (%s): %s", inj.priority, inj.content[:80])
 
-        final_prompt = assembler.build()
+        # build_parts() splits the assembled injections into (system_text, user_text)
+        # at the USER_INPUT_PRIORITY boundary so chat-template formatters (e.g. stheno)
+        # receive a properly structured conversation rather than a flat string.
+        # Raw/non-chat models fall back to the naive role:content join in RawStringFormatter.
+        system_text, user_text = assembler.build_parts()
+        messages = []
+        if system_text:
+            messages.append({"role": "system", "content": system_text})
+        if user_text:
+            messages.append({"role": "user", "content": user_text})
+
         return await self.llm_service.generate_with_retries(
             profile=self.main_profile,
-            input=final_prompt,
+            input=messages,
             max_attempts=MAX_GENERATION_ATTEMPTS,
         )
 

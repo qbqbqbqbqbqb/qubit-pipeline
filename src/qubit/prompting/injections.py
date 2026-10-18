@@ -2,6 +2,13 @@
 
 from dataclasses import dataclass
 
+# Injections at or below this priority are treated as the user turn when a
+# chat-template formatter splits the assembled prompt into system + user.
+# Everything above this threshold becomes part of the system message.
+# input_module uses priority=10 which sits at this boundary.
+USER_INPUT_PRIORITY = 10
+
+
 @dataclass
 class PromptInjection:
     """
@@ -14,6 +21,8 @@ class PromptInjection:
     Attributes:
         content (str): The text content of the injection.
         priority (int): Ordering priority (higher values come first).
+            Injections at or below USER_INPUT_PRIORITY are the user turn;
+            everything above is the system context.
     """
     content: str
     priority: int = 0
