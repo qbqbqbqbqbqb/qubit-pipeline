@@ -53,14 +53,26 @@ class DialogueSanitiser:
         filtered = filter_banned_words(response, self.blacklist, self.whitelist)
         return True, filtered
 
+    # Conjunctions and similar words that indicate a mid-clause truncation when
+    # they appear at the end of the response with no following sentence boundary.
+    _DANGLING_TAIL = re.compile(
+        r"\s*\b(and|but|or|so|because|although|however|yet|while|since|then|also|though|if|as)\W*$",
+        re.IGNORECASE,
+    )
+
     def remove_trailing_text(self: Any, response: str) -> str:
         """
-        <summary>Trim text after the final sentence-ending punctuation (., !, ?).</summary>
-        <param name="response">The response string to trim.</param>
-        <returns>The response truncated at the last sentence boundary.</returns>
+        <summary>
+        Strip a dangling conjunction or connective from the end of a response
+        that indicates a mid-clause token-limit truncation (e.g. "I love streaming and").
+        Does not truncate at sentence boundaries — full sentences are left intact.
+        </summary>
+        <param name="response">The response string to clean.</param>
+        <returns>The response with any trailing conjunction removed, or the original
+        string if no dangling tail is found.</returns>
         """
-        match = re.search(r"[.!?](?!.*[.!?])", response)
-        return response[:match.end()].strip() if match else response.strip()
+        stripped = self._DANGLING_TAIL.sub("", response).strip()
+        return stripped if stripped else response.strip()
 
     def remove_bot_name(self: Any, response: str) -> str:
         """

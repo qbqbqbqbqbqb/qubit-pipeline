@@ -127,7 +127,8 @@ class OutputCoordinator(Service):
         after_bot = self.dialogue_sanitiser.remove_bot_name(filtered_response)
         _log_mutation("remove_bot_name", filtered_response, after_bot)
 
-        after_trailing = after_bot
+        after_trailing = self.dialogue_sanitiser.remove_trailing_text(after_bot)
+        _log_mutation("remove_trailing_text", after_bot, after_trailing)
 
         response_clean = self.dialogue_sanitiser.strip_leading_punctuation(after_trailing)
         _log_mutation("strip_leading_punctuation", after_trailing, response_clean)
