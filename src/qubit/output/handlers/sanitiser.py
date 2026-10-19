@@ -90,7 +90,8 @@ class DialogueSanitiser:
 
     # Punctuation characters that are safe to strip from the start of a response.
     # < and > are excluded so emoticons like <3, <333, </3 are preserved.
-    _STRIPPABLE_LEADING = set(string.punctuation + " ") - {"<", ">"}
+    # * is excluded so *action* emotes like *giggles* and *waves at camera* are preserved.
+    _STRIPPABLE_LEADING = set(string.punctuation + " ") - {"<", ">", "*"}
 
     def strip_leading_punctuation(self: Any, text: str) -> str:
         """

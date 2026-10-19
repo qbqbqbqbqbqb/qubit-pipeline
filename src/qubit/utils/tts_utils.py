@@ -10,6 +10,25 @@ import inflect
 p = inflect.engine()
 from config.config import ACRONYMS_LIST
 
+def fix_mojibake(text: str) -> str:
+    """
+    <summary>
+    Detect and repair UTF-8 text that was incorrectly decoded as latin-1 (mojibake).
+    The model tokenizer occasionally outputs UTF-8 byte sequences that get
+    misinterpreted, turning emoji like 😜 into garbled strings like ðŸ˜œ.
+    Attempts to re-encode as latin-1 and decode as UTF-8; falls back to the
+    original string if the round-trip fails or produces no improvement.
+    </summary>
+    <param name="text">The text to check and repair.</param>
+    <returns>The repaired string, or the original if no repair was needed.</returns>
+    """
+    try:
+        fixed = text.encode("latin-1").decode("utf-8")
+        return fixed
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
 def normalise_text_for_tts(text: str) -> str:
     """
     Normalizes the input text for TTS by applying a series of transformations including
@@ -22,6 +41,7 @@ def normalise_text_for_tts(text: str) -> str:
     Returns:
         str: The normalized text suitable for TTS.
     """
+    text = fix_mojibake(text)
     text = remove_brackets_and_parentheses(text)
     text = remove_unsupported_chars(text)
     text = remove_quotes(text)
