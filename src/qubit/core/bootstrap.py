@@ -19,6 +19,7 @@ from src.qubit.output.handlers.vtube import VtubeStudioHandler
 from src.qubit.processing.moderation import ModerationProcessor
 from src.qubit.processing.conversation import ConversationProcessor
 from src.qubit.processing.autonomous import AutonomousPromptProcessor
+from src.qubit.processing.chat_logger import ChatLogger
 
 from src.qubit.generation.coordinator import GenerationCoordinator
 
@@ -63,6 +64,7 @@ async def create_app() -> App:
     conversation_processor = ConversationProcessor(max_age_seconds=30)
     autonomous_prompt_processor = AutonomousPromptProcessor(max_age_seconds=30)
     frontend_command_processor = FrontendCommandProcessor(runtime_state=app.state)
+    chat_logger = ChatLogger(runtime_state=app.state)
 
     for processor in (
         moderation_processor,
@@ -70,6 +72,7 @@ async def create_app() -> App:
         autonomous_prompt_processor,
         frontend_command_processor,
         memory_writer,
+        chat_logger,
     ):
         processor.register_subscriptions(app.event_bus)
 
