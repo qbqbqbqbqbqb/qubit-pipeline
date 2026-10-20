@@ -1,26 +1,21 @@
-# Generation Layer
+# generation/
 
-This is the **single owner** of turning a high-level decision into an actual LLM call and `ResponseGeneratedEvent`.
+Prompt assembly and LLM execution. Converts a `ResponsePromptEvent` into a `ResponseGeneratedEvent`.
+
+## Files
+
+| File | Responsibility |
+|---|---|
+| `coordinator.py` | `GenerationCoordinator` — `Service` that owns the generation queue, assembles prompts via `PromptAssembler`, calls `LLMService`, and publishes the result |
 
 ## Responsibilities
 
-- Own the queue of pending generation intents (`ResponsePromptEvent`)
-- Assemble the final prompt (using `PromptAssembler` + all injections)
-- Call the LLM via `LLMService`
-- Publish the resulting `ResponseGeneratedEvent`
+- Maintains an async queue of pending `ResponsePromptEvent` items.
+- Drops stale requests (older than `max_age_seconds`) before processing.
+- Holds system personality state (mood, tone, interaction level) injected into every prompt.
+- Delegates prompt construction to `prompting/`.
+- Delegates model execution to `models/`.
 
-## Key Components
+## Invariant
 
-- `GenerationCoordinator` — the central `Service` with queue + `_run` loop
-- Uses `PromptAssembler` + modules from `prompting/`
-- Triggers memory RAG via `PromptAssemblyEvent`
-
-## Design Rules
-
-- Nothing outside this layer should directly call the LLM for chat/monologue responses.
-- All prompt construction for generation intents funnels through here (or emits `ResponsePromptEvent` to it).
-- The coordinator is intentionally a `Service` because it owns a queue and background processing.
-
-## Flow
-
-`response_prompt` event → `enqueue` → queue → `_generate_response` (assemble + LLM) → `_publish_response` → `ResponseGeneratedEvent`
+This package has no knowledge of which platform a message came from, or whether Qubit should respond at all. Those decisions belong in `cognitive/`. `GenerationCoordinator` executes whatever it receives.

@@ -1,24 +1,29 @@
-# Memory Layer
+# memory/
 
-Split responsibility between writing and everything else.
+Persistent memory — stores significant moments from streams and surfaces them as context during generation.
 
-## Components
+## Files
 
-| Component             | Type           | Responsibility |
-|-----------------------|----------------|----------------|
-| `MemoryWriter`        | `EventProcessor` | Pure writes to storage from events |
-| `MemoryService`       | `Service`      | Owns Chroma + SQLite, public RAG getters, background reflection job |
-| `MemoryManager`       | -              | Low-level collection management |
-| `ReflectionsGenerator`| -              | Background Q&A reflection creation |
+| File | Responsibility |
+|---|---|
+| `service.py` | `MemoryService` — owns ChromaDB + SQLite stores, runs background reflection jobs, exposes recent history for RAG, injects memory into prompt assembly events |
+| `memory_manager.py` | CRUD operations against ChromaDB and the SQLite index |
+| `reflections_generator.py` | `ReflectionGenerator` — uses the `reflection` LLM profile to synthesise higher-level memories from raw entries |
+| `writer.py` | `MemoryWriter` — `EventProcessor` that subscribes to `*_filtered` and `response_generated` events and routes writes to `MemoryService`; the only component that decides what gets stored |
 
-## Design Rules
+## Storage
 
-- **Only `MemoryWriter`** may write to persistent storage from the event system.
-- `MemoryService` provides read access for RAG (`get_recent_chat_history`, etc.).
-- RAG injection happens via the `prompt_assembly` event (not direct calls from generation).
-- Reflections run as a background job inside `MemoryService._run`.
+| Store | Contents |
+|---|---|
+| ChromaDB | Embedding-indexed memory entries for semantic retrieval |
+| SQLite | Lightweight index of entry metadata (timestamps, types) |
 
-## Current State (Post-Refactor)
+Both stores live under the path configured in `env_config.settings`.
 
-- `MemoryHandler` (old router) has been removed from production.
-- Clear separation between write path and read/RAG path.
+## Read / write flags
+
+`FeatureFlags.memory_read` and `memory_write` gate retrieval and storage independently, toggled live from the frontend. When `memory_write` is off, `MemoryWriter` is a no-op. When `memory_read` is off, `MemoryService` skips the retrieval step during prompt assembly.
+
+## Invariant
+
+`MemoryWriter` is the only entry point for writes. No other component calls `MemoryService` write methods directly.

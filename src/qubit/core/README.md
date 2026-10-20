@@ -1,32 +1,23 @@
-# Core / Runtime Layer
+# core/
 
-This package contains the fundamental runtime and wiring components.
+Application lifecycle and shared infrastructure. Everything else depends on this package; this package depends on nothing inside `qubit/`.
 
-## Responsibilities
+## Files
 
-- Application lifecycle (`App`, `Service`)
-- Event distribution (`EventBus`)
-- Shared mutable runtime state (`RuntimeState`)
-- Central bootstrap / dependency wiring (`bootstrap.py`)
-- Long-running service orchestration
+| File | Responsibility |
+|---|---|
+| `app.py` | `App` — top-level container; holds `state`, `event_bus`, and the service registry |
+| `bootstrap.py` | Wires every service and processor together; the only place construction order is defined |
+| `event_bus.py` | `EventBus` — async pub/sub; typed string event names, async handler dispatch |
+| `event_processor.py` | `EventProcessor` — abstract base for stateless event consumers; subclasses declare `SUBSCRIPTIONS` |
+| `events.py` | All typed `Event` dataclasses used across the application |
+| `runtime.py` | `Runtime` — drives `asyncio` lifecycle; starts and stops services in registration order |
+| `runtime_state.py` | `RuntimeState` + `FeatureFlags` — shared mutable state (lifecycle events, feature toggles) |
+| `server.py` | `WebSocketServerService` — WebSocket server on `ws://0.0.0.0:8765`; bridges the frontend control panel to the event bus |
+| `service.py` | `Service` — abstract base for long-lived async services; subclasses implement `start()` / `stop()` |
 
-## Key Types
+## Key invariants
 
-| Type                | Role                                      | Notes |
-|---------------------|-------------------------------------------|-------|
-| `Service`           | Base for anything that owns a `_run` loop or connection | Has `start`/`stop` + lifecycle |
-| `EventProcessor`    | Pure reactor that reacts to events        | No loop, just `handle_event` |
-| `EventBus`          | Central pub/sub                           | Global singleton in most runs |
-| `RuntimeState`      | Single source of truth for flags + `ai_*` state | `features`, `ai_speaking`, `ai_thinking`, etc. |
-| `App`               | Lightweight container of services         | Mostly for wiring and shutdown coordination |
-
-## Design Rules
-
-- Only `Runtime` + `WebSocketServerService` should own long-running loops in core.
-- `RuntimeState` must be the **only** place that holds cross-cutting boolean/timing state.
-- `bootstrap.py` is intentionally the only place that knows how all the pieces are wired together.
-
-## See Also
-
-- `bootstrap.py` for the current wiring
-- Individual layer READMEs for how their components are registered
+- `FeatureFlags` is the single source of truth for every runtime toggle. Add new flags here, nowhere else.
+- Events are the only permitted cross-layer communication. No service holds a direct reference to another service.
+- `bootstrap.py` is the only file allowed to import from every layer. Keep it flat; construction logic does not belong elsewhere.

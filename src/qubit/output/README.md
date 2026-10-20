@@ -1,30 +1,36 @@
-# Output Layer
+# output/
 
-Owns final delivery of generated responses.
+Delivery layer. Receives `ResponseGeneratedEvent` and drives all output channels: voice, OBS scene control, VTube Studio, PNG model, and audio playback.
 
-## Responsibilities
+## Files
 
-- Sanitise dialogue (banned words, bot name removal, etc.)
-- Own the output queue + staleness logic
-- Drive `ai_speaking` / `ai_thinking` state on `RuntimeState`
-- Coordinate leaf handlers: TTS, OBS subtitles, optional VTube mouth animation
+| File | Responsibility |
+|---|---|
+| `coordinator.py` | `OutputCoordinator` — `Service` that owns the split output queue (priority + normal), manages `ai_speaking` state, delegates to all handlers |
+| `tts_manager.py` | `TTSManager` — manages TTS engine lifecycle and audio rendering |
 
-## Key Components
+## `handlers/`
 
-- `OutputCoordinator` — the `Service` that owns the queue and speaking state
-- `DialogueSanitiser` (in `handlers/`)
-- Leaf handlers in `output/handlers/`:
-  - `tts.py`
-  - `obs.py`
-  - `vtube.py`
-  - `sanitiser.py`
+Each handler is a self-contained leaf responsible for one output channel.
 
-## Design Rules
+| File | Handler | Channel |
+|---|---|---|
+| `tts.py` | `TTSHandler` | Text-to-speech audio synthesis and playback |
+| `obs.py` | `OBSHandler` | OBS WebSocket — scene switching, source visibility |
+| `vtube.py` | `VtubeStudioHandler` | VTube Studio WebSocket — model expression and motion |
+| `png.py` | `PNGOutputHandler` | PNG model — frame switching for the browser-source avatar |
+| `audio_player.py` | `AudioFilePlayer` | Manual audio file playback triggered from the frontend |
+| `sanitiser.py` | `DialogueSanitiser` | Strips TTS-unfriendly characters and formatting before synthesis |
 
-- This layer is the **only** place that should set/clear `ai_speaking`.
-- The coordinator coordinates — it does **not** contain synthesis or websocket logic.
-- All actual work is delegated to the small pure handlers in `handlers/`.
+## Queue model
 
-## Flow
+`OutputCoordinator` maintains two deques:
 
-`ResponseGeneratedEvent` → sanitise + memory forward → queue → drain loop → call handlers → speaking state management
+- **priority_queue** — community-event reactions (raids, gifts, follows). Drained first, longer staleness allowance.
+- **queue** — everything else. Normal staleness cutoff.
+
+Both queues are capped (`maxlen`) to prevent unbounded growth if output stalls.
+
+## Invariant
+
+No handler imports from `cognitive/`, `generation/`, or `processing/`. Handlers receive only what `OutputCoordinator` passes them and never inspect the originating event type to make decisions.

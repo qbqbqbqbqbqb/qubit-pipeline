@@ -1,30 +1,39 @@
-# Input Processing Layer
+# processing/
 
-This layer contains **pure** `EventProcessor`s that transform, filter, and normalise raw input events.
+Input processing layer. Sits between raw platform events and the cognitive layer. All processors are stateless `EventProcessor` subclasses — they receive events and publish new ones; they do not hold service state or make decisions.
 
-## Responsibilities
+## Files
 
-- Deduplication
-- Staleness filtering
-- Moderation
-- Memory side-effects (forwarding to `MemoryWriter`)
-- Converting certain events into high-level intents for the Cognitive or Generation layers
+| File | Responsibility |
+|---|---|
+| `common.py` | Shared utilities: `is_stale()` staleness check used by multiple processors |
+| `moderation.py` | `ModerationProcessor` — first pass; filters banned words, sanitises usernames and text, emits `*_processed` events |
+| `conversation.py` | `ConversationProcessor` — second pass; deduplicates via `MessageTracker`, drops stale messages, emits `*_filtered` events |
+| `autonomous.py` | `AutonomousPromptProcessor` — handles monologue prompt events; applies staleness filtering before forwarding to generation |
+| `chat_logger.py` | `ChatLogger` — appends filtered messages to `logs/chat_training.jsonl` when the `chat_logging` feature flag is on |
 
-## Current Processors
+## Event flow
 
-| Processor                    | Trigger Events                          | Does |
-|------------------------------|-----------------------------------------|------|
-| `ConversationProcessor`      | `twitch_chat_processed`, subs, raids, follows | Dedup + staleness + memory forward |
-| `AutonomousPromptProcessor`  | `monologue_prompt`, `start_message`     | Staleness + memory + emits `ResponsePromptEvent` |
-| `ModerationProcessor`        | Raw chat events                         | Basic sanitisation / filtering |
-| `FrontendCommandProcessor`   | Frontend commands                       | Normalises and emits events |
+```
+twitch_chat / kick_chat / stt_processed
+        │
+        ▼
+ ModerationProcessor  ──►  *_processed
+        │
+        ▼
+ ConversationProcessor  ──►  *_filtered
+        │
+        ├──►  CognitiveOrchestrator (via ActivityTracker)
+        ├──►  MemoryWriter
+        └──►  ChatLogger  (if chat_logging == True)
+```
 
-## Design Rules
+## Training log (`chat_logger.py`)
 
-- These are **pure reactors** — no loops, no queues.
-- They should only publish events or forward to `MemoryWriter`.
-- Prompt construction for monologues now lives here (emits `ResponsePromptEvent` directly).
+Output: `logs/chat_training.jsonl` — one JSON object per line.
 
-## Naming
+```json
+{"timestamp": "2026-10-20T14:00:00+00:00", "source": "twitch", "user": "someone", "text": "hello"}
+```
 
-Use `*Processor` for anything in this layer.
+Toggle via the **Chat Logging** button in the frontend control panel. Off by default. STT events are logged with `"user": "streamer"`.
