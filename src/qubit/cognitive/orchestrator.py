@@ -131,19 +131,10 @@ class CognitiveOrchestrator(Service):
 
     def _should_run_cycle(self) -> bool:
         """
-        <summary>Return True if the app has started and output is not currently speaking.</summary>
+        <summary>Return True if the app has started.</summary>
         <returns>True when a decision cycle should execute.</returns>
         """
-        if not self.app.state.start.is_set():
-            return False
-        return not self._is_output_busy()
-
-    def _is_output_busy(self) -> bool:
-        """
-        <summary>Return True while OutputCoordinator is actively speaking (TTS running).</summary>
-        <returns>True if ai_speaking is set on RuntimeState.</returns>
-        """
-        return self.app.state.ai_speaking.is_set()
+        return self.app.state.start.is_set()
 
     def toggle_monologue(self, enabled: bool) -> None:
         """
