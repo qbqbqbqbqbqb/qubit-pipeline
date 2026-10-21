@@ -111,6 +111,11 @@ class SpeechEvent(Event):
 # ---------------------------------------------------------------------------
 
 @dataclass
+class StreamEndEvent(Event):
+    """<summary>Fired by the server when the frontend triggers end_stream. Stops input processing and queues the farewell monologue.</summary>"""
+
+
+@dataclass
 class MonologueEvent(Event):
     """<summary>Autonomous monologue prompt trigger from the cognitive layer.</summary>"""
     user: str

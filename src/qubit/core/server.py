@@ -7,9 +7,11 @@ WebSocket server service for frontend communication and state broadcasting.
 import asyncio
 import dataclasses
 import json
+from datetime import datetime, timezone
 
 import websockets
 
+from src.qubit.core.events import Event
 from src.qubit.core.service import Service
 
 
@@ -93,21 +95,6 @@ class WebSocketServerService(Service):
             else:
                 self.logger.warning("[_handle_message] Unknown feature flag: %s", flag)
 
-        elif action == "initialize":
-            self.logger.info("[_handle_message] Initialize command from frontend — loading models")
-            llm_service = getattr(self.app.state, "llm_service", None)
-            if llm_service is None:
-                self.logger.error("[_handle_message] initialize: llm_service not on runtime state")
-                return
-            try:
-                for profile in llm_service.list_profiles():
-                    self.logger.info("[_handle_message] Loading profile: %s", profile)
-                    await llm_service.ensure_loaded(profile)
-                self.logger.info("[_handle_message] All models loaded")
-            except Exception as exc:
-                self.logger.error("[_handle_message] Model load failed: %s", exc)
-            await self.broadcast_states()
-
         elif action == "start":
             self.logger.info("[_handle_message] Start command from frontend")
             for k, v in data.get("features", {}).items():
@@ -121,6 +108,16 @@ class WebSocketServerService(Service):
         elif action == "terminate":
             self.logger.info("[_handle_message] Terminate command from frontend")
             self.app.state.shutdown.set()
+
+        elif action == "end_stream":
+            self.logger.info("[_handle_message] End stream command from frontend — halting input processing")
+            self.app.state.features.processing_active = False
+            await self.app.event_bus.publish(Event(
+                type="bot_end_stream",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                data={"command": "end_stream", "source": "frontend"},
+            ))
+            await self.broadcast_states()
 
         elif action == "play_audio":
             file_path = data.get("file_path")

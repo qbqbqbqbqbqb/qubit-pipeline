@@ -32,6 +32,7 @@ class FeatureFlags:
     memory_read: bool = True
     memory_write: bool = True
     chat_logging: bool = False
+    processing_active: bool = True
 
 
 class RuntimeState:

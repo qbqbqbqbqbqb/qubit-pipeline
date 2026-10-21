@@ -28,6 +28,7 @@ class FrontendCommandProcessor(EventProcessor):
 
     SUBSCRIPTIONS = {
         "bot_started": "handle_event",
+        "bot_end_stream": "handle_event",
         "frontend_command": "handle_event",
     }
 
@@ -56,7 +57,12 @@ class FrontendCommandProcessor(EventProcessor):
         <param name="event">The raw event received from the bus.</param>
         """
         raw_command = event.data.get("command", event.type).lower().strip()
-        command = "start" if raw_command in ("bot_started", "start", "bot_start") else raw_command
+        if raw_command in ("bot_started", "start", "bot_start"):
+            command = "start"
+        elif raw_command in ("bot_end_stream", "end_stream"):
+            command = "end_stream"
+        else:
+            command = raw_command
 
         if not command:
             return

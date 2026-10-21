@@ -32,6 +32,10 @@ class FrontendTriggeredMonologueBehavior(Behavior):
             "Share a random fun fact about yourself as an AI, about streaming, or about "
             "something genuinely interesting. Keep it snappy."
         ),
+        "end_stream": (
+            "Say goodbye to the stream. Thank the viewers for watching, be warm and genuine. "
+            "Keep it short — this is a sign-off, not a recap."
+        ),
     }
     DEFAULT_PROMPT = (
         "Say something interesting or fun — your choice. Keep it natural and in character."
