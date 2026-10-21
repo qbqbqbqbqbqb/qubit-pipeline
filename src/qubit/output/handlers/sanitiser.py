@@ -12,7 +12,7 @@ import re
 import string
 from typing import Any
 
-from config.config import BOT_NAME
+from config.settings import BOT_NAME
 from src.qubit.utils.log_utils import get_logger
 from src.qubit.utils.filter_utils import filter_banned_words
 

@@ -16,7 +16,7 @@ import json
 from typing import Any
 import websocket
 
-from config.config import TTS_SUBTITLE_NAME
+from config.settings import TTS_SUBTITLE_NAME
 from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger("OBS_Websocket_Controller")

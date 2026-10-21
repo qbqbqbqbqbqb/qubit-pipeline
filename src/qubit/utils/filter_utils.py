@@ -2,7 +2,7 @@ import difflib
 from pathlib import Path
 import re
 from src.qubit.utils.log_utils import get_logger
-from config.config import BOT_NAME
+
 
 logger = get_logger("Filter_Utils")
 
@@ -101,5 +101,3 @@ def filter_banned_words(text: str, blacklist: list[str], whitelist: list[str] = 
 
     tokens = re.findall(r'\w+|\W+', text)
     return ''.join(replace_banned_in_word(token) for token in tokens)
-
-

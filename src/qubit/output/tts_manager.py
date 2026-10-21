@@ -8,9 +8,11 @@ and maintaining the voice instance used by TTSHandler for synthesis.
 </remarks>
 """
 
+from pathlib import Path
+
 from piper import PiperVoice
 from src.qubit.utils.log_utils import get_logger
-from config.config import TTS_MODEL_PATH
+from config.settings import TTS_MODEL_NAME
 
 
 class TTSManager:
@@ -28,7 +30,7 @@ class TTSManager:
         </summary>
         """
         self.logger = get_logger("TTSManager")
-        self.model_path = TTS_MODEL_PATH
+        self.model_path = Path(__file__).resolve().parents[4] / TTS_MODEL_NAME
         self.voice = None
         self._load_model()
 

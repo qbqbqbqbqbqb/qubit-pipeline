@@ -21,7 +21,7 @@ import numpy as np
 from piper import SynthesisConfig
 import pyaudio
 
-from config.config import TTS_SPEAKER_NAME
+from config.settings import TTS_SPEAKER_NAME
 from src.qubit.utils.tts_utils import normalise_text_for_tts
 from src.qubit.output.tts_manager import TTSManager
 from src.qubit.utils.log_utils import get_logger

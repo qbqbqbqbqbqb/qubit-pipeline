@@ -26,7 +26,7 @@ later receive a ResponseGeneratedEvent.
 import asyncio
 from datetime import datetime, timedelta, timezone
 
-from config.config import MAX_GENERATION_ATTEMPTS
+from config.settings import DEFAULT_MOOD, DEFAULT_TONE, DEFAULT_INTERACTION_LEVEL
 from src.qubit.processing.common import is_stale
 from src.qubit.core.service import Service
 from src.qubit.models.llm_service import LLMService
@@ -60,9 +60,9 @@ class GenerationCoordinator(Service):
         self.llm_service = llm_service
         self.main_profile = main_profile
         self.queue: asyncio.Queue = asyncio.Queue()
-        self.system_mood = "energetic"
-        self.system_tone = "casual and humorous"
-        self.system_interaction = "high"
+        self.system_mood = DEFAULT_MOOD
+        self.system_tone = DEFAULT_TONE
+        self.system_interaction = DEFAULT_INTERACTION_LEVEL
         self.max_age = timedelta(seconds=max_age_seconds)
 
         # Static injections: built once at startup, reused on every generation call.
