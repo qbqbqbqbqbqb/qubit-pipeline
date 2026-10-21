@@ -125,10 +125,7 @@ class KickListener(Service, KickAuthMixin, KickEventsMixin):
                 await self.chat_ws.close()
             except Exception:
                 pass
-        if self.kick_bot:
-            await self.kick_bot.close()
-        if self.kick_streamer:
-            await self.kick_streamer.close()
+        # kick_bot and kick_streamer are token dicts, not client objects — no .close() needed.
         self.connected = False
         self.logger.info("[stop] Kick disconnected.")
         await super().stop()
