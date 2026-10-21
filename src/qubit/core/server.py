@@ -93,6 +93,21 @@ class WebSocketServerService(Service):
             else:
                 self.logger.warning("[_handle_message] Unknown feature flag: %s", flag)
 
+        elif action == "initialize":
+            self.logger.info("[_handle_message] Initialize command from frontend — loading models")
+            llm_service = getattr(self.app.state, "llm_service", None)
+            if llm_service is None:
+                self.logger.error("[_handle_message] initialize: llm_service not on runtime state")
+                return
+            try:
+                for profile in llm_service.list_profiles():
+                    self.logger.info("[_handle_message] Loading profile: %s", profile)
+                    await llm_service.ensure_loaded(profile)
+                self.logger.info("[_handle_message] All models loaded")
+            except Exception as exc:
+                self.logger.error("[_handle_message] Model load failed: %s", exc)
+            await self.broadcast_states()
+
         elif action == "start":
             self.logger.info("[_handle_message] Start command from frontend")
             for k, v in data.get("features", {}).items():
