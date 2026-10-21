@@ -326,7 +326,14 @@ class OutputCoordinator(Service):
 
             if self.tts_handler:
                 self.logger.info("[_handle_text_output] Speaking: %s", text)
-                await self.tts_handler.speak(text)
+                features = self.app.state.features if self.app else None
+                vts_active = (
+                    features
+                    and features.vtube_studio
+                    and self.vtube_studio_handler is not None
+                )
+                on_amplitude = self.vtube_studio_handler.inject_mouth if vts_active else None
+                await self.tts_handler.speak(text, on_amplitude=on_amplitude)
 
         finally:
             if self.app:
