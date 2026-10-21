@@ -1,21 +1,8 @@
 """
-<summary>
 Shared pure helpers for input processing.
-</summary>
-<remarks>
-Contains the only logic shared between multiple input processors:
-  - Staleness checking based on event timestamp and max_age.
-  - Forwarding events to the memory handler.
-
-Both are intentionally free functions with no side effects beyond logging
-and calling the provided memory_writer. This keeps individual processors
-thin and obviously correct.
-</remarks>
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
-
 from src.qubit.utils.log_utils import get_logger
 
 logger = get_logger(__name__)
@@ -44,18 +31,3 @@ async def is_stale(event: Any, max_age: timedelta, logger: Any, context: str = "
         logger.debug("[%s] Dropping stale message: %s", prefix, event.data.get("text", "")[:80])
         return True
     return False
-
-
-async def forward_to_memory(event: Any, memory_writer: Any, logger: Any) -> None:
-    """
-    <summary>
-    Forward the event to the memory writer if one is configured.
-    Pure delegation with logging; no transformation is performed.
-    </summary>
-    <param name="event">The event to forward.</param>
-    <param name="memory_writer">The MemoryWriter instance, or None.</param>
-    <param name="logger">Logger for the info message.</param>
-    """
-    if memory_writer:
-        logger.info("[forward_to_memory] Forwarding %s to memory", getattr(event, "type", "unknown"))
-        await memory_writer.handle_event(event)

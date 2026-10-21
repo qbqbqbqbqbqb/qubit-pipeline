@@ -165,16 +165,6 @@ class MemoryService(Service):
         """<summary>Return the 3 most recent reflection Q&A items for RAG injection.</summary>"""
         return await self.memory_manager.get_recent_items("reflections", limit=3)
 
-    def _get_chat_memory_injection(self):
-        """<summary>Return a PromptInjection for recent chat history, or None.</summary>"""
-        history = self.get_recent_chat_history()
-        return chat_memory_module(history)
-
-    def _get_reflection_memory_injection(self):
-        """<summary>Return a PromptInjection for recent reflections, or None.</summary>"""
-        reflections = self.get_recent_reflections()
-        return reflection_memory_module(reflections)
-
     async def handle_prompt_assembly(self, event: PromptAssemblyEvent) -> None:
         """
         <summary>

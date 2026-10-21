@@ -130,16 +130,4 @@ class CognitiveOrchestrator(Service):
             await asyncio.sleep(self.DECISION_INTERVAL_SECONDS)
 
     def _should_run_cycle(self) -> bool:
-        """
-        <summary>Return True if the app has started.</summary>
-        <returns>True when a decision cycle should execute.</returns>
-        """
         return self.app.state.start.is_set()
-
-    def toggle_monologue(self, enabled: bool) -> None:
-        """
-        <summary>Enable or disable the monologue feature flag at runtime.</summary>
-        <param name="enabled">True to enable autonomous monologue, False to disable.</param>
-        """
-        self.app.state.features.monologue = enabled
-        self.logger.info("[Cognitive] Monologue feature toggled -> %s", enabled)
