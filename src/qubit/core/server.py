@@ -7,11 +7,9 @@ WebSocket server service for frontend communication and state broadcasting.
 import asyncio
 import dataclasses
 import json
-from datetime import datetime, timezone
 
 import websockets
 
-from src.qubit.core.events import Event
 from src.qubit.core.service import Service
 
 
@@ -105,19 +103,27 @@ class WebSocketServerService(Service):
             self.app.state.start.set()
             await self.broadcast_states()
 
+        elif action == "list_windows":
+            from src.qubit.input.vision.capture import list_windows
+            windows = list_windows()
+            await websocket.send(json.dumps({"type": "window_list", "data": windows}))
+
+        elif action == "set_vision_window":
+            window = data.get("window", "").strip()
+            self.app.state.vision_window = window
+            self.logger.info("[_handle_message] Vision window set to: %r", window)
+            await self.broadcast_states()
+
+        elif action == "set_stream_type":
+            stream_type = data.get("stream_type", "").strip()
+            if stream_type:
+                self.app.state.stream_type = stream_type
+                self.logger.info("[_handle_message] Stream type set to: %s", stream_type)
+                await self.broadcast_states()
+
         elif action == "terminate":
             self.logger.info("[_handle_message] Terminate command from frontend")
             self.app.state.shutdown.set()
-
-        elif action == "end_stream":
-            self.logger.info("[_handle_message] End stream command from frontend — halting input processing")
-            self.app.state.features.processing_active = False
-            await self.app.event_bus.publish(Event(
-                type="bot_end_stream",
-                timestamp=datetime.now(timezone.utc).isoformat(),
-                data={"command": "end_stream", "source": "frontend"},
-            ))
-            await self.broadcast_states()
 
         elif action == "play_audio":
             file_path = data.get("file_path")
@@ -145,10 +151,16 @@ class WebSocketServerService(Service):
 
     def _features_as_dict(self) -> dict:
         """
-        <summary>Serialize FeatureFlags to a plain dict for JSON broadcast.</summary>
-        <returns>A dict representation of the current FeatureFlags state.</returns>
+        <summary>Serialize FeatureFlags and mutable stream metadata to a plain dict for JSON broadcast.</summary>
+        <returns>A dict of current feature flags and stream state.</returns>
         """
-        return dataclasses.asdict(self.app.state.features)
+        return {
+            **dataclasses.asdict(self.app.state.features),
+            "stream_type": self.app.state.stream_type,
+            "vision_window": self.app.state.vision_window,
+            "health": self.app.state.health,
+            "current_obs_scene": self.app.state.current_obs_scene,
+        }
 
     async def send_states(self, websocket) -> None:
         """

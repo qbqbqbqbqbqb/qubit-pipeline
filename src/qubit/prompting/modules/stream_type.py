@@ -3,23 +3,16 @@
 from src.qubit.prompting.injections import PromptInjection
 from config.settings import STREAM_TYPE
 
-def stream_type_module() -> PromptInjection:
+
+def stream_type_module(stream_type: str | None = None) -> PromptInjection:
     """
-    Create a prompt injection describing the stream type.
-
-    This injection informs the language model about the current
-    stream context (e.g., "Just Chatting") so responses can be
-    aligned with the intended format or tone.
-
-    Returns:
-        PromptInjection: The configured prompt injection with
-        stream type context.
+    Create a prompt injection describing the current stream type.
+    Accepts an optional stream_type override from RuntimeState so the value
+    can be changed at runtime from the frontend. Falls back to the settings
+    default if not provided.
     """
-    content = (
-        f"You are doing a {STREAM_TYPE} stream."
-    )
-
+    active_type = stream_type or STREAM_TYPE
     return PromptInjection(
-        content=content,
-        priority=80
+        content=f"You are doing a {active_type} stream.",
+        priority=80,
     )

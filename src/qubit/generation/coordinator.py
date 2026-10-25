@@ -27,6 +27,8 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from config.settings import DEFAULT_MOOD, DEFAULT_TONE, DEFAULT_INTERACTION_LEVEL
+from src.qubit.prompting.modules.vision import vision_module
+from src.qubit.prompting.modules.obs_scene import obs_scene_module
 from src.qubit.processing.common import is_stale
 from src.qubit.core.service import Service
 from src.qubit.models.llm_service import LLMService
@@ -69,7 +71,7 @@ class GenerationCoordinator(Service):
         # personality_module and input_module are NOT cached — they depend on
         # runtime state (mood/tone) and per-request input respectively.
         self._core_injection = core_system_module()
-        self._stream_type_injection = stream_type_module()
+
 
     async def _run(self) -> None:
         """
@@ -181,7 +183,17 @@ class GenerationCoordinator(Service):
             tone=self.system_tone,
             interaction_level=self.system_interaction,
         ))
-        assembler.add(self._stream_type_injection)
+        assembler.add(stream_type_module(getattr(self.app.state, "stream_type", None)))
+
+        scene_inj = obs_scene_module(getattr(self.app.state, "current_obs_scene", None))
+        if scene_inj:
+            assembler.add(scene_inj)
+
+        if getattr(self.app.state.features, "vision", False):
+            vision_desc = getattr(self.app.state, "latest_vision_description", "")
+            vision_inj = vision_module(vision_desc)
+            if vision_inj:
+                assembler.add(vision_inj)
 
         assembly_event = PromptAssemblyEvent(
             type="prompt_assembly",

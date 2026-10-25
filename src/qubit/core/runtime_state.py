@@ -33,19 +33,26 @@ class FeatureFlags:
     memory_write: bool = True
     chat_logging: bool = False
     processing_active: bool = True
+    vision: bool = False
 
 
 class RuntimeState:
     """
     <summary>
-    Shared mutable state for the running application. Holds lifecycle events
-    and the feature flag set.
+    Shared mutable state for the running application. Holds lifecycle events,
+    the feature flag set, and mutable stream metadata.
     </summary>
     """
 
     def __init__(self):
+        from config.settings import STREAM_TYPE, VISION_WINDOW_TITLE
         self.shutdown = asyncio.Event()
         self.start = asyncio.Event()
         self.ai_speaking = asyncio.Event()
         self.ai_thinking = asyncio.Event()
         self.features = FeatureFlags()
+        self.stream_type: str = STREAM_TYPE
+        self.vision_window: str = VISION_WINDOW_TITLE
+        self.latest_vision_description: str = ""
+        self.health: dict[str, dict] = {}  # keyed by service name, value: {status, detail}
+        self.current_obs_scene: str = ""
