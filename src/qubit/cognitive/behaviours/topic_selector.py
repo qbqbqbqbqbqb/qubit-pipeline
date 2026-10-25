@@ -504,8 +504,7 @@ class TopicSelector:
 
     @staticmethod
     def _apply_modifier(prompt: str) -> str:
-        modifier = random.choice(_STYLE_MODIFIERS)
-        return f"{prompt} {modifier}"
+        return _apply_modifier_fn(prompt)
 
     def _draw_fixed(self, available: list[FixedPrompt]) -> FixedPrompt:
         weights = [p.weight for p in available]
@@ -561,6 +560,12 @@ class TopicSelector:
             weights["streamer_life"] -= 0.5
 
         return {k: max(0.1, v) for k, v in weights.items()}
+
+
+def _apply_modifier_fn(prompt: str) -> str:
+    """Module-level wrapper so tests can import and call it directly."""
+    modifier = random.choice(_STYLE_MODIFIERS)
+    return f"{prompt} {modifier}"
 
 
 @dataclass
