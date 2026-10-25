@@ -1,0 +1,17 @@
+{
+    "streamer_name": "your name here",
+    "topics": [
+        "Add a topic or running bit your stream is known for here",
+        "Something chat always reacts to",
+        "A game or mechanic you have strong opinions on",
+        "Something that happened on stream that became a recurring reference"
+    ],
+    "references": [
+        "A running joke or meme from your community",
+        "A recurring bit or catchphrase",
+        "Something chat brings up constantly"
+    ],
+    "avoid": [
+        "Topics or subjects you don't want Qubit to bring up unprompted"
+    ]
+}
