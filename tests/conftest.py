@@ -43,9 +43,51 @@ for _name in (
     "peft",
     "peft.PeftModel",
     "bitsandbytes",
+    "pygetwindow",
+    "mss",
+    "piper",
+    "pyaudio",
+    "websocket",
+    "pyvts",
 ):
     if _name not in sys.modules:
         sys.modules[_name] = _stub_module(_name)
+
+# Stub config package so config.settings and config.config both resolve
+# without requiring the real files to exist in CI.
+_config_pkg = _stub_module("config")
+_config_pkg.__path__ = []  # mark as package
+sys.modules["config"] = _config_pkg
+
+# config.config — word lists and scopes needed by ModerationProcessor etc.
+_config_config_stub = _stub_module(
+    "config.config",
+    BLACKLISTED_WORDS_LIST=["badword"],
+    WHITELISTED_WORDS_LIST=[],
+    ACRONYMS_LIST=[],
+    CORE_SYSTEM_PROMPT="You are Qubit.",
+    BOT_SCOPES=[],
+    STREAMER_SCOPES=[],
+)
+sys.modules["config.config"] = _config_config_stub
+
+_settings_stub = _stub_module(
+    "config.settings",
+    BOT_NAME="Qubit",
+    STREAM_TYPE="Just Chatting",
+    DEFAULT_MOOD="energetic",
+    DEFAULT_TONE="casual and humorous",
+    DEFAULT_INTERACTION_LEVEL="high",
+    TTS_SPEAKER_NAME="p236",
+    TTS_MODEL_NAME="en_GB-vctk-medium.onnx",
+    TTS_SUBTITLE_NAME="TTS_Subtitles",
+    TTS_DELAY=1.5,
+    REFLECTIONS_THRESHOLD=5,
+    VISION_MODEL="moondream2",
+    VISION_INTERVAL_SECONDS=45,
+    VISION_WINDOW_TITLE="",
+)
+sys.modules["config.settings"] = _settings_stub
 
 
 def make_event(type_="twitch_chat_processed", text="hello", user="viewer1", **kwargs):
