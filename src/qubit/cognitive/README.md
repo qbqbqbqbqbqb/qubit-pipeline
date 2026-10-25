@@ -1,55 +1,50 @@
 # cognitive/
 
-The decision layer. The only part of the application that decides what Qubit does next.
+Decides what Qubit does next. Nothing else in the codebase makes that call.
 
-## Responsibility
+Takes filtered input via `ActivityTracker`, runs a scored proposal cycle across all behaviours every 5 seconds, and publishes the winner as a `ResponsePromptEvent`. The loop runs continuously regardless of TTS state — output queuing and staleness are handled downstream by `OutputCoordinator`.
 
-Receives filtered input (via `ActivityTracker`), runs a scored proposal cycle across registered behaviours, and publishes the winning action as a `ResponsePromptEvent` or `MonologueEvent`. Nothing else in the codebase is permitted to make that decision.
-
-## Files
-
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `orchestrator.py` | `CognitiveOrchestrator` — `Service` that owns the decision loop tick; wires `ActivityTracker` and `DecisionEngine` |
-| `priority_queue.py` | `InputPriorityQueue` — scored queue for pending chat and STT messages |
+| `orchestrator.py` | Owns the 5s decision loop. Wires `ActivityTracker` and `DecisionEngine`. Gates `_handle_input` on `processing_active` — no new messages enter after end_stream |
+| `priority_queue.py` | Scored queue for pending chat and STT messages |
 
-## Sub-packages
+## activity/
 
-### `activity/`
-Pure state holders for the cognitive context. No decision logic.
+State only — no decision logic lives here.
 
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `activity_tracker.py` | Coordinates busyness score, input queue, and community event queue; used only by `CognitiveOrchestrator` and `DecisionEngine` |
-| `busyness.py` | `ActivityScore` — scalar representing how busy chat currently is |
-| `community_event_queue.py` | Queue for pending raid / gift / follow reactions |
-| `event_adapter.py` | Translates raw `Event` objects into the typed fields `ActivityTracker` needs; isolates field-shape knowledge from the tracker |
+| `activity_tracker.py` | Coordinates busyness score, input queue, and community event queue |
+| `busyness.py` | Chat busyness as a scalar value |
+| `community_event_queue.py` | Pending raid / gift / follow reactions |
+| `event_adapter.py` | Translates raw events into the fields `ActivityTracker` needs |
 
-### `behaviours/`
-Pluggable decision strategies. Each returns a scored proposal or `None`.
+## behaviours/
 
-| File | Responsibility |
+Each behaviour returns a scored proposal or `None`.
+
+| File | What it does |
 |---|---|
-| `base.py` | `Behavior` — abstract base; defines the proposal contract |
-| `chat_response.py` | Proposes a response to the highest-priority chat or STT message |
-| `community.py` | Proposes a reaction to a pending community event (raid, gift, follow) |
-| `frontend_monologue.py` | Proposes a monologue triggered by a manual frontend button press |
+| `base.py` | Abstract base. Defines the proposal contract |
+| `chat_response.py` | Proposes a response to the top pending chat or STT message |
+| `community.py` | Proposes a reaction to a pending raid, gift, or follow |
+| `frontend_monologue.py` | Proposes a monologue from a frontend trigger (`start`, `random_fact`, `end_stream`) |
 | `idle_monologue.py` | Proposes a spontaneous monologue when chat is quiet |
-| `topic_selector.py` | Utility for selecting a topic when `idle_monologue` runs |
+| `topic_selector.py` | Picks a topic for idle monologues |
 
-### `decision/`
-Wires proposals into a final action.
+## decision/
 
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `decision_engine.py` | Builds context, collects proposals, delegates scoring and execution |
-| `decision_executor.py` | Turns a winning proposal into published events |
-| `idle_quota_tracker.py` | Rate-limits idle monologues across the session |
-| `proposal_arbiter.py` | Scores and ranks proposals using `BEHAVIOR_WEIGHTS`; picks a winner |
+| `decision_engine.py` | Builds context, collects proposals, delegates to arbiter and executor |
+| `decision_executor.py` | Turns the winning proposal into published events |
+| `idle_quota_tracker.py` | Keeps idle monologue share near 30% (`TARGET_SHARE`) over a 20-entry sliding window. `CATCHUP_BONUS = 5.0` guarantees a win when under quota |
+| `proposal_arbiter.py` | Scores and ranks proposals via `BEHAVIOR_WEIGHTS`. Picks the winner |
 
 ## Adding a behaviour
 
-1. Create `behaviours/my_behaviour.py` subclassing `Behavior`.
-2. Implement `tick(context) -> dict | None`.
-3. Register an instance in `DecisionEngine.__init__`.
-4. Set its weight in `ProposalArbiter.BEHAVIOR_WEIGHTS`.
+1. Create `behaviours/my_behaviour.py` subclassing `Behavior`
+2. Implement `tick(context) -> dict | None`
+3. Register an instance in `DecisionEngine.__init__`
+4. Set its weight in `ProposalArbiter.BEHAVIOR_WEIGHTS`

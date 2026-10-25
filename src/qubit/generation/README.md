@@ -1,21 +1,13 @@
 # generation/
 
-Prompt assembly and LLM execution. Converts a `ResponsePromptEvent` into a `ResponseGeneratedEvent`.
+Takes a `ResponsePromptEvent` and turns it into a `ResponseGeneratedEvent`. One file.
 
-## Files
-
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `coordinator.py` | `GenerationCoordinator` — `Service` that owns the generation queue, assembles prompts via `PromptAssembler`, calls `LLMService`, and publishes the result |
+| `coordinator.py` | Owns the generation queue, assembles prompts via `PromptAssemblyEvent`, calls `LLMService`, publishes the result |
 
-## Responsibilities
+Drops stale requests before processing. Holds personality state (mood, tone, interaction level) that gets injected into every prompt — defaults come from `config/settings.py` and can be overridden at runtime from the frontend. Delegates prompt construction to `prompting/` and model execution to `models/`.
 
-- Maintains an async queue of pending `ResponsePromptEvent` items.
-- Drops stale requests (older than `max_age_seconds`) before processing.
-- Holds system personality state (mood, tone, interaction level) injected into every prompt.
-- Delegates prompt construction to `prompting/`.
-- Delegates model execution to `models/`.
+Models are not loaded at startup. `LLMService.ensure_loaded()` is called when the frontend sends the `initialize` action.
 
-## Invariant
-
-This package has no knowledge of which platform a message came from, or whether Qubit should respond at all. Those decisions belong in `cognitive/`. `GenerationCoordinator` executes whatever it receives.
+No knowledge of which platform a message came from or whether to respond — that's `cognitive/`'s job.

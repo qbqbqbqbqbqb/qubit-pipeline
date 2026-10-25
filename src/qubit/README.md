@@ -1,51 +1,12 @@
-# src/qubit
+# utils/
 
-Root package. Contains only `main.py` (entry point) and this README.
-All application code lives in the sub-packages below.
+Shared helpers. No dependencies on any application layer — safe to import from anywhere.
 
-## Package map
+| File | What it does |
+|---|---|
+| `log_utils.py` | `get_logger(name)` — single logging entry point for the whole application |
+| `filter_utils.py` | Word-list filtering against `BLACKLISTED_WORDS_LIST` and `WHITELISTED_WORDS_LIST` from `config/config.py` |
+| `message_tracker.py` | Sliding-window deduplication for chat messages. Used by `ConversationProcessor` |
+| `tts_utils.py` | Text pre-processing before TTS — abbreviation expansion, number normalisation, character sanitisation |
 
-```
-qubit/
-├── core/           Application lifecycle, event bus, WebSocket server
-├── cognitive/      Decision loop — what to do next
-│   ├── activity/   Activity scoring and priority queues
-│   ├── behaviours/ Pluggable decision strategies
-│   └── decision/   Engine, arbiter, executor
-├── input/          Platform listeners and input processing
-│   ├── twitch/
-│   ├── kick/
-│   └── youtube/
-├── processing/     Input filtering, deduplication, training log
-├── generation/     Prompt assembly → LLM → ResponseGeneratedEvent
-├── prompting/      Prompt assembler, injection modules
-│   └── modules/
-├── memory/         Persistent memory (ChromaDB + SQLite), reflections
-├── models/         LLM profiles, executors, prompt formatters
-│   └── prompt_formatters/
-├── output/         TTS, OBS, VTube Studio, PNG model, audio player
-│   └── handlers/
-└── utils/          Shared utilities (logging, filtering, message tracking)
-```
-
-## Layered architecture
-
-Data flows strictly top-to-bottom. No layer imports from a layer below it in this list.
-
-```
-Platform events (Twitch / Kick / STT)
-        │
-        ▼
- [ Input ]  ──── ModerationProcessor ──── ConversationProcessor ──── ChatLogger
-        │
-        ▼
- [ Cognitive ]  ── ActivityTracker ── DecisionEngine ── Behaviours
-        │
-        ▼
- [ Generation ]  ── PromptAssembler ── LLMService
-        │
-        ▼
- [ Output ]  ── TTSHandler ── OBSHandler ── VTubeStudioHandler
-```
-
-The `core/` event bus is the shared transport; every layer communicates through typed events, never direct method calls across boundaries.
+Nothing here imports from `cognitive/`, `processing/`, `generation/`, `memory/`, `models/`, `output/`, or `input/`. No application state stored here.

@@ -1,36 +1,29 @@
 # output/
 
-Delivery layer. Receives `ResponseGeneratedEvent` and drives all output channels: voice, OBS scene control, VTube Studio, PNG model, and audio playback.
+Receives `ResponseGeneratedEvent` and handles all output: voice, OBS, VTube Studio, PNG avatar, audio playback.
 
-## Files
-
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `coordinator.py` | `OutputCoordinator` — `Service` that owns the split output queue (priority + normal), manages `ai_speaking` state, delegates to all handlers |
-| `tts_manager.py` | `TTSManager` — manages TTS engine lifecycle and audio rendering |
+| `coordinator.py` | Owns the output queues, drives `ai_speaking` state, sanitises text, delegates to handlers. Passes `on_amplitude` callback to `TTSHandler.speak()` when VTube Studio is active |
+| `tts_manager.py` | Loads and holds the Piper voice model. Model path built from `TTS_MODEL_NAME` in `config/settings.py` |
 
-## `handlers/`
+## handlers/
 
-Each handler is a self-contained leaf responsible for one output channel.
+| File | Channel |
+|---|---|
+| `tts.py` | Streams Piper synthesis chunks into PyAudio. Measures per-chunk RMS amplitude and fires an `on_amplitude` callback before each chunk is written to the stream |
+| `vtube.py` | VTube Studio WebSocket via pyvts. `inject_mouth(amplitude)` drives `JawOpen` and `MouthOpen` from real audio amplitude — VTS built-in mic lip sync should be disabled. Head movement, smile, blink, and eye gaze are still animation-loop driven |
+| `obs.py` | OBS WebSocket — scene switching, source visibility, subtitle overlay (`TTS_SUBTITLE_NAME` from `config/settings.py`) |
+| `png.py` | PNG avatar — frame switching for the browser source |
+| `audio_player.py` | Manual audio file playback triggered from the frontend |
+| `sanitiser.py` | Strips TTS-unfriendly characters and bot name prefix before synthesis. Bot name from `config/settings.py` |
 
-| File | Handler | Channel |
-|---|---|---|
-| `tts.py` | `TTSHandler` | Text-to-speech audio synthesis and playback |
-| `obs.py` | `OBSHandler` | OBS WebSocket — scene switching, source visibility |
-| `vtube.py` | `VtubeStudioHandler` | VTube Studio WebSocket — model expression and motion |
-| `png.py` | `PNGOutputHandler` | PNG model — frame switching for the browser-source avatar |
-| `audio_player.py` | `AudioFilePlayer` | Manual audio file playback triggered from the frontend |
-| `sanitiser.py` | `DialogueSanitiser` | Strips TTS-unfriendly characters and formatting before synthesis |
+## Queues
 
-## Queue model
+Two deques — priority (raids/gifts/follows, 120s staleness) and normal (everything else, 30s). Priority is always drained first. Both are capped so a stalled output can't grow unbounded. Stale items are dropped silently when popped.
 
-`OutputCoordinator` maintains two deques:
+## Mouth tracking
 
-- **priority_queue** — community-event reactions (raids, gifts, follows). Drained first, longer staleness allowance.
-- **queue** — everything else. Normal staleness cutoff.
+`TTSHandler` measures RMS amplitude per synthesis chunk and calls `VtubeStudioHandler.inject_mouth(amplitude)` immediately before writing each chunk to the audio stream. This drives `JawOpen` and `MouthOpen` from actual audio rather than a sine approximation. The virtual audio cable is no longer needed and VTS's built-in microphone lip sync should be turned off to avoid competing parameter writes.
 
-Both queues are capped (`maxlen`) to prevent unbounded growth if output stalls.
-
-## Invariant
-
-No handler imports from `cognitive/`, `generation/`, or `processing/`. Handlers receive only what `OutputCoordinator` passes them and never inspect the originating event type to make decisions.
+Handlers don't import from `cognitive/`, `generation/`, or `processing/`.

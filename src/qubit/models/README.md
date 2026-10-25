@@ -1,32 +1,31 @@
 # models/
 
-LLM abstraction layer. Provides a single `LLMService` interface over multiple named model profiles. The rest of the application calls `LLMService.generate(profile, ...)` and never references a specific model directly.
+LLM abstraction. Everything else calls `LLMService.generate(profile, ...)` and never touches a model directly.
 
-## Files
-
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `llm_service.py` | `LLMService` — registers profiles, loads executors on demand, routes `generate()` calls, handles retries |
-| `llm_profile.py` | `LLMProfile` — named profile binding a model config to a prompt formatter and generation defaults |
-| `model_config.py` | `GenerationConfig` — sampling parameters (temperature, top-p, max tokens, etc.) |
-| `model_registry.py` | `LLM_PROFILES` dict — the authoritative list of profiles used in the application (`main`, `reflection`, …) |
-| `_executor.py` | `_HuggingFaceExecutor` — low-level HuggingFace `transformers` execution; internal to this package |
+| `llm_service.py` | Registers profiles, loads executors on demand via `ensure_loaded`, routes generation calls |
+| `llm_profile.py` | Named profile — binds a model config to a formatter and generation defaults |
+| `model_config.py` | Sampling parameters (temperature, top-p, max tokens, etc.) |
+| `model_registry.py` | The list of profiles the application uses (`main`, `reflection`). `LLM_PROFILES` is iterated by `bootstrap.py` to register all profiles at startup |
+| `_executor.py` | Low-level HuggingFace execution. Private to this package |
 
-## `prompt_formatters/`
+Models are not loaded at startup. `ensure_loaded` is called for each registered profile when the frontend sends the `initialize` WebSocket action. Calling `ensure_loaded` on an already-loaded profile is a no-op.
 
-Each formatter converts a plain prompt string or message list into the token format a specific model expects.
+## prompt_formatters/
 
-| File | Formatter |
+Converts a prompt string or message list into whatever token format a given model expects.
+
+| File | What it does |
 |---|---|
 | `base.py` | Abstract base |
-| `chat_template.py` | `ChatTemplateFormatter` — uses the model's built-in `apply_chat_template` |
-| `raw.py` | `RawFormatter` — passes the string through unchanged |
-| `reflection.py` | `ReflectionFormatter` — structured format for reflection-profile prompts |
-| `role_mapped.py` | `RoleMappedFormatter` — remaps role names for models with non-standard conventions |
-| `registry.py` | Maps formatter name strings to classes; used by `model_registry.py` |
+| `chat_template.py` | Uses the model's built-in `apply_chat_template` |
+| `raw.py` | Passes the string through unchanged |
+| `reflection.py` | Structured format for reflection-profile prompts |
+| `role_mapped.py` | Remaps role names for models with non-standard conventions |
+| `registry.py` | Maps formatter name strings to classes |
 
 ## Adding a profile
 
-1. Add a `GenerationConfig` entry in `model_config.py` if a new sampling config is needed.
-2. Add a `LLMProfile` in `model_registry.py` with the model path, formatter, and config.
-3. Call `llm_service.ensure_loaded("profile_name")` in `bootstrap.py`.
+1. Add a `GenerationConfig` in `model_config.py` if you need different sampling settings
+2. Add a `LLMProfile` in `model_registry.py` — it will be registered and loaded automatically on `initialize`

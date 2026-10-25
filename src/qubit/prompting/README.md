@@ -1,28 +1,23 @@
 # prompting/
 
-Prompt construction. Assembles the final prompt string from ordered injection modules before handing it to `LLMService`.
+Assembles the final prompt from ordered injection modules.
 
-## Files
-
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `injections.py` | `PromptInjection` dataclass and priority constants (e.g. `USER_INPUT_PRIORITY`) |
-| `prompt_assembler.py` | `PromptAssembler` — collects injections, sorts by priority, concatenates into a final prompt |
+| `injections.py` | `PromptInjection` dataclass and priority constants |
+| `prompt_assembler.py` | Collects injections, sorts by priority, concatenates into the final prompt |
 
-## `modules/`
+## modules/
 
-Each module is a function that returns a `PromptInjection` for a specific concern.
+Each module is a function returning a `PromptInjection`. `GenerationCoordinator` calls the relevant modules when handling a `PromptAssemblyEvent` — subscribers (e.g. `MemoryService`) can append their own injections to `contributions` before the assembler runs.
 
-| File | Injection content |
+| File | Injects |
 |---|---|
-| `core.py` | Base system prompt — Qubit's identity, role, hard rules |
-| `personality.py` | Current mood, tone, and interaction level from `GenerationCoordinator` |
-| `stream_type.py` | Context about the current stream type or game |
-| `input.py` | The triggering user message or STT transcript |
-| `chat.py` | Recent chat history for context |
-| `reflection.py` | Relevant memories retrieved from `MemoryService` |
+| `core.py` | System prompt loaded from `src/data/system_prompt.txt` |
+| `personality.py` | Current mood, tone, interaction level from `GenerationCoordinator` |
+| `stream_type.py` | Current stream type from `config/settings.py` |
+| `input.py` | The triggering message or STT transcript |
+| `chat.py` | Recent chat history |
+| `reflection.py` | Relevant memories retrieved from `MemoryService` (when `memory_read` is on) |
 
-## Adding a module
-
-1. Create `modules/my_module.py` returning a `PromptInjection` with an appropriate priority constant.
-2. Import and call it in `GenerationCoordinator` when building the `PromptAssembler` for the relevant request type.
+To add a module: create `modules/my_module.py` returning a `PromptInjection` with an appropriate priority, then call it in `GenerationCoordinator` when building the assembler.
