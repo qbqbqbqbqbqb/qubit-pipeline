@@ -73,23 +73,13 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
         chat and EventSub traffic is handled asynchronously via the mixins.
         """
         while not self.app.state.shutdown.is_set():
-            twitch_enabled = self.app.state.features.twitch
-
-            self.logger.debug("[_run] TwitchListener loop - start: {self.app.state.start.is_set()}, twitch_enabled: {twitch_enabled}, connected: {self.connected}")
-            if not self.app.state.start.is_set() or not twitch_enabled:
+            if not self.app.state.start.is_set() or not self.app.state.features.twitch:
                 await asyncio.sleep(1)
                 continue
 
-            if twitch_enabled:
-                try:
-                    await self._ensure_connected()
-                    await self._refresh_tokens()
-                    await asyncio.sleep(60 * 60)
-
-                except Exception as e:
-                    self.logger.error("[_run] Listener error: %s. Restarting...", e)
-                    await self.stop()
-                    await asyncio.sleep(5)
+            await self._ensure_connected()
+            await self._refresh_tokens()
+            await asyncio.sleep(60 * 60)
 
     async def _ensure_connected(self: Any) -> None:
         """
@@ -104,13 +94,14 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
 
         self.connected = await self._start_client()
         if not self.connected:
-            self.logger.error("[_ensure_connected] Failed to connect. Retrying in 10s...")
-            await asyncio.sleep(10)
-            return
+            self._set_disconnected("auth failed")
+            self.logger.error("[_ensure_connected] Failed to connect — supervisor will retry")
+            raise ConnectionError("Twitch connection failed")
 
         self.eventsub = EventSubWebsocket(self.twitch_streamer)
         self.eventsub.start()
         await self._subscribe_to_follow_events()
+        self._set_connected()
 
 
     async def _start_client(self: Any) -> bool:
@@ -153,5 +144,6 @@ class TwitchListener(Service, TwitchAuthMixin, TwitchEventsMixin, TwitchWebsocke
         if self.eventsub:
             await self.eventsub.stop()
         self.connected = False
+        self._set_disconnected()
         self.logger.info("[stop] Disconnected successfully.")
         await super().stop()

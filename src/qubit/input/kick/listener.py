@@ -41,23 +41,13 @@ class KickListener(Service, KickAuthMixin, KickEventsMixin):
 
     async def _run(self: Any) -> None:
         while not self.app.state.shutdown.is_set():
-            kick_enabled = self.app.state.features.kick
-
-            self.logger.debug("[_run] KickListener loop - start: %s, kick_enabled: %s, connected: %s",
-                              self.app.state.start.is_set(), kick_enabled, self.connected)
-            if not self.app.state.start.is_set() or not kick_enabled:
+            if not self.app.state.start.is_set() or not self.app.state.features.kick:
                 await asyncio.sleep(1)
                 continue
 
-            if kick_enabled:
-                try:
-                    await self._ensure_connected()
-                    await self._refresh_tokens()
-                    await asyncio.sleep(60 * 60)
-                except Exception as e:
-                    self.logger.error("[_run] Kick listener error: %s. Restarting...", e)
-                    await self.stop()
-                    await asyncio.sleep(5)
+            await self._ensure_connected()
+            await self._refresh_tokens()
+            await asyncio.sleep(60 * 60)
 
     async def _ensure_connected(self: Any) -> None:
         if self.connected:
@@ -65,12 +55,12 @@ class KickListener(Service, KickAuthMixin, KickEventsMixin):
 
         self.connected = await self._start_client()
         if not self.connected:
-            self.logger.error("[_ensure_connected] Failed to connect Kick. Retrying in 10s...")
-            await asyncio.sleep(10)
-            return
+            self._set_disconnected("auth failed")
+            self.logger.error("[_ensure_connected] Failed to connect Kick — supervisor will retry")
+            raise ConnectionError("Kick connection failed")
 
-        # Start the Pusher WS listener for chat + events (non-blocking)
         await self._start_pusher_listener()
+        self._set_connected()
 
     async def _start_client(self: Any) -> bool:
         self.logger.info("[_start_client] Starting KickClient...")
@@ -125,7 +115,11 @@ class KickListener(Service, KickAuthMixin, KickEventsMixin):
                 await self.chat_ws.close()
             except Exception:
                 pass
-        # kick_bot and kick_streamer are token dicts, not client objects — no .close() needed.
+        if self.kick_bot:
+            await self.kick_bot.close()
+        if self.kick_streamer:
+            await self.kick_streamer.close()
         self.connected = False
+        self._set_disconnected()
         self.logger.info("[stop] Kick disconnected.")
         await super().stop()

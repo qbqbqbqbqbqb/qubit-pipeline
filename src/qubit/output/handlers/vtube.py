@@ -148,6 +148,7 @@ class VtubeStudioHandler:
 
             self.connected = True
             print("[VtubeStudioHandler] Connected and authenticated with VTube Studio")
+            self._report_health("connected")
             return True
 
         except Exception as e:
@@ -155,7 +156,15 @@ class VtubeStudioHandler:
             print("[VtubeStudioHandler] Ensure VTube Studio is running and the plugin permission was accepted.")
             self.connected = False
             self.vts = None
+            self._report_health("disconnected", str(e))
             return False
+
+    def _report_health(self, status: str, detail: str = "") -> None:
+        try:
+            if self.app and hasattr(self.app.state, "health"):
+                self.app.state.health["vtube_studio"] = {"status": status, "detail": detail}
+        except Exception:
+            pass
 
     async def _send_request(self, request):
         if not self.vts:
