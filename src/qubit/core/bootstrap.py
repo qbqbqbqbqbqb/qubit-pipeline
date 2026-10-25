@@ -19,6 +19,9 @@ from src.qubit.output.handlers.vtube import VtubeStudioHandler
 from src.qubit.processing.moderation import ModerationProcessor
 from src.qubit.processing.conversation import ConversationProcessor
 from src.qubit.processing.autonomous import AutonomousPromptProcessor
+from src.qubit.processing.chat_logger import ChatLogger
+from src.qubit.input.vision.listener import VisionListener
+from src.qubit.output.handlers.obs_scene_listener import OBSSceneListener
 
 from src.qubit.generation.coordinator import GenerationCoordinator
 
@@ -40,12 +43,12 @@ async def create_app() -> App:
     app.state.features.vtube_studio = settings.enable_vtube_studio
     app.event_bus = EventBus()
 
-    # LLM service — profiles registered here; models are NOT loaded yet.
-    # Loading is deferred until the frontend sends the "initialize" command,
-    # which triggers WebSocketServerService._handle_initialize().
+    # LLM service — profiles registered and executors loaded before anything else.
     llm_service = LLMService()
     for profile in LLM_PROFILES.values():
         llm_service.register_profile(profile)
+    await llm_service.ensure_loaded("main")
+    await llm_service.ensure_loaded("reflection")
     app.state.llm_service = llm_service
 
     # Memory
@@ -63,6 +66,7 @@ async def create_app() -> App:
     conversation_processor = ConversationProcessor(max_age_seconds=30)
     autonomous_prompt_processor = AutonomousPromptProcessor(max_age_seconds=30)
     frontend_command_processor = FrontendCommandProcessor(runtime_state=app.state)
+    chat_logger = ChatLogger(runtime_state=app.state)
 
     for processor in (
         moderation_processor,
@@ -70,6 +74,7 @@ async def create_app() -> App:
         autonomous_prompt_processor,
         frontend_command_processor,
         memory_writer,
+        chat_logger,
     ):
         processor.register_subscriptions(app.event_bus)
 
@@ -99,5 +104,7 @@ async def create_app() -> App:
     app.add_service(SpeechToTextListener(input_device_index=settings.stt_input_device_index))
     app.add_service(audio_player)
     app.add_service(output_coordinator)
+    app.add_service(OBSSceneListener(settings=settings))
+    app.add_service(VisionListener())
 
     return app

@@ -116,6 +116,11 @@ class StreamEndEvent(Event):
 
 
 @dataclass
+class VisionContextEvent(Event):
+    """<summary>Fired by VisionListener after each capture cycle. Carries the vision model's screen description.</summary>"""
+
+
+@dataclass
 class MonologueEvent(Event):
     """<summary>Autonomous monologue prompt trigger from the cognitive layer.</summary>"""
     user: str

@@ -27,3 +27,11 @@ TTS_SUBTITLE_NAME = "TTS_Subtitles"  # OBS source name for subtitle overlay
 
 # === Memory ===
 REFLECTIONS_THRESHOLD = 5  # number of unreflected entries before a reflection job runs
+
+# === Vision ===
+# Which vision model to use: "moondream2" (fast, ~1.8GB) or "llava" (better detail, ~4GB 4-bit)
+VISION_MODEL = "moondream2"
+# Seconds between screen captures when vision is on
+VISION_INTERVAL_SECONDS = 45
+# Default window title to capture — can be overridden at runtime from the frontend
+VISION_WINDOW_TITLE = ""
