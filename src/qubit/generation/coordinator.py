@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 from config.settings import DEFAULT_MOOD, DEFAULT_TONE, DEFAULT_INTERACTION_LEVEL
 from src.qubit.prompting.modules.vision import vision_module
 from src.qubit.prompting.modules.obs_scene import obs_scene_module
+from src.qubit.prompting.modules.length import length_module
 from src.qubit.processing.common import is_stale
 from src.qubit.core.service import Service
 from src.qubit.models.llm_service import LLMService
@@ -208,6 +209,10 @@ class GenerationCoordinator(Service):
         for injection in assembly_event.contributions:
             assembler.add(injection)
 
+        assembler.add(length_module(
+            event_type=getattr(event, "type", None),
+            source=getattr(event, "source", None),
+        ))
         assembler.add(input_module(prompt_text))
         for inj in assembly_event.contributions:
             self.logger.info("[_generate_response] Injection (%s): %s", inj.priority, inj.content[:80])
