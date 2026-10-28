@@ -43,12 +43,11 @@ async def create_app() -> App:
     app.state.features.vtube_studio = settings.enable_vtube_studio
     app.event_bus = EventBus()
 
-    # LLM service — profiles registered and executors loaded before anything else.
+    # LLM service — profiles registered here; models are NOT loaded yet.
+    # Loading is deferred until the frontend sends the "initialize" action.
     llm_service = LLMService()
     for profile in LLM_PROFILES.values():
         llm_service.register_profile(profile)
-    await llm_service.ensure_loaded("main")
-    await llm_service.ensure_loaded("reflection")
     app.state.llm_service = llm_service
 
     # Memory

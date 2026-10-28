@@ -1,38 +1,23 @@
 """
-<summary>
 WebSocket server service for frontend communication and state broadcasting.
-</summary>
 """
 
 import asyncio
 import dataclasses
 import json
+from datetime import datetime, timezone
 
 import websockets
 
+from src.qubit.core.events import Event
 from src.qubit.core.service import Service
 
 
 class WebSocketServerService(Service):
-    """
-    <summary>
-    Manages WebSocket connections and routes frontend commands to the application.
-    </summary>
-    <remarks>
-    WAIT_FOR_START is False because this service must be running before the
-    frontend can send the start command — it cannot wait for the signal it
-    is responsible for delivering.
-    </remarks>
-    """
 
     WAIT_FOR_START = False
 
     def __init__(self, host: str = "0.0.0.0", port: int = 8765) -> None:
-        """
-        <summary>Initialise the WebSocket server with host and port.</summary>
-        <param name="host">Host address to bind the server to.</param>
-        <param name="port">Port number to listen on.</param>
-        """
         super().__init__("websocket_server")
         self.host = host
         self.port = port
@@ -40,9 +25,6 @@ class WebSocketServerService(Service):
         self.server = None
 
     async def _run(self) -> None:
-        """
-        <summary>Start the WebSocket server and serve until cancelled.</summary>
-        """
         self.server = await websockets.serve(
             self.websocket_handler, self.host, self.port
         )
@@ -50,9 +32,6 @@ class WebSocketServerService(Service):
         await self.server.wait_closed()
 
     async def stop(self) -> None:
-        """
-        <summary>Gracefully close the server then cancel the worker task.</summary>
-        """
         self.logger.info("[stop] Stopping WebSocketServer")
         if self.server:
             self.server.close()
@@ -60,10 +39,6 @@ class WebSocketServerService(Service):
         await super().stop()
 
     async def websocket_handler(self, websocket) -> None:
-        """
-        <summary>Handle the full lifecycle of a single connected client.</summary>
-        <param name="websocket">The WebSocket connection for this client.</param>
-        """
         self.connected_clients.add(websocket)
         try:
             await self.send_states(websocket)
@@ -75,14 +50,24 @@ class WebSocketServerService(Service):
             self.connected_clients.discard(websocket)
 
     async def _handle_message(self, websocket, data: dict) -> None:
-        """
-        <summary>Route an incoming frontend message to the appropriate action handler.</summary>
-        <param name="websocket">The client connection the message arrived on.</param>
-        <param name="data">Parsed JSON payload from the client.</param>
-        """
         action = data.get("action")
 
-        if action == "toggle":
+        if action == "initialize":
+            self.logger.info("[_handle_message] Initialize — loading models")
+            llm_service = getattr(self.app.state, "llm_service", None)
+            if llm_service is None:
+                self.logger.error("[_handle_message] initialize: llm_service not on state")
+                return
+            try:
+                for profile in llm_service.list_profiles():
+                    self.logger.info("[_handle_message] Loading profile: %s", profile)
+                    await llm_service.ensure_loaded(profile)
+                self.logger.info("[_handle_message] All models loaded")
+            except Exception as exc:
+                self.logger.error("[_handle_message] Model load failed: %s", exc)
+            await self.broadcast_states()
+
+        elif action == "toggle":
             flag = data.get("input")
             state = data.get("state") == "on"
             features = self.app.state.features
@@ -103,15 +88,22 @@ class WebSocketServerService(Service):
             self.app.state.start.set()
             await self.broadcast_states()
 
-        elif action == "list_windows":
-            from src.qubit.input.vision.capture import list_windows
-            windows = list_windows()
-            await websocket.send(json.dumps({"type": "window_list", "data": windows}))
+        elif action == "end_stream":
+            self.logger.info("[_handle_message] End stream — halting input processing")
+            self.app.state.features.processing_active = False
+            await self.app.event_bus.publish(Event(
+                type="bot_end_stream",
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                data={"command": "end_stream", "source": "frontend"},
+            ))
+            await self.broadcast_states()
 
-        elif action == "set_vision_window":
-            window = data.get("window", "").strip()
-            self.app.state.vision_window = window
-            self.logger.info("[_handle_message] Vision window set to: %r", window)
+        elif action == "terminate":
+            self.logger.info("[_handle_message] Terminate command from frontend")
+            self.app.state.shutdown.set()
+
+        elif action == "reconnect":
+            self.logger.info("[_handle_message] Reconnect requested")
             await self.broadcast_states()
 
         elif action == "set_stream_type":
@@ -121,9 +113,19 @@ class WebSocketServerService(Service):
                 self.logger.info("[_handle_message] Stream type set to: %s", stream_type)
                 await self.broadcast_states()
 
-        elif action == "terminate":
-            self.logger.info("[_handle_message] Terminate command from frontend")
-            self.app.state.shutdown.set()
+        elif action == "list_windows":
+            try:
+                from src.qubit.input.vision.capture import list_windows
+                windows = list_windows()
+            except Exception:
+                windows = []
+            await websocket.send(json.dumps({"type": "window_list", "data": windows}))
+
+        elif action == "set_vision_window":
+            window = data.get("window", "").strip()
+            self.app.state.vision_window = window
+            self.logger.info("[_handle_message] Vision window set to: %r", window)
+            await self.broadcast_states()
 
         elif action == "play_audio":
             file_path = data.get("file_path")
@@ -150,32 +152,21 @@ class WebSocketServerService(Service):
                 await websocket.send(json.dumps({"type": "audio_files", "data": files}))
 
     def _features_as_dict(self) -> dict:
-        """
-        <summary>Serialize FeatureFlags and mutable stream metadata to a plain dict for JSON broadcast.</summary>
-        <returns>A dict of current feature flags and stream state.</returns>
-        """
         return {
             **dataclasses.asdict(self.app.state.features),
-            "stream_type": self.app.state.stream_type,
-            "vision_window": self.app.state.vision_window,
-            "health": self.app.state.health,
-            "current_obs_scene": self.app.state.current_obs_scene,
+            "stream_type": getattr(self.app.state, "stream_type", ""),
+            "vision_window": getattr(self.app.state, "vision_window", ""),
+            "current_obs_scene": getattr(self.app.state, "current_obs_scene", ""),
+            "health": getattr(self.app.state, "health", {}),
         }
 
     async def send_states(self, websocket) -> None:
-        """
-        <summary>Push current feature states to a newly connected client.</summary>
-        <param name="websocket">The client to send state to.</param>
-        """
         await websocket.send(json.dumps({
             "type": "states",
             "data": self._features_as_dict(),
         }))
 
     async def broadcast_states(self) -> None:
-        """
-        <summary>Push current feature states to all connected clients.</summary>
-        """
         if self.connected_clients:
             message = json.dumps({
                 "type": "states",
@@ -184,11 +175,6 @@ class WebSocketServerService(Service):
             await asyncio.gather(*(c.send(message) for c in self.connected_clients))
 
     async def forward_event(self, event_type: str, data: dict) -> None:
-        """
-        <summary>Forward an internal bus event to all connected clients.</summary>
-        <param name="event_type">The event type string to forward.</param>
-        <param name="data">The event payload to include.</param>
-        """
         if self.connected_clients:
             message = json.dumps({"type": event_type, "data": data})
             await asyncio.gather(*(c.send(message) for c in self.connected_clients))

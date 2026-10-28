@@ -30,7 +30,7 @@ class TTSManager:
         </summary>
         """
         self.logger = get_logger("TTSManager")
-        self.model_path = Path(__file__).resolve().parents[4] / TTS_MODEL_NAME
+        self.model_path = Path(__file__).resolve().parents[3] / TTS_MODEL_NAME
         self.voice = None
         self._load_model()
 
