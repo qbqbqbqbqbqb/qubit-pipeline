@@ -88,6 +88,7 @@ class GenerationCoordinator(Service):
                 await asyncio.sleep(1)
                 continue
 
+            self._set_connected()
             while not self.app.state.shutdown.is_set():
                 event: ResponsePromptEvent = await self.queue.get()
                 try:
@@ -104,6 +105,7 @@ class GenerationCoordinator(Service):
 
                 except Exception as e:
                     self.logger.error("[_run] Error: %s", e)
+                    self._report_health("error", str(e))
                 finally:
                     self.queue.task_done()
 

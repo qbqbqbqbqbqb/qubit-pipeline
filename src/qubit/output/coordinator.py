@@ -250,6 +250,7 @@ class OutputCoordinator(Service):
             except Exception as e:
                 self.logger.error("[_run] VTube Studio connection failed: %s", e)
 
+        self._set_connected()
         while not self.app.state.shutdown.is_set():
             if not self.app.state.start.is_set():
                 await asyncio.sleep(1)
@@ -284,6 +285,7 @@ class OutputCoordinator(Service):
                     break
                 except Exception as e:
                     self.logger.exception("[_run] Error: %s", e)
+                    self._report_health("error", str(e))
                     await asyncio.sleep(0.1)
 
     async def _check_if_timestamp_stale(self: Any, item: dict) -> bool:

@@ -53,6 +53,7 @@ class VisionListener(Service):
             description = await loop.run_in_executor(None, self._capture_sync)
         except Exception as exc:
             self.logger.error("[_capture_and_publish] Capture failed: %s", exc)
+            self._report_health("error", str(exc))
             return
 
         if not description:
@@ -74,6 +75,7 @@ class VisionListener(Service):
         if not self._model_loaded:
             models.load(VISION_MODEL)
             self._model_loaded = True
+            self._set_connected()
 
         window_title = getattr(self.app.state, "vision_window", None)
         image = capture.capture_window(window_title)

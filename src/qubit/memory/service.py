@@ -122,15 +122,19 @@ class MemoryService(Service):
                 await asyncio.sleep(1)
                 continue
 
-            while not self.app.state.shutdown.is_set():
-                self.logger.info("[_run] Checking for reflections...")
-                recent_chats = await self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
-                self.logger.info("[_run] Found %s recent chat items", len(recent_chats))
-                unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
-                self.logger.info("[_run] Found %s unreflected items", len(unreflected))
+            break
 
-                if len(unreflected) >= REFLECTIONS_THRESHOLD:
-                    self.logger.info("[_run] Generating reflections")
+        self._set_connected()
+        while not self.app.state.shutdown.is_set():
+            self.logger.info("[_run] Checking for reflections...")
+            recent_chats = await self.memory_manager.get_recent_items("chat", limit=100, max_age_minutes=120)
+            self.logger.info("[_run] Found %s recent chat items", len(recent_chats))
+            unreflected = [chat for chat in recent_chats if not chat.get("reflected", False)]
+            self.logger.info("[_run] Found %s unreflected items", len(unreflected))
+
+            if len(unreflected) >= REFLECTIONS_THRESHOLD:
+                self.logger.info("[_run] Generating reflections")
+                try:
                     reflections = await self.memory_manager.generate_reflections()
                     self.logger.info("[_run] Generated %s reflections", len(reflections))
                     for q, a in reflections:
@@ -138,8 +142,11 @@ class MemoryService(Service):
                     ids_to_update = [chat["id"] for chat in unreflected]
                     self.logger.info("[_run] Marking %s items as reflected", len(ids_to_update))
                     await self.memory_manager.update_items_metadata(ids_to_update, {"reflected": True})
+                except Exception as exc:
+                    self.logger.error("[_run] Reflection generation failed: %s", exc)
+                    self._report_health("error", f"reflection failed: {exc}")
 
-                await asyncio.sleep(60)
+            await asyncio.sleep(60)
 
     async def stop(self) -> None:
         """<summary>Stop the service worker task.</summary>"""
@@ -164,16 +171,6 @@ class MemoryService(Service):
     async def get_recent_reflections(self) -> List[Dict]:
         """<summary>Return the 3 most recent reflection Q&A items for RAG injection.</summary>"""
         return await self.memory_manager.get_recent_items("reflections", limit=3)
-
-    def _get_chat_memory_injection(self):
-        """<summary>Return a PromptInjection for recent chat history, or None.</summary>"""
-        history = self.get_recent_chat_history()
-        return chat_memory_module(history)
-
-    def _get_reflection_memory_injection(self):
-        """<summary>Return a PromptInjection for recent reflections, or None.</summary>"""
-        reflections = self.get_recent_reflections()
-        return reflection_memory_module(reflections)
 
     async def handle_prompt_assembly(self, event: PromptAssemblyEvent) -> None:
         """

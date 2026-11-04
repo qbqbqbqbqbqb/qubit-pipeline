@@ -68,6 +68,7 @@ class SpeechToTextListener(Service):
                 )
                 self._worker_thread.start()
                 self.logger.info("[_run] STT (RealtimeSTT) started")
+                self._set_connected()
 
             if not stt_enabled and self._worker_thread is not None:
                 self._stop_worker()
@@ -88,6 +89,7 @@ class SpeechToTextListener(Service):
         self._worker_thread = None
         self._recorder = None
         self.logger.info("[_stop_worker] STT stopped")
+        self._set_disconnected()
 
     async def stop(self: Any) -> None:
         self._stop_worker()
@@ -99,6 +101,7 @@ class SpeechToTextListener(Service):
             from RealtimeSTT import AudioToTextRecorder
         except Exception as e:
             self.logger.error("RealtimeSTT not installed or failed to load: %s", e)
+            self._report_health("error", f"import failed: {e}")
             return
 
         config = {
@@ -132,6 +135,7 @@ class SpeechToTextListener(Service):
                     recorder.text(self._on_final_text)
         except Exception as e:
             self.logger.error("RealtimeSTT worker error: %s", e)
+            self._report_health("error", str(e))
         finally:
             self._recorder = None
 
