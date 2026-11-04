@@ -8,6 +8,9 @@ Scoring and priority logic lives in ProposalArbiter.
 Idle-monologue quota tracking lives in IdleQuotaTracker.
 Turning a winning proposal into a published event lives in DecisionExecutor.
 This class wires them together and owns the per-cycle sequencing.
+
+After each cycle a "decision_made" event is published on the bus so that
+WebSocketServerService can forward it to the control-panel decision dashboard.
 </remarks>
 """
 
@@ -22,6 +25,7 @@ from src.qubit.cognitive.behaviours.idle_monologue import IdleMonologueBehavior
 from src.qubit.cognitive.decision.decision_executor import DecisionExecutor
 from src.qubit.cognitive.decision.idle_quota_tracker import IdleQuotaTracker
 from src.qubit.cognitive.decision.proposal_arbiter import ProposalArbiter
+from src.qubit.core.events import Event
 from src.qubit.utils.log_utils import get_logger
 
 
@@ -40,6 +44,7 @@ class DecisionEngine:
         <param name="event_bus">The EventBus used by DecisionExecutor to publish outcomes.</param>
         """
         self.tracker = tracker
+        self.event_bus = event_bus
         self.logger = get_logger("DecisionEngine")
         self.behaviors: list = [
             IdleMonologueBehavior(),
@@ -71,7 +76,7 @@ class DecisionEngine:
             extra_bonus_by_reason={"idle_monologue": self.idle_quota.catchup_bonus(idle_catchup)},
         )
         self._log_winner(winner)
-        await self._execute_decision(winner)
+        await self._execute_decision(winner, proposals, context)
 
     async def _collect_proposals(self, context: dict) -> list[dict]:
         """
@@ -103,20 +108,26 @@ class DecisionEngine:
             "queue": self.tracker.queue,
             "pending_events": self.tracker.peek_pending_events(),
             "features": self.tracker.features,
-            # Tells IdleMonologueBehavior to bypass its cooldown/spark gates this cycle.
             "idle_quota_catchup": idle_catchup,
             "last_autonomous_speech_time": last_autonomous,
             "last_user_input_response_time": last_response,
             "time_since_last_autonomous": (now - last_autonomous).total_seconds(),
             "time_since_last_user_response": (now - last_response).total_seconds(),
-            # Peeked, not consumed: a losing proposal must not lose the command.
             "frontend_command": self.tracker.peek_frontend_command(),
         }
 
-    async def _execute_decision(self, decision: dict) -> None:
+    async def _execute_decision(
+        self, decision: dict, all_proposals: list[dict], context: dict
+    ) -> None:
         """
-        <summary>Execute the winning proposal, update the source behaviour's last_triggered, and record the outcome.</summary>
+        <summary>
+        Execute the winning proposal, update the source behaviour's last_triggered,
+        record the outcome in the quota tracker, and publish a decision_made event
+        for the control-panel dashboard.
+        </summary>
         <param name="decision">The winning proposal dict.</param>
+        <param name="all_proposals">Every proposal from this cycle (used for the dashboard).</param>
+        <param name="context">The context dict for this cycle (supplies activity and queue depth).</param>
         """
         now = datetime.now(timezone.utc)
         source_behavior = decision.pop("_source_behavior", None)
@@ -129,10 +140,82 @@ class DecisionEngine:
 
         self.idle_quota.record(reason)
 
+        await self._publish_decision_event(decision, all_proposals, context, now)
+
+    async def _publish_decision_event(
+        self,
+        winner: dict,
+        all_proposals: list[dict],
+        context: dict,
+        now: datetime,
+    ) -> None:
+        """
+        <summary>
+        Publish a decision_made event on the bus. WebSocketServerService
+        forwards this to the frontend as a decision_log message.
+        </summary>
+        """
+        # Compute the composite score the arbiter actually used so the
+        # dashboard can show the same number the engine acted on.
+        idle_catchup = context.get("idle_quota_catchup", False)
+        catchup_bonus = self.idle_quota.catchup_bonus(idle_catchup)
+
+        def composite(p: dict) -> float:
+            reason = p.get("reason", "")
+            weight = self.arbiter.BEHAVIOR_WEIGHTS.get(reason, self.arbiter.DEFAULT_BEHAVIOR_WEIGHT)
+            score = p.get("score", 0.0) * weight
+            score += p.get("priority_tier", 0) * self.arbiter.PRIORITY_TIER_BONUS
+            if reason == "idle_monologue":
+                score += catchup_bonus
+            return round(score, 4)
+
+        # Snapshot proposals without the internal _source_behavior object
+        # (not JSON-serialisable).
+        proposal_summaries = [
+            {
+                "reason": p.get("reason", ""),
+                "type": p.get("type", ""),
+                "raw_score": round(p.get("score", 0.0), 4),
+                "composite_score": composite(p),
+                "priority_tier": p.get("priority_tier", 0),
+            }
+            for p in all_proposals
+        ]
+
+        pending_chat = len(getattr(context.get("queue"), "messages", []))
+        pending_events = len(context.get("pending_events", []))
+
+        # Compute trailing idle share for the dashboard ratio bar.
+        relevant = [d for d in self.idle_quota._history if d in ("response", "monologue")]
+        idle_share = (
+            round(relevant.count("monologue") / len(relevant), 3) if relevant else None
+        )
+
+        event = Event(
+            type="decision_made",
+            timestamp=now.isoformat(),
+            data={
+                "timestamp": now.isoformat(),
+                "winner": {
+                    "reason": winner.get("reason", ""),
+                    "type": winner.get("type", ""),
+                    "composite_score": composite(winner),
+                },
+                "proposals": proposal_summaries,
+                "activity_score": round(context.get("activity_score", 0.0), 3),
+                "pending_chat": pending_chat,
+                "pending_events": pending_events,
+                "idle_catchup": idle_catchup,
+                "idle_share": idle_share,
+                "idle_target": IdleQuotaTracker.TARGET_SHARE,
+            },
+        )
+        await self.event_bus.publish(event)
+
     def _log_cycle_start(self, context: dict) -> None:
         if not self.logger.isEnabledFor(logging.INFO):
             return
-        pending_chat = len(getattr(self.tracker.queue, "messages", []))
+        pending_chat = len(getattr(context.get("queue"), "messages", []))
         pending_events = len(context.get("pending_events", []))
         self.logger.info(
             "[DecisionEngine] Cycle | activity=%.2f | pending_chat=%s | pending_events=%s | last_mono=%.0fs",
