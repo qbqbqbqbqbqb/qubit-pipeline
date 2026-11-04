@@ -15,6 +15,7 @@ from src.qubit.output.handlers.tts import TTSHandler
 from src.qubit.output.handlers.obs import OBSHandler
 from src.qubit.output.handlers.audio_player import AudioFilePlayer
 from src.qubit.output.handlers.vtube import VtubeStudioHandler
+from src.qubit.output.handlers.png import PNGOutputHandler
 
 from src.qubit.processing.moderation import ModerationProcessor
 from src.qubit.processing.conversation import ConversationProcessor
@@ -58,13 +59,11 @@ async def create_app() -> App:
         runtime_state=app.state,
     )
 
-    # Processing — register subscriptions here, not in service.start(),
-    # because processors are not long-lived services; they are stateless
-    # event handlers that run synchronously on the bus.
+    # Processing
     moderation_processor = ModerationProcessor()
     conversation_processor = ConversationProcessor(max_age_seconds=30)
     autonomous_prompt_processor = AutonomousPromptProcessor(max_age_seconds=30)
-    frontend_command_processor = FrontendCommandProcessor(runtime_state=app.state)
+    frontend_command_processor = FrontendCommandProcessor()
     chat_logger = ChatLogger(runtime_state=app.state)
 
     for processor in (
@@ -77,26 +76,41 @@ async def create_app() -> App:
     ):
         processor.register_subscriptions(app.event_bus)
 
-    # Output
+    # Output handlers
     vtube_handler = (
         VtubeStudioHandler(port=settings.vtube_studio_port)
         if settings.enable_vtube_studio
         else None
     )
+
+    # PNGOutputHandler is always constructed so the coordinator can fire
+    # speak/idle commands whenever png_output is toggled on at runtime.
+    # connect() is non-blocking (no network call) so it is safe to call here.
+    png_handler = PNGOutputHandler(
+        frontend_url=getattr(settings, "png_frontend_url", "http://127.0.0.1:8000")
+    )
+    await png_handler.connect()
+
     output_coordinator = OutputCoordinator(
         tts_handler=TTSHandler(),
         obs_handler=OBSHandler(settings=settings),
         vtube_studio_handler=vtube_handler,
     )
+    # png_handler is not a constructor parameter — assign directly.
+    # OutputCoordinator checks self.png_handler before every speak/idle call.
+    output_coordinator.png_handler = png_handler
 
     audio_player = AudioFilePlayer(audio_directory=settings.audio_directory)
     app.audio_player = audio_player
 
     # Services — started in order; WebSocket first so it can receive the
     # frontend start command before anything else is running.
+    generation_coordinator = GenerationCoordinator(llm_service=llm_service, main_profile="main")
+    app.generation_coordinator = generation_coordinator
+
     app.add_service(WebSocketServerService(host="0.0.0.0", port=8765))
     app.add_service(memory_service)
-    app.add_service(GenerationCoordinator(llm_service=llm_service, main_profile="main"))
+    app.add_service(generation_coordinator)
     app.add_service(CognitiveOrchestrator())
     app.add_service(TwitchListener(settings=settings))
     app.add_service(KickListener(settings=settings))
