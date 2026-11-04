@@ -17,6 +17,11 @@ class WebSocketServerService(Service):
 
     WAIT_FOR_START = False
 
+    SUBSCRIPTIONS = {
+        "decision_made": "_on_decision_made",
+    }
+
+
     def __init__(self, host: str = "0.0.0.0", port: int = 8765) -> None:
         super().__init__("websocket_server")
         self.host = host
@@ -29,6 +34,7 @@ class WebSocketServerService(Service):
             self.websocket_handler, self.host, self.port
         )
         self.logger.info("[_run] WebSocketServer listening on %s:%s", self.host, self.port)
+        self._set_connected()
         await self.server.wait_closed()
 
     async def stop(self) -> None:
@@ -40,6 +46,7 @@ class WebSocketServerService(Service):
 
     async def websocket_handler(self, websocket) -> None:
         self.connected_clients.add(websocket)
+        self._report_health("connected", f"{len(self.connected_clients)} client(s)")
         try:
             await self.send_states(websocket)
             async for message in websocket:
@@ -48,6 +55,10 @@ class WebSocketServerService(Service):
             self.logger.error("[websocket_handler] %s", e)
         finally:
             self.connected_clients.discard(websocket)
+            if self.connected_clients:
+                self._report_health("connected", f"{len(self.connected_clients)} client(s)")
+            else:
+                self._report_health("connected", "listening, 0 clients")
 
     async def _handle_message(self, websocket, data: dict) -> None:
         action = data.get("action")
@@ -57,14 +68,17 @@ class WebSocketServerService(Service):
             llm_service = getattr(self.app.state, "llm_service", None)
             if llm_service is None:
                 self.logger.error("[_handle_message] initialize: llm_service not on state")
+                await self._send_init_status(websocket, ok=False, detail="llm_service not available")
                 return
             try:
                 for profile in llm_service.list_profiles():
                     self.logger.info("[_handle_message] Loading profile: %s", profile)
                     await llm_service.ensure_loaded(profile)
                 self.logger.info("[_handle_message] All models loaded")
+                await self._send_init_status(websocket, ok=True)
             except Exception as exc:
                 self.logger.error("[_handle_message] Model load failed: %s", exc)
+                await self._send_init_status(websocket, ok=False, detail=str(exc))
             await self.broadcast_states()
 
         elif action == "toggle":
@@ -80,11 +94,16 @@ class WebSocketServerService(Service):
 
         elif action == "start":
             self.logger.info("[_handle_message] Start command from frontend")
+            # Always reset processing_active on start so that a start after
+            # end_stream (or pause) reliably re-enables input processing.
+            self.app.state.features.processing_active = True
             for k, v in data.get("features", {}).items():
                 features = self.app.state.features
                 if hasattr(features, k):
                     setattr(features, k, bool(v))
                     self.logger.info("[_handle_message] Set feature %s = %s", k, v)
+                else:
+                    self.logger.warning("[_handle_message] start: unknown feature flag ignored: %s", k)
             self.app.state.start.set()
             await self.broadcast_states()
 
@@ -104,6 +123,16 @@ class WebSocketServerService(Service):
 
         elif action == "reconnect":
             self.logger.info("[_handle_message] Reconnect requested")
+            await self.broadcast_states()
+
+        elif action == "pause":
+            self.logger.info("[_handle_message] Pause — suspending input processing")
+            self.app.state.features.processing_active = False
+            await self.broadcast_states()
+
+        elif action == "resume":
+            self.logger.info("[_handle_message] Resume — restoring input processing")
+            self.app.state.features.processing_active = True
             await self.broadcast_states()
 
         elif action == "set_stream_type":
@@ -151,13 +180,61 @@ class WebSocketServerService(Service):
                     ]
                 await websocket.send(json.dumps({"type": "audio_files", "data": files}))
 
+        elif action == "set_personality":
+            mood              = data.get("mood") or None
+            tone              = data.get("tone") or None
+            interaction_level = data.get("interaction_level") or None
+            gc = getattr(self.app, "generation_coordinator", None)
+            if gc is None:
+                self.logger.warning("[_handle_message] set_personality: generation_coordinator not on app")
+            else:
+                gc.update_system_personality(
+                    mood=mood,
+                    tone=tone,
+                    interaction_level=interaction_level,
+                )
+                self.logger.info(
+                    "[_handle_message] Personality updated — mood=%s tone=%s interaction=%s",
+                    mood, tone, interaction_level,
+                )
+                await self.broadcast_states()
+
+        else:
+            self.logger.warning("[_handle_message] Unrecognised action: %s", action)
+
+    async def _send_init_status(self, websocket, ok: bool, detail: str = "") -> None:
+        """Send an init_status message to a single client so the frontend can
+        show success or revert phase on failure."""
+        await websocket.send(json.dumps({
+            "type": "init_status",
+            "data": {"ok": ok, "detail": detail},
+        }))
+
+
+    async def _on_decision_made(self, event) -> None:
+        """Forward a decision_made event to all connected frontend clients."""
+        if not self.connected_clients:
+            return
+        message = json.dumps({"type": "decision_log", "data": event.data})
+        clients = list(self.connected_clients)
+        await asyncio.gather(
+            *(c.send(message) for c in clients),
+            return_exceptions=True,
+        )
+
     def _features_as_dict(self) -> dict:
+        gc = getattr(self.app, "generation_coordinator", None)
         return {
             **dataclasses.asdict(self.app.state.features),
-            "stream_type": getattr(self.app.state, "stream_type", ""),
-            "vision_window": getattr(self.app.state, "vision_window", ""),
-            "current_obs_scene": getattr(self.app.state, "current_obs_scene", ""),
-            "health": getattr(self.app.state, "health", {}),
+            "stream_type": self.app.state.stream_type,
+            "vision_window": self.app.state.vision_window,
+            "current_obs_scene": self.app.state.current_obs_scene,
+            "health": self.app.state.health,
+            "personality": {
+                "mood": gc.system_mood if gc else "",
+                "tone": gc.system_tone if gc else "",
+                "interaction_level": gc.system_interaction if gc else "",
+            },
         }
 
     async def send_states(self, websocket) -> None:
@@ -167,14 +244,17 @@ class WebSocketServerService(Service):
         }))
 
     async def broadcast_states(self) -> None:
-        if self.connected_clients:
-            message = json.dumps({
-                "type": "states",
-                "data": self._features_as_dict(),
-            })
-            await asyncio.gather(*(c.send(message) for c in self.connected_clients))
-
-    async def forward_event(self, event_type: str, data: dict) -> None:
-        if self.connected_clients:
-            message = json.dumps({"type": event_type, "data": data})
-            await asyncio.gather(*(c.send(message) for c in self.connected_clients))
+        if not self.connected_clients:
+            return
+        message = json.dumps({
+            "type": "states",
+            "data": self._features_as_dict(),
+        })
+        # Snapshot the set before awaiting so a concurrent disconnect cannot
+        # mutate it mid-gather. return_exceptions=True prevents a single failed
+        # send from cancelling the broadcast to all remaining clients.
+        clients = list(self.connected_clients)
+        await asyncio.gather(
+            *(c.send(message) for c in clients),
+            return_exceptions=True,
+        )
