@@ -27,9 +27,12 @@ class FrontendCommandProcessor(EventProcessor):
     """
 
     SUBSCRIPTIONS = {
-        "bot_started":      "handle_event",
-        "bot_end_stream":   "handle_event",
-        "frontend_command": "handle_event",
+        # Lifecycle events only. frontend_command is NOT listed here — subscribing
+        # to it would cause infinite recursion because handle_event re-publishes
+        # a frontend_command event. The WebSocket server publishes frontend_command
+        # directly with a normalised command field, so it needs no translation.
+        "bot_started":    "handle_event",
+        "bot_end_stream": "handle_event",
     }
 
     def __init__(self):

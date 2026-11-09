@@ -11,6 +11,12 @@ without touching ActivityTracker's state at all.
 Community events (raids, subscriptions, follows) use the *_processed naming
 convention because they arrive after ModerationProcessor, which sanitises
 usernames before forwarding them downstream.
+
+Feature flag mapping (cognitive gate):
+  raids       -> user_event_raid
+  follow      -> user_event_follow
+  subs        -> user_event_subscription (non-gift)
+  gifts       -> user_event_subscription (gift, sub_type == "gift")
 </remarks>
 """
 
@@ -44,13 +50,14 @@ class EventAdapter:
     # Source -> feature flag that must be True for this input to be processed.
     # user_event_subscription is absent here — feature_flag_for() splits gift
     # vs non-gift subs by inspecting sub_type, since the schema has no separate
-    # gift event type to route on.
-    # Follows are bundled under the 'raids' toggle by default.
+    # gift event type to route on (gift -> 'gifts', non-gift -> 'subs').
+    # Follows use the dedicated 'follow' flag so they can be toggled
+    # independently of raids.
     FEATURE_FLAG_BY_SOURCE = {
         "user_input_stt": "stt",
         "user_input_chat_message": "chat",
         "user_event_raid": "raids",
-        "user_event_follow": "raids",
+        "user_event_follow": "follow",
     }
 
     # sub_type values that count as a gift for the purposes of the gifts toggle.
@@ -85,7 +92,7 @@ class EventAdapter:
                 sub_type = event.data.get("sub_type")
             if (sub_type or "").lower() in cls.GIFT_SUB_TYPES:
                 return "gifts"
-            return "raids"
+            return "subs"
         return cls.FEATURE_FLAG_BY_SOURCE.get(source)
 
     @classmethod

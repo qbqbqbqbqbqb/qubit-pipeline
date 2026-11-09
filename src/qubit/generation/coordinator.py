@@ -27,8 +27,6 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from config.settings import DEFAULT_MOOD, DEFAULT_TONE, DEFAULT_INTERACTION_LEVEL
-
-MAX_GENERATION_ATTEMPTS = 3
 from src.qubit.prompting.modules.vision import vision_module
 from src.qubit.prompting.modules.obs_scene import obs_scene_module
 from src.qubit.prompting.modules.length import length_module
@@ -41,6 +39,8 @@ from src.qubit.prompting.modules.core import core_system_module
 from src.qubit.prompting.modules.input import input_module
 from src.qubit.prompting.modules.personality import personality_module
 from src.qubit.prompting.modules.stream_type import stream_type_module
+
+MAX_GENERATION_ATTEMPTS = 3
 
 
 class GenerationCoordinator(Service):

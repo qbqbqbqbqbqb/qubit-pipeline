@@ -58,6 +58,20 @@ class IdleQuotaTracker:
         """
         return self.CATCHUP_BONUS if under_quota else 0.0
 
+    def trailing_idle_share(self) -> float | None:
+        """
+        <summary>
+        Return the monologue share of the recent history window, or None when
+        fewer than MIN_SAMPLES relevant decisions have been recorded yet.
+        Used by the decision dashboard to display the current ratio bar.
+        </summary>
+        <returns>A float in [0.0, 1.0], or None if the sample count is too small.</returns>
+        """
+        relevant = [d for d in self._history if d in ("response", "monologue")]
+        if len(relevant) < self.MIN_SAMPLES:
+            return None
+        return round(relevant.count("monologue") / len(relevant), 3)
+
     def record(self, reason: str) -> None:
         """
         <summary>

@@ -99,9 +99,17 @@ class DecisionExecutor:
         <remarks>
         Reuses MonologueEvent because a raid/gift/follow reaction is Qubit speaking
         on her own initiative about something that just happened — the same shape as
-        an idle monologue with a forced topic. Deliberately does not touch
-        last_autonomous_speech_time or last_user_input_response_time, since a
-        community-event reaction is its own category and should not reset either timer.
+        an idle monologue with a forced topic.
+
+        last_autonomous_speech_time IS reset here so that idle-monologue catch-up
+        mode does not immediately fire a second autonomous monologue on the very next
+        cycle after a community-event reaction. Without this, a raid arriving during
+        a long silence (which triggers catch-up) would cause Qubit to react to the
+        raid and then speak again autonomously within the next 5 s.
+
+        last_user_input_response_time is intentionally left untouched — a community
+        event is not a user conversational turn and should not suppress response
+        willingness for chat messages.
         </remarks>
         <param name="decision">The community_event proposal dict containing 'topic' and 'events'.</param>
         <param name="now">Current cycle timestamp.</param>
@@ -117,4 +125,5 @@ class DecisionExecutor:
             prompt=prompt,
         )
         await self.event_bus.publish(event)
+        self.last_autonomous_speech_time = now
         self.tracker.remove_pending_events(decision["events"])

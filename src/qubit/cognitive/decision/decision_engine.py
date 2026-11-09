@@ -186,10 +186,7 @@ class DecisionEngine:
         pending_events = len(context.get("pending_events", []))
 
         # Compute trailing idle share for the dashboard ratio bar.
-        relevant = [d for d in self.idle_quota._history if d in ("response", "monologue")]
-        idle_share = (
-            round(relevant.count("monologue") / len(relevant), 3) if relevant else None
-        )
+        idle_share = self.idle_quota.trailing_idle_share()
 
         event = Event(
             type="decision_made",
