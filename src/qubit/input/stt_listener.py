@@ -95,6 +95,53 @@ class SpeechToTextListener(Service):
         self._stop_worker()
         await super().stop()
 
+    @staticmethod
+    def _ensure_silero_cache() -> None:
+        """
+        Pre-seed the torch.hub Silero VAD cache and lock it to offline mode so
+        that AudioToTextRecorder never tries to reach GitHub at startup.
+
+        torch.hub.load() validates the remote ref against GitHub on every call
+        unless the hub directory already contains a cached copy AND the process
+        has TORCH_HUB_OFFLINE=1 set. Without this, a slow or absent internet
+        connection produces a 504 and kills the STT worker before it starts.
+
+        Safe to call repeatedly — torch.hub.load with force_reload=False is a
+        no-op when the model is already cached.
+        """
+        import os
+        import torch
+
+        # Point hub at the local cache dir so the downloaded model stays with
+        # the project rather than in %USERPROFILE%/.cache/torch/hub.
+        hub_dir = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "data", "torch_hub"
+        )
+        hub_dir = os.path.normpath(hub_dir)
+        os.makedirs(hub_dir, exist_ok=True)
+        torch.hub.set_dir(hub_dir)
+
+        # Pull the model once if not yet cached, then go offline permanently.
+        cache_marker = os.path.join(hub_dir, "snakers4_silero-vad_main")
+        if not os.path.isdir(cache_marker):
+            try:
+                torch.hub.load(
+                    "snakers4/silero-vad",
+                    "silero_vad",
+                    force_reload=False,
+                    onnx=True,
+                )
+            except Exception as exc:
+                # If the first-time download fails (no internet), RealtimeSTT
+                # will also fail — surface the error there rather than here.
+                raise RuntimeError(
+                    "Silero VAD model not cached and download failed. "
+                    "Connect to the internet once to seed the cache, or "
+                    f"manually place the model in {hub_dir}."
+                ) from exc
+
+        os.environ["TORCH_HUB_OFFLINE"] = "1"
+
     def _stt_worker(self):
         """Thread that owns the RealtimeSTT recorder."""
         try:
@@ -102,6 +149,13 @@ class SpeechToTextListener(Service):
         except Exception as e:
             self.logger.error("RealtimeSTT not installed or failed to load: %s", e)
             self._report_health("error", f"import failed: {e}")
+            return
+
+        try:
+            self._ensure_silero_cache()
+        except RuntimeError as e:
+            self.logger.error("[_stt_worker] %s", e)
+            self._report_health("error", str(e))
             return
 
         config = {
