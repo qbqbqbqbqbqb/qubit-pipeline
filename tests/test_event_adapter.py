@@ -78,12 +78,12 @@ def test_feature_flag_raid():
 
 
 def test_feature_flag_follow():
-    assert EventAdapter.feature_flag_for("user_event_follow", MagicMock()) == "raids"
+    assert EventAdapter.feature_flag_for("user_event_follow", MagicMock()) == "follow"
 
 
-def test_feature_flag_non_gift_sub_returns_raids():
+def test_feature_flag_non_gift_sub_returns_subs():
     e = _event("twitch_subscription_processed", sub_type="prime")
-    assert EventAdapter.feature_flag_for("user_event_subscription", e) == "raids"
+    assert EventAdapter.feature_flag_for("user_event_subscription", e) == "subs"
 
 
 def test_feature_flag_gift_sub_returns_gifts():

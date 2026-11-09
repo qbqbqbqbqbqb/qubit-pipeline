@@ -66,3 +66,43 @@ def test_record_chat_response_adds_response_entry(tracker):
 def test_record_idle_monologue_adds_monologue_entry(tracker):
     tracker.record("idle_monologue")
     assert "monologue" in tracker._history
+
+
+# --- trailing_idle_share ---
+
+def test_trailing_idle_share_none_below_min_samples(tracker):
+    # Fewer than MIN_SAMPLES records -> None
+    for _ in range(tracker.MIN_SAMPLES - 1):
+        tracker.record("chat_response")
+    assert tracker.trailing_idle_share() is None
+
+
+def test_trailing_idle_share_zero_when_all_responses(tracker):
+    for _ in range(tracker.MIN_SAMPLES + 2):
+        tracker.record("chat_response")
+    assert tracker.trailing_idle_share() == 0.0
+
+
+def test_trailing_idle_share_one_when_all_monologues(tracker):
+    for _ in range(tracker.MIN_SAMPLES + 2):
+        tracker.record("idle_monologue")
+    assert tracker.trailing_idle_share() == 1.0
+
+
+def test_trailing_idle_share_mixed(tracker):
+    for _ in range(7):
+        tracker.record("chat_response")
+    for _ in range(3):
+        tracker.record("idle_monologue")
+    share = tracker.trailing_idle_share()
+    assert share == pytest.approx(0.3)
+
+
+def test_trailing_idle_share_ignores_irrelevant_entries(tracker):
+    # community_event entries are recorded as neither "response" nor "monologue"
+    # and should not count toward the denominator
+    for _ in range(tracker.MIN_SAMPLES):
+        tracker.record("chat_response")
+    tracker.record("something_else")  # not recorded at all
+    share = tracker.trailing_idle_share()
+    assert share == 0.0
