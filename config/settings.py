@@ -6,7 +6,7 @@ Non-sensitive application settings. Safe to commit to version control.
 For secrets and machine-specific config (tokens, ports, device indices),
 see .env loaded via config/env_config.py.
 
-For the system prompt, edit src/data/system_prompt.txt directly.
+For the system prompt, edit data/system_prompt.txt directly.
 """
 
 # === Bot identity ===

@@ -1,7 +1,7 @@
 """
 FastAPI router for reading and writing the streamer profile JSON.
 
-The profile lives in the pipeline repo at src/data/streamer_profile.json.
+The profile lives in the pipeline repo at data/streamer_profile.json.
 The pipeline root is resolved from the PIPELINE_ROOT environment variable,
 defaulting to the directory one level above the frontend repo (standard
 sibling-repo layout: qubit-frontend/ and qubit-pipeline/ sit in the same
@@ -21,7 +21,7 @@ profile_router = APIRouter(prefix="/profile")
 _FRONTEND_ROOT = Path(__file__).parent
 _DEFAULT_PIPELINE_ROOT = _FRONTEND_ROOT.parent / "qubit-pipeline-2026"
 _PIPELINE_ROOT = Path(os.environ.get("PIPELINE_ROOT", str(_DEFAULT_PIPELINE_ROOT)))
-_PROFILE_PATH = _PIPELINE_ROOT / "src" / "data" / "streamer_profile.json"
+_PROFILE_PATH = _PIPELINE_ROOT / "data" / "streamer_profile.json"
 
 _EMPTY_PROFILE = {
     "streamer_name": "",

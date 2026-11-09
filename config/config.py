@@ -53,7 +53,7 @@ def _load_text(path: Path, fallback: str = "") -> str:
         return fallback
 
 
-_ROOT = Path(__file__).resolve().parent.parent / "src" / "data"
+_ROOT = Path(__file__).resolve().parent.parent / "data"
 
 BLACKLISTED_WORDS_LIST = _load_lines(_ROOT / "blacklisted_words.txt")
 WHITELISTED_WORDS_LIST = _load_lines(_ROOT / "whitelisted_words.txt")

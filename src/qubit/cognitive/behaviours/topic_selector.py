@@ -375,7 +375,7 @@ _CATEGORY_MAP: dict[str, Category] = {c.name: c for c in CATEGORIES}
 FIXED_DRAW_CHANCE = 0.22
 STREAMER_DRAW_CHANCE = 0.20  # chance of drawing from the streamer profile pool each cycle
 
-_PROFILE_PATH = Path(__file__).resolve().parents[4] / "src" / "data" / "streamer_profile.json"
+_PROFILE_PATH = Path(__file__).resolve().parents[4] / "data" / "streamer_profile.json"
 _logger = logging.getLogger(__name__)
 
 
