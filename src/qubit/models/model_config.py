@@ -43,8 +43,6 @@ class ModelConfig:
         torch_dtype (torch.dtype): Torch data type for model weights.
         lora_path (Optional[str]): Path to LoRA adapter weights, if used.
         trust_remote_code (bool): Whether to allow execution of remote code.
-        use_chat_template (bool): Whether to apply a chat template.
-        chat_template_type (Optional[str]): Type of chat template to use.
         max_context_length (int): Maximum token context length supported.
         extra_eos_tokens (list[str] | None): Additional end-of-sequence tokens.
         system_model_specific_prompt (Optional[str]): System prompt tailored
@@ -60,8 +58,6 @@ class ModelConfig:
     torch_dtype: torch.dtype = torch.float16
     lora_path: Optional[str] = None
     trust_remote_code: bool = False
-    use_chat_template: bool = False
-    chat_template_type: Optional[str] = None
     max_context_length: int = 2048
     extra_eos_tokens: list[str] | None = None
     system_model_specific_prompt: Optional[str] = None

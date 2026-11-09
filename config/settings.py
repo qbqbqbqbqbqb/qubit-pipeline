@@ -22,7 +22,6 @@ DEFAULT_INTERACTION_LEVEL = "high"  # "low" | "medium" | "high"
 # === TTS ===
 TTS_SPEAKER_NAME = "p236"
 TTS_MODEL_NAME = "en_GB-vctk-medium.onnx"
-TTS_DELAY = 1.5  # seconds between TTS playback and next action
 TTS_SUBTITLE_NAME = "TTS_Subtitles"  # OBS source name for subtitle overlay
 
 # === Memory ===
