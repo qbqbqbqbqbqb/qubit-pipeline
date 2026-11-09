@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     twitch_redirect_uri: str
     twitch_streamer_name: str
     twitch_bot_name: str
+    token_endpoint: str 
     # ===================== KICK (pure HTTP) =====================
     kick_client_id: str = ""
     kick_client_secret: str = ""
